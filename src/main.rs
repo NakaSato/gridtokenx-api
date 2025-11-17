@@ -1,0 +1,545 @@
+use std::net::SocketAddr;
+
+use anyhow::Result;
+use axum::{routing::{get, post}, Router, middleware::from_fn_with_state};
+use tower::ServiceBuilder;
+use tower_http::{cors::CorsLayer, trace::TraceLayer, timeout::TimeoutLayer};
+use tracing::{info, warn};
+use tracing_subscriber::EnvFilter;
+
+mod config;
+mod database;
+mod handlers;
+mod middleware;
+mod models;
+mod services;
+mod utils;
+mod error;
+mod auth;
+mod openapi;
+
+use config::Config;
+use handlers::{health, auth as auth_handlers, user_management, blockchain, trading, meters, wallet_auth, registry, oracle, governance, token, erc, blockchain_test, audit, admin, epochs};
+use auth::{jwt::JwtService, jwt::ApiKeyService};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+/// Application state shared across handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub db: sqlx::PgPool,
+    pub timescale_db: Option<sqlx::PgPool>,
+    pub redis: redis::Client,
+    pub config: Config,
+    pub jwt_service: JwtService,
+    pub api_key_service: ApiKeyService,
+    pub email_service: Option<services::EmailService>,
+    pub blockchain_service: services::BlockchainService,
+    pub wallet_service: services::WalletService,
+    pub meter_service: services::MeterService,
+    pub erc_service: services::ErcService,
+    pub order_matching_engine: services::OrderMatchingEngine,
+    pub market_clearing_engine: services::MarketClearingEngine,
+    pub market_clearing_service: services::MarketClearingService,
+    pub websocket_service: services::WebSocketService,
+    pub health_checker: services::HealthChecker,
+    pub audit_logger: services::AuditLogger,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Load .env file first
+    dotenvy::dotenv().ok();
+
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "api_gateway=debug,tower_http=debug".into())
+        )
+        .init();
+
+    // Validate secrets and security configuration before proceeding
+    utils::validate_secrets()?;
+
+    // Initialize Prometheus metrics exporter
+    let prometheus_builder = metrics_exporter_prometheus::PrometheusBuilder::new();
+    prometheus_builder
+        .install()
+        .expect("Failed to install Prometheus exporter");
+    info!("Prometheus metrics exporter initialized");
+
+    // Load configuration
+    let config = Config::from_env()?;
+    info!("Loaded configuration for environment: {}", config.environment);
+
+    // Setup database connections
+    let db_pool = database::setup_database(&config.database_url).await?;
+    info!("PostgreSQL connection established");
+
+    let timescale_pool = database::setup_timescale_database(&config.influxdb_url).await?;
+    if timescale_pool.is_some() {
+        info!("TimescaleDB connection established");
+    }
+
+    // Run database migrations (PostgreSQL only - TimescaleDB has its own schema)
+    database::run_migrations(&db_pool).await?;
+    info!("Database migrations completed successfully");
+
+    // Setup Redis connection with authentication support
+    let redis_client = redis::Client::open(config.redis_url.as_str())?;
+    
+    // Test Redis connection
+    match redis_client.get_multiplexed_async_connection().await {
+        Ok(_) => {
+            let auth_status = if config.redis_url.contains("@") {
+                "✅ Redis connection established (authenticated)"
+            } else {
+                "⚠️  Redis connection established (no authentication - consider adding password)"
+            };
+            info!("{}", auth_status);
+        }
+        Err(e) => {
+            tracing::error!("Failed to establish Redis connection: {}", e);
+            return Err(e.into());
+        }
+    }
+
+    // Initialize authentication services
+    let jwt_service = JwtService::new()?;
+    let api_key_service = ApiKeyService::new()?;
+    info!("Authentication services initialized");
+
+    // Initialize email service (optional - may fail if SMTP not configured)
+    let email_service = match services::EmailService::new(&config.email) {
+        Ok(service) => {
+            info!("Email service initialized successfully");
+            Some(service)
+        }
+        Err(e) => {
+            tracing::warn!("Email service initialization failed: {}. Email verification will be disabled.", e);
+            None
+        }
+    };
+
+    // Initialize blockchain service
+    let blockchain_service = services::BlockchainService::new(
+        config.solana_rpc_url.clone(),
+        "localnet".to_string(),
+    )?;
+    info!("Blockchain service initialized");
+
+    // Initialize wallet service (Phase 4)
+    let wallet_service = services::WalletService::new(&config.solana_rpc_url);
+    
+    // Try to load authority wallet
+    match wallet_service.initialize_authority().await {
+        Ok(()) => {
+            let pubkey = wallet_service.get_authority_pubkey_string().await?;
+            info!("Authority wallet loaded: {}", pubkey);
+        }
+        Err(e) => {
+            tracing::warn!("Failed to load authority wallet: {}. Token minting will not be available.", e);
+        }
+    }
+
+    // Initialize meter service (Phase 4)
+    let meter_service = services::MeterService::new(db_pool.clone());
+    info!("Meter service initialized");
+
+    // Initialize ERC service (Phase 4)
+    let erc_service = services::ErcService::new(db_pool.clone());
+    info!("ERC service initialized");
+
+    // Initialize market clearing service (Phase 5) for epoch-based order management
+    let market_clearing_service = services::MarketClearingService::new(db_pool.clone());
+    info!("✅ Market clearing service initialized for epoch management");
+
+    // Initialize WebSocket service for real-time market updates
+    let websocket_service = services::WebSocketService::new();
+    info!("✅ WebSocket service initialized for real-time updates");
+
+    // Initialize automated order matching engine
+    let order_matching_engine = services::OrderMatchingEngine::new(db_pool.clone())
+        .with_websocket(websocket_service.clone());
+    info!("Order matching engine initialized");
+
+    // Initialize market clearing engine for P2P energy trading
+    let market_clearing_engine = services::MarketClearingEngine::new(
+        db_pool.clone(),
+        redis_client.clone()
+    )
+    .with_websocket(websocket_service.clone());
+    info!("✅ Market clearing engine initialized with WebSocket support");
+    
+    // Load active orders into order book
+    match market_clearing_engine.load_order_book().await {
+        Ok(count) => info!("Loaded {} active orders into order book", count),
+        Err(e) => warn!("Failed to load order book: {}", e),
+    }
+
+    // Start the background matching service
+    order_matching_engine.start().await;
+    info!("✅ Automated order matching engine started");
+
+    // Initialize epoch scheduler with 15-minute intervals
+    let epoch_scheduler = std::sync::Arc::new(
+        services::EpochScheduler::new(
+            db_pool.clone(),
+            services::EpochConfig::default(),
+        )
+    );
+    info!("✅ Epoch scheduler initialized (15-minute intervals)");
+
+    // Start epoch scheduler in background
+    match epoch_scheduler.start().await {
+        Ok(_) => info!("🚀 Epoch scheduler started successfully"),
+        Err(e) => warn!("⚠️  Failed to start epoch scheduler: {}", e),
+    }
+
+    // Initialize health checker with dependencies
+    let health_checker = services::HealthChecker::new(
+        db_pool.clone(),
+        redis_client.clone(),
+        config.solana_rpc_url.clone(),
+    );
+    info!("Health checker initialized");
+
+    // Initialize audit logger for security event tracking
+    let audit_logger = services::AuditLogger::new(db_pool.clone());
+    info!("✅ Audit logger initialized for security event tracking");
+
+    // Create application state
+    let app_state = AppState {
+        db: db_pool,
+        timescale_db: timescale_pool,
+        redis: redis_client,
+        config: config.clone(),
+        jwt_service,
+        api_key_service,
+        email_service,
+        blockchain_service,
+        wallet_service,
+        meter_service,
+        erc_service,
+        order_matching_engine,
+        market_clearing_engine,
+        market_clearing_service,
+        websocket_service: websocket_service.clone(),
+        health_checker,
+        audit_logger,
+    };
+
+    // Build application router
+    let app = Router::new()
+        // Health check routes (no authentication required, at root level)
+        .route("/health", get(health::health_check))
+        
+        // Prometheus metrics endpoint (no auth required for monitoring)
+        .route("/metrics", get(|| async { "# Metrics endpoint\n" }))
+        
+        // Swagger UI for API documentation
+        .merge(SwaggerUi::new("/api/docs")
+            .url("/api/docs/openapi.json", openapi::ApiDoc::openapi()))
+        
+        // Nest all API routes under /api prefix
+        .nest("/api", Router::new()
+            // Public authentication routes (no authentication required)
+            .route("/auth/login", post(auth_handlers::login)
+                .layer(axum::middleware::from_fn(middleware::auth_logger_middleware)))
+            .route("/auth/register", post(user_management::register)
+                .layer(axum::middleware::from_fn(middleware::auth_logger_middleware)))
+            .route("/auth/verify-email", get(handlers::email_verification::verify_email))
+            .route("/auth/resend-verification", post(handlers::email_verification::resend_verification))
+            .route("/auth/wallet/login", post(wallet_auth::login_with_wallet)
+                .layer(axum::middleware::from_fn(middleware::auth_logger_middleware)))
+            .route("/auth/wallet/register", post(wallet_auth::register_with_wallet)
+                .layer(axum::middleware::from_fn(middleware::auth_logger_middleware)))
+            
+            // Protected auth routes (require authentication)
+            .route("/auth/profile", get(auth_handlers::get_profile)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/auth/profile/update", post(auth_handlers::update_profile)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/auth/password", post(auth_handlers::change_password)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            
+            // user management routes (authenticated users)
+            .nest("/user", Router::new()
+                .route("/wallet", post(user_management::update_wallet_address))
+                .route("/wallet", axum::routing::delete(user_management::remove_wallet_address))
+                .route("/activity", get(user_management::get_user_activity))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Admin-only user management routes
+            .nest("/users", Router::new()
+                .route("/{id}", get(auth_handlers::get_user))
+                .route("/{id}", axum::routing::put(user_management::admin_update_user))
+                .route("/{id}/deactivate", post(user_management::admin_deactivate_user))
+                .route("/{id}/reactivate", post(user_management::admin_reactivate_user))
+                .route("/{id}/activity", get(user_management::get_user_activity))
+                .route("/", get(auth_handlers::list_users))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Blockchain interaction routes (authenticated users)
+            .nest("/blockchain", Router::new()
+                .route("/transactions", post(blockchain::submit_transaction))
+                .route("/transactions", get(blockchain::get_transaction_history))
+                .route("/transactions/{signature}", get(blockchain::get_transaction_status))
+                .route("/programs/{name}", post(blockchain::interact_with_program))
+                .route("/accounts/{address}", get(blockchain::get_account_info))
+                .route("/network", get(blockchain::get_network_status))
+                // Registry program endpoints
+                .route("/users/{wallet_address}", get(registry::get_blockchain_user))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Blockchain testing routes (authenticated users)
+            .nest("/test", Router::new()
+                .route("/transactions", post(blockchain_test::create_test_transaction))
+                .route("/transactions/{signature}", get(blockchain_test::get_test_transaction_status))
+                .route("/statistics", get(blockchain_test::get_test_statistics))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Admin-only blockchain management routes
+            .nest("/admin", Router::new()
+                .route("/users/{id}/update-role", post(registry::update_user_role))
+                // Governance admin routes
+                .route("/governance/emergency-pause", post(governance::emergency_pause))
+                .route("/governance/unpause", post(governance::emergency_unpause))
+                // Token admin routes
+                .route("/tokens/mint", post(token::mint_tokens))
+                // Trading admin routes
+                .route("/trading/match-orders", post(trading::match_blockchain_orders))
+                // Market admin routes - Health monitoring and control
+                .route("/market/health", get(admin::get_market_health))
+                .route("/market/analytics", get(admin::get_trading_analytics))
+                .route("/market/control", post(admin::market_control))
+                // Audit log routes (admin only)
+                .route("/audit/user/{user_id}", get(audit::get_user_audit_logs))
+                .route("/audit/type/{event_type}", get(audit::get_audit_logs_by_type))
+                .route("/audit/security", get(audit::get_security_events))
+                // Epoch management (admin only)
+                .route("/epochs", get(epochs::list_all_epochs))
+                .route("/epochs/{epoch_id}/stats", get(epochs::get_epoch_stats))
+                .route("/epochs/{epoch_id}/trigger", post(epochs::trigger_manual_clearing))
+                // .route("/trading/run-matching", post(trading::run_order_matching)) // Temporarily disabled for email verification testing
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Oracle routes (authenticated users)
+            .nest("/oracle", Router::new()
+                .route("/prices", post(oracle::submit_price))
+                .route("/prices/current", get(oracle::get_current_prices))
+                .route("/data", get(oracle::get_oracle_data))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Governance routes (authenticated users)
+            .nest("/governance", Router::new()
+                .route("/status", get(governance::get_governance_status))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Trading routes (authenticated users)
+            .nest("/trading", Router::new()
+                .route("/orders", post(trading::create_order))
+                .route("/orders", get(trading::get_user_orders))
+                .route("/market", get(trading::get_market_data))
+                .route("/stats", get(trading::get_trading_stats))
+                // Phase 5 new endpoints - Temporarily disabled for email verification testing
+                // .route("/order-book", get(trading::get_order_book))
+                // .route("/orders/:id", axum::routing::delete(trading::cancel_order))
+                // .route("/epochs/current", get(trading::get_current_epoch_info))
+                // .route("/history", get(trading::get_trading_history))
+                // Blockchain trading routes
+                .route("/market/blockchain", get(trading::get_blockchain_market_data))
+                .route("/orders/blockchain", post(trading::create_blockchain_order))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+                .layer(axum::middleware::from_fn(middleware::trading_logger_middleware))
+            )
+            
+            // P2P Energy Trading routes (authenticated users)
+            // Market Data - New Market Clearing Engine
+            .nest("/market", Router::new()
+                .route("/stats", get(handlers::market_data::get_market_stats))
+                .route("/depth", get(handlers::market_data::get_order_book_depth))
+                .route("/depth-chart", get(handlers::market_data::get_market_depth_chart))
+                .route("/clearing-price", get(handlers::market_data::get_clearing_price))
+                .route("/trades/my-history", get(handlers::market_data::get_my_trade_history))
+                // Epoch endpoints (public market info)
+                .route("/epoch/current", get(epochs::get_current_epoch))
+                .route("/epoch/history", get(epochs::get_epoch_history))
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware))
+            )
+            
+            // Offers (Producer role)
+            .route("/offers", post(handlers::energy_trading::create_offer)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/offers", get(handlers::energy_trading::list_offers)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/offers/{id}", get(handlers::energy_trading::get_offer)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/offers/{id}", axum::routing::patch(handlers::energy_trading::cancel_offer)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            // Orders (Consumer role)
+            .route("/orders", post(handlers::energy_trading::create_order)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/orders", get(handlers::energy_trading::list_orders)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            // Transactions
+            .route("/transactions", get(handlers::energy_trading::list_transactions)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/transactions/{id}", get(handlers::energy_trading::get_transaction)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            // Market data - price history only (stats is in /market/stats)
+            .route("/market/price-history", get(handlers::energy_trading::get_price_history)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            
+            // Analytics routes (authenticated users)
+            .route("/analytics/market", get(handlers::analytics::get_market_analytics)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            .route("/analytics/my-stats", get(handlers::analytics::get_user_trading_stats)
+                .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware)))
+            
+            // WebSocket endpoint for real-time market updates (no auth required for connection)
+            .route("/market/ws", get(handlers::websocket::market_websocket_handler)
+                .layer(axum::middleware::from_fn(middleware::websocket_logger_middleware)))
+            
+            // Token routes (authenticated users)
+            .nest("/tokens", Router::new()
+                .route("/balance/{wallet_address}", get(token::get_token_balance))
+                .route("/info", get(token::get_token_info))
+                .route("/mint-from-reading", post(token::mint_from_reading))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Energy meter routes (authenticated users) - Phase 4
+            .nest("/meters", Router::new()
+                // Phase 4 meter reading endpoints
+                .route("/submit-reading", post(meters::submit_reading))
+                .route("/my-readings", get(meters::get_my_readings))
+                .route("/readings/{wallet_address}", get(meters::get_readings_by_wallet))
+                .route("/stats", get(meters::get_user_stats))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Admin meter routes - Phase 4
+            .nest("/admin/meters", Router::new()
+                .route("/unminted", get(meters::get_unminted_readings))
+                .route("/mint-from-reading", post(meters::mint_from_reading))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+            
+            // Energy Renewable Certificate (ERC) routes (authenticated users) - Phase 4
+            .nest("/erc", Router::new()
+                .route("/issue", post(erc::issue_certificate))
+                .route("/my-certificates", get(erc::get_my_certificates))
+                .route("/my-stats", get(erc::get_my_certificate_stats))
+                .route("/{certificate_id}", get(erc::get_certificate))
+                .route("/{certificate_id}/retire", post(erc::retire_certificate))
+                .route("/wallet/{wallet_address}", get(erc::get_certificates_by_wallet))
+                .layer(from_fn_with_state(
+                    app_state.clone(),
+                    auth::middleware::auth_middleware,
+                ))
+            )
+        ) // Close the /api nest
+        
+        // WebSocket endpoint at root level for easier discovery
+        // Handles authentication via token query parameter
+        .route("/ws", get(handlers::websocket::websocket_handler))
+        
+        // Global middleware stack
+        .layer(
+            ServiceBuilder::new()
+                .layer(axum::middleware::from_fn(middleware::add_security_headers)) // Security headers first
+                .layer(axum::middleware::from_fn(middleware::metrics_middleware))
+                .layer(axum::middleware::from_fn(middleware::active_requests_middleware))
+                .layer(axum::middleware::from_fn(middleware::request_logger_middleware))
+                .layer(TraceLayer::new_for_http())
+                .layer(TimeoutLayer::new(std::time::Duration::from_secs(30)))
+                .layer(CorsLayer::permissive()) // TODO: Configure proper CORS in production
+        )
+        .with_state(app_state);
+
+    // Start server
+    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    info!("Starting API Gateway server on {}", addr);
+    
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    
+    // Setup graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+    
+    Ok(())
+}
+
+/// Wait for SIGTERM or SIGINT signal for graceful shutdown
+async fn shutdown_signal() {
+    use tokio::signal;
+    
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            tracing::info!("Received Ctrl+C signal, shutting down gracefully");
+        },
+        _ = terminate => {
+            tracing::info!("Received SIGTERM signal, shutting down gracefully");
+        },
+    }
+}

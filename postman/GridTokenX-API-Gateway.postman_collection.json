@@ -1,0 +1,1463 @@
+{
+	"info": {
+		"_postman_id": "gridtokenx-api-gateway-2025",
+		"name": "GridTokenX API Gateway",
+		"description": "Complete API collection for GridTokenX Platform - Peer-to-peer renewable energy trading platform built on Solana blockchain.\n\n**Version**: 1.0.0\n**Updated**: 2025-11-09\n**Base URL**: Configure via environment variables\n\n## Authentication\nMost endpoints require JWT authentication. Use the login endpoint to obtain a token, which will be automatically saved to your environment.\n\n## Endpoints Summary\n- Health & Status: 1 endpoint\n- Authentication: 6 endpoints\n- User Management: 7 endpoints\n- Blockchain: 7 endpoints\n- Oracle: 3 endpoints\n- Governance: 3 endpoints\n- Trading: 6 endpoints\n- Tokens: 2 endpoints\n- Energy Meters: 10 endpoints\n- ERC Certificates: 6 endpoints\n- Admin Operations: 12 endpoints\n\n**Total**: 55+ endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Collection-level pre-request script",
+					"// Automatically adds JWT token to protected endpoints",
+					"",
+					"const token = pm.environment.get(\"jwt_token\");",
+					"if (token) {",
+					"    pm.request.headers.add({",
+					"        key: \"Authorization\",",
+					"        value: `Bearer ${token}`",
+					"    });",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Collection-level test script",
+					"// Basic response validation",
+					"",
+					"pm.test(\"Response time is acceptable\", function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"if (pm.response.code !== 401 && pm.response.code !== 403) {",
+					"    pm.test(\"Response has valid JSON\", function () {",
+					"        pm.response.to.be.json;",
+					"    });",
+					"}"
+				]
+			}
+		}
+	],
+	"item": [
+		{
+			"name": "00. Health & Status",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Service is healthy\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response.status).to.eql(\"healthy\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						},
+						"description": "Check API health status. No authentication required."
+					},
+					"response": []
+				}
+			],
+			"description": "System health and status endpoints"
+		},
+		{
+			"name": "01. Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Returns JWT token\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response).to.have.property(\"token\");",
+									"    pm.expect(response.token).to.be.a(\"string\");",
+									"    pm.expect(response.token.length).to.be.above(20);",
+									"    ",
+									"    // Save token to environment",
+									"    pm.environment.set(\"jwt_token\", response.token);",
+									"    console.log(\"Token saved:\", response.token.substring(0, 20) + \"...\");",
+									"});",
+									"",
+									"pm.test(\"Returns user information\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response).to.have.property(\"user\");",
+									"    pm.expect(response.user).to.have.property(\"id\");",
+									"    pm.expect(response.user).to.have.property(\"username\");",
+									"    pm.expect(response.user).to.have.property(\"email\");",
+									"    pm.expect(response.user).to.have.property(\"role\");",
+									"    ",
+									"    // Save user info",
+									"    pm.environment.set(\"user_id\", response.user.id);",
+									"    pm.environment.set(\"username\", response.user.username);",
+									"    pm.environment.set(\"user_role\", response.user.role);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Authenticate user with username and password. Returns JWT token."
+					},
+					"response": []
+				},
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 or 200\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"User created successfully\", function () {",
+									"    const response = pm.response.json();",
+									"    pm.expect(response).to.have.property(\"user\");",
+									"    pm.expect(response.user).to.have.property(\"id\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"role\": \"consumer\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new user account. Email verification may be required."
+					},
+					"response": []
+				},
+				{
+					"name": "Wallet Login",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\",\n  \"signature\": \"base58_encoded_signature\",\n  \"message\": \"Login to GridTokenX\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/wallet/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "wallet", "login"]
+						},
+						"description": "Authenticate using Solana wallet signature."
+					},
+					"response": []
+				},
+				{
+					"name": "Wallet Register",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\",\n  \"signature\": \"base58_encoded_signature\",\n  \"message\": \"Register to GridTokenX\",\n  \"username\": \"wallet_user\",\n  \"email\": \"wallet@example.com\",\n  \"role\": \"prosumer\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/wallet/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "wallet", "register"]
+						},
+						"description": "Register new account using Solana wallet."
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Email",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/verify-email?token=verification_token_here",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-email"],
+							"query": [
+								{
+									"key": "token",
+									"value": "verification_token_here"
+								}
+							]
+						},
+						"description": "Verify email address using token sent via email."
+					},
+					"response": []
+				},
+				{
+					"name": "Resend Verification Email",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/resend-verification",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "resend-verification"]
+						},
+						"description": "Resend email verification link."
+					},
+					"response": []
+				}
+			],
+			"description": "User authentication and registration endpoints"
+		},
+		{
+			"name": "02. User Management",
+			"item": [
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/profile",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "profile"]
+						},
+						"description": "Get current user's profile information. Requires JWT token."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"newemail@example.com\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Smith\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/profile",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "profile"]
+						},
+						"description": "Update current user's profile information."
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"current_password\": \"OldPass123!\",\n  \"new_password\": \"NewSecurePass456!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "password"]
+						},
+						"description": "Change user password. Requires current password."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Wallet Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/wallet",
+							"host": ["{{base_url}}"],
+							"path": ["user", "wallet"]
+						},
+						"description": "Link Solana wallet address to user account."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Wallet Address",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/wallet",
+							"host": ["{{base_url}}"],
+							"path": ["user", "wallet"]
+						},
+						"description": "Unlink wallet address from user account."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Activity",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/activity?page=1&per_page=20",
+							"host": ["{{base_url}}"],
+							"path": ["user", "activity"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "per_page",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Get current user's activity history."
+					},
+					"response": []
+				}
+			],
+			"description": "User profile and account management"
+		},
+		{
+			"name": "03. Blockchain",
+			"item": [
+				{
+					"name": "Submit Transaction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"transaction\": \"base58_encoded_transaction\",\n  \"program\": \"energy-token\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/blockchain/transactions",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "transactions"]
+						},
+						"description": "Submit a signed transaction to the blockchain."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Transaction History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/blockchain/transactions?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "transactions"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						},
+						"description": "Get transaction history for current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Transaction Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/blockchain/transactions/:signature",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "transactions", ":signature"],
+							"variable": [
+								{
+									"key": "signature",
+									"value": "transaction_signature_here"
+								}
+							]
+						},
+						"description": "Get status of specific transaction."
+					},
+					"response": []
+				},
+				{
+					"name": "Interact with Program",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"instruction\": \"transfer\",\n  \"params\": {\n    \"amount\": 100,\n    \"recipient\": \"wallet_address\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/blockchain/programs/:name",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "programs", ":name"],
+							"variable": [
+								{
+									"key": "name",
+									"value": "energy-token"
+								}
+							]
+						},
+						"description": "Interact with a specific Solana program."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Account Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/blockchain/accounts/:address",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "accounts", ":address"],
+							"variable": [
+								{
+									"key": "address",
+									"value": "account_address_here"
+								}
+							]
+						},
+						"description": "Get blockchain account information."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Network Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/blockchain/network",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "network"]
+						},
+						"description": "Get Solana network status and statistics."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Blockchain User",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/blockchain/users/:wallet_address",
+							"host": ["{{base_url}}"],
+							"path": ["blockchain", "users", ":wallet_address"],
+							"variable": [
+								{
+									"key": "wallet_address",
+									"value": "{{wallet_address}}"
+								}
+							]
+						},
+						"description": "Get user information from registry program."
+					},
+					"response": []
+				}
+			],
+			"description": "Blockchain interaction and transaction management"
+		},
+		{
+			"name": "04. Oracle",
+			"item": [
+				{
+					"name": "Submit Price Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"energy_price\": 0.15,\n  \"currency\": \"USD\",\n  \"timestamp\": \"2025-11-09T12:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/oracle/prices",
+							"host": ["{{base_url}}"],
+							"path": ["oracle", "prices"]
+						},
+						"description": "Submit energy price data to oracle (admin/oracle role)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Prices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/oracle/prices/current",
+							"host": ["{{base_url}}"],
+							"path": ["oracle", "prices", "current"]
+						},
+						"description": "Get current energy prices from oracle."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Oracle Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/oracle/data",
+							"host": ["{{base_url}}"],
+							"path": ["oracle", "data"]
+						},
+						"description": "Get complete oracle data and statistics."
+					},
+					"response": []
+				}
+			],
+			"description": "Oracle price feed and data management"
+		},
+		{
+			"name": "05. Governance",
+			"item": [
+				{
+					"name": "Get Governance Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/governance/status",
+							"host": ["{{base_url}}"],
+							"path": ["governance", "status"]
+						},
+						"description": "Get current governance status and configuration."
+					},
+					"response": []
+				}
+			],
+			"description": "Platform governance endpoints"
+		},
+		{
+			"name": "06. Trading",
+			"item": [
+				{
+					"name": "Create Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"order_type\": \"buy\",\n  \"amount\": 100,\n  \"price\": 0.15,\n  \"duration_hours\": 24\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/trading/orders",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "orders"]
+						},
+						"description": "Create a new trading order."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Orders",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/trading/orders?status=active",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "orders"],
+							"query": [
+								{
+									"key": "status",
+									"value": "active"
+								}
+							]
+						},
+						"description": "Get current user's trading orders."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Market Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/trading/market",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "market"]
+						},
+						"description": "Get current market data and order book."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Trading Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/trading/stats",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "stats"]
+						},
+						"description": "Get trading statistics and volumes."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Blockchain Market Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/trading/market/blockchain",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "market", "blockchain"]
+						},
+						"description": "Get market data from blockchain trading program."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Blockchain Order",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"order_type\": \"sell\",\n  \"amount\": 50,\n  \"price_per_kwh\": 0.18\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/trading/orders/blockchain",
+							"host": ["{{base_url}}"],
+							"path": ["trading", "orders", "blockchain"]
+						},
+						"description": "Create order directly on blockchain."
+					},
+					"response": []
+				}
+			],
+			"description": "Energy trading and marketplace"
+		},
+		{
+			"name": "07. Tokens",
+			"item": [
+				{
+					"name": "Get Token Balance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/tokens/balance/:wallet_address",
+							"host": ["{{base_url}}"],
+							"path": ["tokens", "balance", ":wallet_address"],
+							"variable": [
+								{
+									"key": "wallet_address",
+									"value": "{{wallet_address}}"
+								}
+							]
+						},
+						"description": "Get token balance for a wallet address."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Token Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/tokens/info",
+							"host": ["{{base_url}}"],
+							"path": ["tokens", "info"]
+						},
+						"description": "Get energy token information and metadata."
+					},
+					"response": []
+				}
+			],
+			"description": "Energy token information and balances"
+		},
+		{
+			"name": "08. Energy Meters",
+			"item": [
+				{
+					"name": "Submit Reading",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"reading_kwh\": 125.5,\n  \"timestamp\": \"2025-11-09T12:00:00Z\",\n  \"location\": \"Building A, Floor 3\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/meters/submit-reading",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "submit-reading"]
+						},
+						"description": "Submit new energy meter reading (Prosumer role)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Readings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/my-readings?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "my-readings"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Get current user's meter readings."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Readings by Wallet",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/readings/:wallet_address",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "readings", ":wallet_address"],
+							"variable": [
+								{
+									"key": "wallet_address",
+									"value": "{{wallet_address}}"
+								}
+							]
+						},
+						"description": "Get meter readings for specific wallet."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/stats",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "stats"]
+						},
+						"description": "Get current user's energy statistics."
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Energy Reading (Legacy)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"value\": 150.75,\n  \"unit\": \"kWh\",\n  \"timestamp\": \"2025-11-09T12:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/meters/readings",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "readings"]
+						},
+						"description": "Submit energy reading (legacy endpoint)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Energy Readings (Legacy)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/readings?start_date=2025-11-01&end_date=2025-11-09",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "readings"],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2025-11-01"
+								},
+								{
+									"key": "end_date",
+									"value": "2025-11-09"
+								}
+							]
+						},
+						"description": "Get energy readings (legacy endpoint)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Reading by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/readings/:id",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "readings", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "reading_id_here"
+								}
+							]
+						},
+						"description": "Get specific meter reading by ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Aggregated Readings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/meters/aggregated?period=daily&days=30",
+							"host": ["{{base_url}}"],
+							"path": ["meters", "aggregated"],
+							"query": [
+								{
+									"key": "period",
+									"value": "daily"
+								},
+								{
+									"key": "days",
+									"value": "30"
+								}
+							]
+						},
+						"description": "Get aggregated energy readings."
+					},
+					"response": []
+				}
+			],
+			"description": "Energy meter readings and statistics"
+		},
+		{
+			"name": "09. ERC (Certificates)",
+			"item": [
+				{
+					"name": "Issue Certificate",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"energy_amount_kwh\": 1000,\n  \"energy_source\": \"solar\",\n  \"generation_date\": \"2025-11-09\",\n  \"location\": \"Building A\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/erc/issue",
+							"host": ["{{base_url}}"],
+							"path": ["erc", "issue"]
+						},
+						"description": "Issue new Energy Renewable Certificate."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Certificates",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/erc/my-certificates?status=active",
+							"host": ["{{base_url}}"],
+							"path": ["erc", "my-certificates"],
+							"query": [
+								{
+									"key": "status",
+									"value": "active"
+								}
+							]
+						},
+						"description": "Get current user's certificates."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Certificate Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/erc/my-stats",
+							"host": ["{{base_url}}"],
+							"path": ["erc", "my-stats"]
+						},
+						"description": "Get current user's certificate statistics."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Certificate by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/erc/:certificate_id",
+							"host": ["{{base_url}}"],
+							"path": ["erc", ":certificate_id"],
+							"variable": [
+								{
+									"key": "certificate_id",
+									"value": "cert_id_here"
+								}
+							]
+						},
+						"description": "Get specific certificate details."
+					},
+					"response": []
+				},
+				{
+					"name": "Retire Certificate",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Carbon offset\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/erc/:certificate_id/retire",
+							"host": ["{{base_url}}"],
+							"path": ["erc", ":certificate_id", "retire"],
+							"variable": [
+								{
+									"key": "certificate_id",
+									"value": "cert_id_here"
+								}
+							]
+						},
+						"description": "Retire a certificate (permanent action)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Certificates by Wallet",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/erc/wallet/:wallet_address",
+							"host": ["{{base_url}}"],
+							"path": ["erc", "wallet", ":wallet_address"],
+							"variable": [
+								{
+									"key": "wallet_address",
+									"value": "{{wallet_address}}"
+								}
+							]
+						},
+						"description": "Get certificates for specific wallet."
+					},
+					"response": []
+				}
+			],
+			"description": "Energy Renewable Certificates (ERC) management"
+		},
+		{
+			"name": "10. Admin Operations",
+			"item": [
+				{
+					"name": "User Management",
+					"item": [
+						{
+							"name": "Get User by ID",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/:id",
+									"host": ["{{base_url}}"],
+									"path": ["users", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Get specific user details (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Update User",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"role\": \"prosumer\",\n  \"is_active\": true\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/users/:id",
+									"host": ["{{base_url}}"],
+									"path": ["users", ":id"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Update user details (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Deactivate User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/:id/deactivate",
+									"host": ["{{base_url}}"],
+									"path": ["users", ":id", "deactivate"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Deactivate user account (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Reactivate User",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/:id/reactivate",
+									"host": ["{{base_url}}"],
+									"path": ["users", ":id", "reactivate"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Reactivate user account (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Get User Activity (Admin)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users/:id/activity",
+									"host": ["{{base_url}}"],
+									"path": ["users", ":id", "activity"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Get user activity history (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "List All Users",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/users?page=1&per_page=20&role=all",
+									"host": ["{{base_url}}"],
+									"path": ["users"],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "20"
+										},
+										{
+											"key": "role",
+											"value": "all"
+										}
+									]
+								},
+								"description": "List all users (admin only)."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Registry Admin",
+					"item": [
+						{
+							"name": "Update User Role (Blockchain)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"new_role\": \"prosumer\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/users/:id/update-role",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "users", ":id", "update-role"],
+									"variable": [
+										{
+											"key": "id",
+											"value": "{{user_id}}"
+										}
+									]
+								},
+								"description": "Update user role on blockchain (admin only)."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Governance Admin",
+					"item": [
+						{
+							"name": "Emergency Pause",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/governance/emergency-pause",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "governance", "emergency-pause"]
+								},
+								"description": "Emergency pause all platform operations (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Unpause",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/governance/unpause",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "governance", "unpause"]
+								},
+								"description": "Resume platform operations (admin only)."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Token Admin",
+					"item": [
+						{
+							"name": "Mint Tokens",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"recipient\": \"wallet_address_here\",\n  \"amount\": 1000,\n  \"reason\": \"Energy production reward\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/tokens/mint",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "tokens", "mint"]
+								},
+								"description": "Mint new energy tokens (admin only)."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Trading Admin",
+					"item": [
+						{
+							"name": "Match Orders",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"epoch_id\": 12345\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/trading/match-orders",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "trading", "match-orders"]
+								},
+								"description": "Manually trigger order matching (admin only)."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Meter Admin",
+					"item": [
+						{
+							"name": "Get Unminted Readings",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/admin/meters/unminted?limit=50",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "meters", "unminted"],
+									"query": [
+										{
+											"key": "limit",
+											"value": "50"
+										}
+									]
+								},
+								"description": "Get meter readings pending token minting (admin only)."
+							},
+							"response": []
+						},
+						{
+							"name": "Mint from Reading",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"reading_id\": \"reading_id_here\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/meters/mint-from-reading",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "meters", "mint-from-reading"]
+								},
+								"description": "Mint tokens from meter reading (admin only)."
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"description": "Administrative operations (admin role required)"
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	]
+}

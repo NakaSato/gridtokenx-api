@@ -1,0 +1,127 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::env;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    pub environment: String,
+    pub port: u16,
+    pub database_url: String,
+    pub influxdb_url: String,
+    pub redis_url: String,
+    pub jwt_secret: String,
+    pub jwt_expiration: i64,
+    pub solana_rpc_url: String,
+    pub solana_ws_url: String,
+    pub engineering_api_key: String,
+    pub max_connections: u32,
+    pub redis_pool_size: u32,
+    pub request_timeout: u64,
+    pub rate_limit_window: u64,
+    pub log_level: String,
+    pub audit_log_enabled: bool,
+    pub test_mode: bool,
+    pub email: EmailConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailConfig {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub from_name: String,
+    pub from_address: String,
+    pub verification_expiry_hours: i64,
+    pub verification_base_url: String,
+    pub verification_required: bool,
+    pub verification_enabled: bool,
+    pub auto_login_after_verification: bool,
+}
+
+impl Config {
+    pub fn from_env() -> Result<Self> {
+        dotenvy::dotenv().ok(); // Load .env file if it exists
+
+        Ok(Config {
+            environment: env::var("ENVIRONMENT")
+                .map_err(|_| anyhow::anyhow!("ENVIRONMENT environment variable is required"))?,
+            port: env::var("PORT")
+                .map_err(|_| anyhow::anyhow!("PORT environment variable is required"))?
+                .parse()?,
+            database_url: env::var("DATABASE_URL")
+                .map_err(|_| anyhow::anyhow!("DATABASE_URL environment variable is required"))?,
+            influxdb_url: env::var("INFLUXDB_URL")
+                .unwrap_or_else(|_| "http://localhost:8086".to_string()),
+            redis_url: env::var("REDIS_URL")
+                .map_err(|_| anyhow::anyhow!("REDIS_URL environment variable is required"))?,
+            jwt_secret: env::var("JWT_SECRET")
+                .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable is required"))?,
+            jwt_expiration: env::var("JWT_EXPIRATION")
+                .unwrap_or_else(|_| "86400".to_string())
+                .parse()
+                .unwrap_or(86400),
+            solana_rpc_url: env::var("SOLANA_RPC_URL")
+                .map_err(|_| anyhow::anyhow!("SOLANA_RPC_URL environment variable is required"))?,
+            solana_ws_url: env::var("SOLANA_WS_URL")
+                .map_err(|_| anyhow::anyhow!("SOLANA_WS_URL environment variable is required"))?,
+            engineering_api_key: env::var("ENGINEERING_API_KEY")
+                .map_err(|_| anyhow::anyhow!("ENGINEERING_API_KEY environment variable is required"))?,
+            max_connections: env::var("MAX_CONNECTIONS")
+                .map_err(|_| anyhow::anyhow!("MAX_CONNECTIONS environment variable is required"))?
+                .parse()?,
+            redis_pool_size: env::var("REDIS_POOL_SIZE")
+                .map_err(|_| anyhow::anyhow!("REDIS_POOL_SIZE environment variable is required"))?
+                .parse()?,
+            request_timeout: env::var("REQUEST_TIMEOUT")
+                .map_err(|_| anyhow::anyhow!("REQUEST_TIMEOUT environment variable is required"))?
+                .parse()?,
+            rate_limit_window: env::var("RATE_LIMIT_WINDOW")
+                .map_err(|_| anyhow::anyhow!("RATE_LIMIT_WINDOW environment variable is required"))?
+                .parse()?,
+            log_level: env::var("LOG_LEVEL")
+                .map_err(|_| anyhow::anyhow!("LOG_LEVEL environment variable is required"))?,
+            audit_log_enabled: env::var("AUDIT_LOG_ENABLED")
+                .map_err(|_| anyhow::anyhow!("AUDIT_LOG_ENABLED environment variable is required"))?
+                .parse()?,
+            test_mode: env::var("TEST_MODE")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            email: EmailConfig {
+                smtp_host: env::var("SMTP_HOST")
+                    .unwrap_or_else(|_| "smtp.gmail.com".to_string()),
+                smtp_port: env::var("SMTP_PORT")
+                    .unwrap_or_else(|_| "587".to_string())
+                    .parse()
+                    .unwrap_or(587),
+                smtp_username: env::var("SMTP_USERNAME")
+                    .unwrap_or_else(|_| "noreply@gridtokenx.com".to_string()),
+                smtp_password: env::var("SMTP_PASSWORD")
+                    .unwrap_or_else(|_| "".to_string()),
+                from_name: env::var("EMAIL_FROM_NAME")
+                    .unwrap_or_else(|_| "GridTokenX Platform".to_string()),
+                from_address: env::var("EMAIL_FROM_ADDRESS")
+                    .unwrap_or_else(|_| "noreply@gridtokenx.com".to_string()),
+                verification_expiry_hours: env::var("EMAIL_VERIFICATION_EXPIRY_HOURS")
+                    .unwrap_or_else(|_| "24".to_string())
+                    .parse()
+                    .unwrap_or(24),
+                verification_base_url: env::var("EMAIL_VERIFICATION_BASE_URL")
+                    .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+                verification_required: env::var("EMAIL_VERIFICATION_REQUIRED")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+                verification_enabled: env::var("EMAIL_VERIFICATION_ENABLED")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+                auto_login_after_verification: env::var("EMAIL_AUTO_LOGIN_AFTER_VERIFICATION")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+            },
+        })
+    }
+}

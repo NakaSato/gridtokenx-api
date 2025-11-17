@@ -1,0 +1,34 @@
+pub mod config;
+pub mod database;
+pub mod handlers;
+pub mod middleware;
+pub mod models;
+pub mod services;
+pub mod utils;
+pub mod error;
+pub mod auth;
+
+pub use config::Config;
+pub use error::ApiError;
+
+/// Application state shared across handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub db: sqlx::PgPool,
+    pub timescale_db: Option<sqlx::PgPool>,
+    pub redis: redis::Client,
+    pub config: Config,
+    pub jwt_service: auth::jwt::JwtService,
+    pub api_key_service: auth::jwt::ApiKeyService,
+    pub email_service: Option<services::EmailService>,
+    pub blockchain_service: services::BlockchainService,
+    pub wallet_service: services::WalletService,
+    pub meter_service: services::MeterService,
+    pub erc_service: services::ErcService,
+    pub order_matching_engine: services::OrderMatchingEngine,
+    pub market_clearing_engine: services::MarketClearingEngine,
+    pub market_clearing_service: services::MarketClearingService,
+    pub websocket_service: services::WebSocketService,
+    pub health_checker: services::HealthChecker,
+    pub audit_logger: services::AuditLogger,
+}
