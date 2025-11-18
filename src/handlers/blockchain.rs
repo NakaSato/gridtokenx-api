@@ -105,7 +105,7 @@ pub async fn submit_transaction(
         r#"
         INSERT INTO blockchain_transactions 
         (signature, user_id, program_id, instruction_name, status, fee, compute_units_consumed, submitted_at)
-        VALUES ($1, $2, $3, $4, 'pending', $5, $6, NOW())
+        VALUES ($1, $2, $3, $4, 'Pending', $5, $6, NOW())
         "#,
         signature,
         user.0.sub,
@@ -301,7 +301,7 @@ pub async fn interact_with_program(
         r#"
         INSERT INTO blockchain_transactions 
         (signature, user_id, program_id, instruction_name, status, compute_units_consumed, submitted_at)
-        VALUES ($1, $2, $3, $4, 'pending', $5, NOW())
+        VALUES ($1, $2, $3, $4, 'Pending', $5, NOW())
         "#,
         signature,
         user.0.sub,

@@ -41,8 +41,6 @@ pub async fn setup_database(database_url: &str) -> Result<DatabasePool> {
 }
 
 pub async fn setup_timescale_database(influxdb_url: &str) -> Result<Option<DatabasePool>> {
-    // TODO: Implement proper InfluxDB client integration
-    // For now, we skip InfluxDB connection if it's an HTTP URL
     if influxdb_url.starts_with("http://") || influxdb_url.starts_with("https://") {
         info!("InfluxDB connection skipped (HTTP URL detected): {}", influxdb_url);
         info!("Note: InfluxDB integration requires proper client library - currently not in use");

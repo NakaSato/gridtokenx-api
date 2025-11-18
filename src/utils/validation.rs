@@ -270,9 +270,9 @@ impl Validator {
 
     /// Validate order status
     pub fn validate_order_status(status: &str) -> Result<(), ApiError> {
-        let valid_statuses = ["pending", "partial", "filled", "cancelled", "expired"];
+        let valid_statuses = ["Pending", "PartiallyFilled", "Filled", "Cancelled", "Expired"];
         
-        if !valid_statuses.contains(&status.to_lowercase().as_str()) {
+        if !valid_statuses.contains(&status) {
             return Err(ApiError::validation_field(
                 "status",
                 format!("Status must be one of: {}", valid_statuses.join(", "))
@@ -284,9 +284,9 @@ impl Validator {
 
     /// Validate transaction status
     pub fn validate_transaction_status(status: &str) -> Result<(), ApiError> {
-        let valid_statuses = ["pending", "processing", "completed", "failed", "cancelled"];
+        let valid_statuses = ["Pending", "Processing", "Completed", "Failed", "Cancelled"];
         
-        if !valid_statuses.contains(&status.to_lowercase().as_str()) {
+        if !valid_statuses.contains(&status) {
             return Err(ApiError::validation_field(
                 "status",
                 format!("Status must be one of: {}", valid_statuses.join(", "))
@@ -298,9 +298,9 @@ impl Validator {
 
     /// Validate certificate status
     pub fn validate_certificate_status(status: &str) -> Result<(), ApiError> {
-        let valid_statuses = ["active", "retired", "expired", "cancelled"];
+        let valid_statuses = ["Active", "Retired", "Expired", "Cancelled"];
         
-        if !valid_statuses.contains(&status.to_lowercase().as_str()) {
+        if !valid_statuses.contains(&status) {
             return Err(ApiError::validation_field(
                 "status",
                 format!("Status must be one of: {}", valid_statuses.join(", "))

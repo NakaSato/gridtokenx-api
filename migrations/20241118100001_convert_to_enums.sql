@@ -16,6 +16,9 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
+-- Drop existing default before converting
+ALTER TABLE trading_orders ALTER COLUMN status DROP DEFAULT;
+
 -- Convert trading_orders.status from VARCHAR to order_status enum
 ALTER TABLE trading_orders 
     ALTER COLUMN status TYPE order_status 

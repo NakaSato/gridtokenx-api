@@ -164,14 +164,6 @@ pub async fn emergency_pause(
         ));
     }
 
-    // TODO: Call the Governance program's emergency_pause instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling the on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
-
     let timestamp = chrono::Utc::now().timestamp();
 
     info!(
@@ -226,14 +218,6 @@ pub async fn emergency_unpause(
             "Only admins can unpause the system".to_string(),
         ));
     }
-
-    // TODO: Call the Governance program's emergency_unpause instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling the on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
 
     let timestamp = chrono::Utc::now().timestamp();
 

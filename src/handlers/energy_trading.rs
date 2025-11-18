@@ -419,7 +419,7 @@ pub async fn create_offer(
         INSERT INTO offers (
             id, created_by, energy_amount, price_per_kwh, energy_source,
             status, available_from, available_until, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $8, $8)
+        ) VALUES ($1, $2, $3, $4, $5, 'Active', $6, $7, $8, $8)
         "#,
     )
     .bind(offer_id)
@@ -473,7 +473,7 @@ pub async fn create_offer(
         energy_amount: payload.energy_amount,
         price_per_kwh: payload.price_per_kwh,
         energy_source: payload.energy_source,
-        status: "active".to_string(),
+        status: "Active".to_string(),
         available_from,
         available_until,
         created_at: now,
@@ -506,7 +506,7 @@ pub async fn list_offers(
     let sort_direction = params.sort_direction();
 
     // Build WHERE conditions
-    let mut where_conditions = vec!["o.status = 'active'".to_string(), "o.available_until > NOW()".to_string()];
+    let mut where_conditions = vec!["o.status = 'Active'".to_string(), "o.available_until > NOW()".to_string()];
     let mut bind_count = 1;
 
     if params.energy_source.is_some() {
@@ -720,7 +720,7 @@ pub async fn cancel_offer(
         ));
     }
 
-    sqlx::query("UPDATE offers SET status = 'cancelled', updated_at = NOW() WHERE id = $1")
+    sqlx::query("UPDATE offers SET status = 'Cancelled', updated_at = NOW() WHERE id = $1")
         .bind(id)
         .execute(&state.db)
         .await
@@ -787,7 +787,7 @@ pub async fn create_order(
         INSERT INTO orders (
             id, created_by, energy_amount, max_price_per_kwh, preferred_source,
             status, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, 'pending', $6, $6)
+        ) VALUES ($1, $2, $3, $4, $5, 'Pending', $6, $6)
         "#,
     )
     .bind(order_id)
@@ -837,7 +837,7 @@ pub async fn create_order(
         energy_amount: payload.energy_amount,
         max_price_per_kwh: payload.max_price_per_kwh,
         preferred_source: payload.preferred_source,
-        status: "pending".to_string(),
+        status: "Pending".to_string(),
         created_at: now,
     }))
 }
@@ -878,7 +878,7 @@ pub async fn list_orders(
     let where_clause = where_conditions.join(" AND ");
 
     // Count total
-    let count_query = format!("SELECT COUNT(*) FROM orders WHERE {}", where_clause);
+    let count_query = format!("SELECT COUNT(*) FROM trading_orders WHERE {}", where_clause);
     let mut count_sqlx = sqlx::query_scalar::<_, i64>(&count_query);
     count_sqlx = count_sqlx.bind(user.0.sub);
     
@@ -899,7 +899,7 @@ pub async fn list_orders(
         r#"
         SELECT id, created_by as buyer_id, energy_amount, max_price_per_kwh,
                preferred_source, status, created_at
-        FROM orders
+        FROM trading_orders
         WHERE {}
         ORDER BY {} {}
         LIMIT ${} OFFSET ${}
@@ -1164,7 +1164,7 @@ pub async fn get_market_stats(
         SELECT
             COALESCE(AVG(price_per_kwh), 0) as avg_price,
             COALESCE(SUM(energy_amount), 0) as total_volume,
-            COUNT(DISTINCT CASE WHEN status = 'completed' THEN id END) as completed_tx
+            COUNT(DISTINCT CASE WHEN status = 'Completed' THEN id END) as completed_tx
         FROM transactions
         WHERE created_at > NOW() - INTERVAL '24 hours'
         "#
@@ -1177,13 +1177,13 @@ pub async fn get_market_stats(
     let total_volume: BigDecimal = stats_row.try_get("total_volume").map_err(|e| ApiError::Internal(format!("Failed to get total_volume: {}", e)))?;
     let completed_tx: i64 = stats_row.try_get("completed_tx").map_err(|e| ApiError::Internal(format!("Failed to get completed_tx: {}", e)))?;
 
-    let active_offers_row = sqlx::query("SELECT COUNT(*) as count FROM offers WHERE status = 'active'")
+    let active_offers_row = sqlx::query("SELECT COUNT(*) as count FROM offers WHERE status = 'Active'")
         .fetch_one(&state.db)
         .await
         .map_err(|e| ApiError::Database(e))?;
     let active_offers: i64 = active_offers_row.try_get("count").map_err(|e| ApiError::Internal(format!("Failed to get count: {}", e)))?;
 
-    let active_orders_row = sqlx::query("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'")
+    let active_orders_row = sqlx::query("SELECT COUNT(*) as count FROM trading_orders WHERE status = 'Pending'")
         .fetch_one(&state.db)
         .await
         .map_err(|e| ApiError::Database(e))?;

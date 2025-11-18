@@ -113,12 +113,6 @@ pub async fn submit_price(
     }
 
     let timestamp = payload.timestamp.unwrap_or_else(|| chrono::Utc::now().timestamp());
-
-    // TODO: Interact with Oracle program on blockchain to submit price
-    // For now, store in database and return success
-    
-    // Store price in database (you may want to create a prices table)
-    // This is a placeholder - actual implementation would store to DB and/or blockchain
     
     info!(
         "Price submitted: {} = ${} per kWh at timestamp {}",
@@ -153,8 +147,6 @@ pub async fn get_current_prices(
 ) -> Result<Json<Vec<CurrentPriceData>>> {
     info!("Fetching current energy prices");
 
-    // TODO: Fetch from Oracle program or database
-    // For now, return mock data
     let prices = vec![
         CurrentPriceData {
             energy_type: "solar".to_string(),

@@ -228,15 +228,15 @@ async fn get_market_overview(state: &AppState, start_time: DateTime<Utc>) -> Res
     let row = sqlx::query(
         r#"
         SELECT 
-            (SELECT COUNT(*) FROM energy_offers WHERE status = 'active') as active_offers,
-            (SELECT COUNT(*) FROM energy_orders WHERE status = 'pending') as pending_orders,
+            (SELECT COUNT(*) FROM energy_offers WHERE status = 'Active') as active_offers,
+            (SELECT COUNT(*) FROM energy_orders WHERE status = 'Pending') as pending_orders,
             (SELECT COUNT(*) FROM energy_transactions WHERE created_at >= $1) as completed_transactions,
             (SELECT COUNT(DISTINCT COALESCE(seller_id, buyer_id)) 
              FROM energy_transactions 
              WHERE created_at >= $1) as users_trading,
             (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))), 0)
-             FROM energy_transactions 
-             WHERE created_at >= $1 AND status = 'completed') as avg_match_time
+        FROM energy_transactions
+        WHERE created_at >= $1 AND status = 'Completed'
         "#,
     )
     .bind(start_time)
@@ -265,7 +265,7 @@ async fn get_trading_volume(
             COALESCE(SUM(energy_amount * price_per_kwh), 0) as total_value,
             COUNT(*) as transaction_count
         FROM energy_transactions
-        WHERE created_at >= $1 AND status = 'completed'
+        WHERE created_at >= $1 AND status = 'Completed'
         "#,
     )
     .bind(start_time)
@@ -277,7 +277,7 @@ async fn get_trading_volume(
         r#"
         SELECT COALESCE(SUM(energy_amount), 0) as total_energy
         FROM energy_transactions
-        WHERE created_at >= $1 AND created_at < $2 AND status = 'completed'
+        WHERE created_at >= $1 AND created_at < $2 AND status = 'Completed'
         "#,
     )
     .bind(prev_start_time)
@@ -326,7 +326,7 @@ async fn get_price_statistics(
             COALESCE(STDDEV(price_per_kwh), 0) as stddev_price,
             PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_kwh) as median_price
         FROM energy_transactions
-        WHERE created_at >= $1 AND status = 'completed'
+        WHERE created_at >= $1 AND status = 'Completed'
         "#,
     )
     .bind(start_time)
@@ -338,7 +338,7 @@ async fn get_price_statistics(
         r#"
         SELECT COALESCE(AVG(price_per_kwh), 0) as avg_price
         FROM energy_transactions
-        WHERE created_at >= $1 AND created_at < $2 AND status = 'completed'
+        WHERE created_at >= $1 AND created_at < $2 AND status = 'Completed'
         "#,
     )
     .bind(prev_start_time)
@@ -384,7 +384,7 @@ async fn get_energy_source_breakdown(
         WITH total_volume AS (
             SELECT COALESCE(SUM(energy_amount), 1) as total
             FROM energy_transactions
-            WHERE created_at >= $1 AND status = 'completed'
+            WHERE created_at >= $1 AND status = 'Completed'
         )
         SELECT 
             COALESCE(eo.energy_source, 'unknown') as energy_source,
@@ -394,7 +394,7 @@ async fn get_energy_source_breakdown(
             (COALESCE(SUM(et.energy_amount), 0) / (SELECT total FROM total_volume) * 100) as market_share
         FROM energy_transactions et
         LEFT JOIN energy_offers eo ON et.offer_id = eo.id
-        WHERE et.created_at >= $1 AND et.status = 'completed'
+        WHERE et.created_at >= $1 AND et.status = 'Completed'
         GROUP BY eo.energy_source
         ORDER BY total_volume DESC
         "#,
@@ -429,7 +429,7 @@ async fn get_top_traders(
                 COUNT(*) as transaction_count,
                 AVG(price_per_kwh) as avg_price
             FROM energy_transactions
-            WHERE created_at >= $1 AND status = 'completed'
+            WHERE created_at >= $1 AND status = 'Completed'
             GROUP BY COALESCE(seller_id, buyer_id)
             ORDER BY total_volume DESC
             LIMIT $2
@@ -472,7 +472,7 @@ async fn get_seller_stats(
         r#"
         SELECT 
             COUNT(DISTINCT eo.id) as offers_created,
-            COUNT(DISTINCT CASE WHEN eo.status = 'fulfilled' THEN eo.id END) as offers_fulfilled,
+            COUNT(DISTINCT CASE WHEN eo.status = 'Fulfilled' THEN eo.id END) as offers_fulfilled,
             COALESCE(SUM(et.energy_amount), 0) as total_sold,
             COALESCE(SUM(et.energy_amount * et.price_per_kwh), 0) as total_revenue,
             COALESCE(AVG(et.price_per_kwh), 0) as avg_price
@@ -504,7 +504,7 @@ async fn get_buyer_stats(
         r#"
         SELECT 
             COUNT(DISTINCT eo.id) as orders_created,
-            COUNT(DISTINCT CASE WHEN eo.status = 'fulfilled' THEN eo.id END) as orders_fulfilled,
+            COUNT(DISTINCT CASE WHEN eo.status = 'Fulfilled' THEN eo.id END) as orders_fulfilled,
             COALESCE(SUM(et.energy_amount), 0) as total_purchased,
             COALESCE(SUM(et.energy_amount * et.price_per_kwh), 0) as total_spent,
             COALESCE(AVG(et.price_per_kwh), 0) as avg_price
@@ -543,7 +543,7 @@ async fn get_overall_user_stats(
             LEFT JOIN energy_offers eo ON et.offer_id = eo.id
             WHERE (et.seller_id = $1 OR et.buyer_id = $1) 
             AND et.created_at >= $2
-            AND et.status = 'completed'
+            AND et.status = 'Completed'
         ),
         revenue_calc AS (
             SELECT 

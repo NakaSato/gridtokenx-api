@@ -3,7 +3,6 @@ pub mod auth;
 pub mod audit;
 pub mod user_management;
 pub mod email_verification;
-pub mod users;
 pub mod meters;
 pub mod erc;
 pub mod trading;

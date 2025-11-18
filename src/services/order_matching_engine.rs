@@ -109,8 +109,8 @@ impl OrderMatchingEngine {
                 preferred_source,
                 required_from,
                 required_until
-            FROM orders
-            WHERE status = 'pending'
+            FROM trading_orders
+            WHERE status = 'Pending'
             ORDER BY created_at ASC
             "#
         )
@@ -146,7 +146,7 @@ impl OrderMatchingEngine {
                         available_from,
                         available_until
                     FROM offers
-                    WHERE status = 'active'
+                    WHERE status = 'Active'
                         AND energy_source = $1
                         AND price_per_kwh <= $2
                         AND energy_amount > 0
@@ -170,7 +170,7 @@ impl OrderMatchingEngine {
                         available_from,
                         available_until
                     FROM offers
-                    WHERE status = 'active'
+                    WHERE status = 'Active'
                         AND price_per_kwh <= $1
                         AND energy_amount > 0
                     ORDER BY price_per_kwh ASC, created_at ASC
@@ -250,7 +250,7 @@ impl OrderMatchingEngine {
                         if new_offer_amount <= zero {
                             // Mark offer as completed (don't update energy_amount to avoid constraint violation)
                             sqlx::query(
-                                "UPDATE offers SET status = 'completed', updated_at = NOW() WHERE id = $1"
+                                "UPDATE offers SET status = 'Completed', updated_at = NOW() WHERE id = $1"
                             )
                             .bind(offer_id)
                             .execute(&self.db)
@@ -275,7 +275,7 @@ impl OrderMatchingEngine {
                         if remaining_order_amount <= zero {
                             // Order fully filled
                             sqlx::query(
-                                "UPDATE orders SET status = 'completed', updated_at = NOW() WHERE id = $1"
+                                "UPDATE orders SET status = 'Completed', updated_at = NOW() WHERE id = $1"
                             )
                             .bind(order_id)
                             .execute(&self.db)
@@ -285,7 +285,7 @@ impl OrderMatchingEngine {
                         } else {
                             // Order partially filled
                             sqlx::query(
-                                "UPDATE orders SET status = 'partial', energy_amount = $1, updated_at = NOW() WHERE id = $2"
+                                "UPDATE orders SET status = 'PartiallyFilled', energy_amount = $1, updated_at = NOW() WHERE id = $2"
                             )
                             .bind(&remaining_order_amount)
                             .bind(order_id)
@@ -337,7 +337,7 @@ impl OrderMatchingEngine {
                 status,
                 created_at,
                 updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW(), NOW())
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Pending', NOW(), NOW())
             "#,
         )
         .bind(transaction_id)

@@ -112,7 +112,7 @@ impl ErcService {
             Utc::now(),
             request.expiry_date,
             issuer_wallet,
-            "active",
+            "Active",
             request.metadata,
         )
         .fetch_one(&self.db_pool)
@@ -374,7 +374,7 @@ impl ErcService {
             ErcCertificate,
             r#"
             UPDATE erc_certificates
-            SET wallet_address = $2, status = 'transferred'
+            SET wallet_address = $2, status = 'Transferred'
             WHERE id = $1
             RETURNING 
                 id, certificate_id, 
@@ -439,8 +439,8 @@ impl ErcService {
             ErcCertificate,
             r#"
             UPDATE erc_certificates
-            SET status = 'retired'
-            WHERE id = $1 AND status = 'active'
+            SET status = 'Retired'
+            WHERE id = $1 AND status = 'Active'
             RETURNING 
                 id, certificate_id, 
                 user_id as "user_id?", 
@@ -474,8 +474,8 @@ impl ErcService {
             r#"
             SELECT 
                 COUNT(*) as "total_count!",
-                COALESCE(SUM(CASE WHEN status = 'active' THEN kwh_amount ELSE 0 END), 0) as "active_kwh!",
-                COALESCE(SUM(CASE WHEN status = 'retired' THEN kwh_amount ELSE 0 END), 0) as "retired_kwh!",
+                COALESCE(SUM(CASE WHEN status = 'Active' THEN kwh_amount ELSE 0 END), 0) as "active_kwh!",
+                COALESCE(SUM(CASE WHEN status = 'Retired' THEN kwh_amount ELSE 0 END), 0) as "retired_kwh!",
                 COALESCE(SUM(kwh_amount), 0) as "total_kwh!"
             FROM erc_certificates
             WHERE user_id = $1

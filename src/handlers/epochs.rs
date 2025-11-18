@@ -122,7 +122,7 @@ pub async fn get_current_epoch(
             clearing_price::text, total_volume::text,
             total_orders, matched_orders
         FROM market_epochs
-        WHERE status IN ('pending', 'active')
+        WHERE status IN ('Pending', 'Active')
         ORDER BY start_time DESC
         LIMIT 1
         "#
@@ -301,8 +301,8 @@ pub async fn get_epoch_stats(
     let settlements = sqlx::query!(
         r#"
         SELECT 
-            COUNT(*) FILTER (WHERE status = 'pending') as pending,
-            COUNT(*) FILTER (WHERE status = 'confirmed') as confirmed
+            COUNT(*) FILTER (WHERE status = 'Pending') as pending,
+            COUNT(*) FILTER (WHERE status = 'Confirmed') as confirmed
         FROM settlements
         WHERE epoch_id = $1
         "#,
@@ -367,9 +367,9 @@ pub async fn trigger_manual_clearing(
     .ok_or_else(|| ApiError::NotFound("Epoch not found".into()))?;
 
     // Check if epoch can be cleared
-    if epoch.status != "active" && epoch.status != "pending" {
+    if epoch.status != "Active" && epoch.status != "Pending" {
         return Err(ApiError::BadRequest(format!(
-            "Epoch cannot be cleared from status: {}. Must be 'active' or 'pending'",
+            "Epoch cannot be cleared from status: {}. Must be 'Active' or 'Pending'",
             epoch.status
         )));
     }
@@ -384,7 +384,7 @@ pub async fn trigger_manual_clearing(
 
     // Update epoch status to cleared
     sqlx::query!(
-        "UPDATE market_epochs SET status = 'cleared', updated_at = NOW() WHERE id = $1",
+        "UPDATE market_epochs SET status = 'Cleared', updated_at = NOW() WHERE id = $1",
         epoch_id
     )
     .execute(&state.db)

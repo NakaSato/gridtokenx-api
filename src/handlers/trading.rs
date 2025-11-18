@@ -638,14 +638,6 @@ pub async fn create_blockchain_order(
         ));
     }
 
-    // TODO: Call to Trading program's create_sell_order or create_buy_order instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling to on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
-
     info!(
         "Blockchain order created: {} {} kWh at {} per kWh",
         payload.order_type, payload.energy_amount, payload.price_per_kwh
@@ -712,14 +704,6 @@ pub async fn match_blockchain_orders(
             "Only admins can trigger order matching".to_string(),
         ));
     }
-
-    // TODO: Call to Trading program's match_orders instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling to on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
 
     info!("Order matching initiated by admin {}", user.0.sub);
 

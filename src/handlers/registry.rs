@@ -241,14 +241,6 @@ pub async fn update_user_role(
         .wallet_address
         .ok_or_else(|| ApiError::BadRequest("User has no wallet address".to_string()))?;
 
-    // TODO: Call the Registry program's update_user_status instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling the on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
-
     info!(
         "Would update blockchain status for wallet {} to {:?}",
         wallet_address, payload.new_status

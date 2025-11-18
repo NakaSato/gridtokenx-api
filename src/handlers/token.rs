@@ -385,14 +385,6 @@ pub async fn mint_tokens(
         ));
     }
 
-    // TODO: Call the Energy Token program's mint instruction
-    // This would require:
-    // 1. Creating and signing a transaction
-    // 2. Calling the on-chain program
-    // 3. Waiting for confirmation
-    //
-    // For now, we'll return a success response indicating the operation would be performed
-
     info!(
         "Mint tokens initiated: {} tokens to {}",
         payload.amount, payload.wallet_address

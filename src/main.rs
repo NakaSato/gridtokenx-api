@@ -338,7 +338,6 @@ async fn main() -> Result<()> {
                 .route("/epochs", get(epochs::list_all_epochs))
                 .route("/epochs/{epoch_id}/stats", get(epochs::get_epoch_stats))
                 .route("/epochs/{epoch_id}/trigger", post(epochs::trigger_manual_clearing))
-                // .route("/trading/run-matching", post(trading::run_order_matching)) // Temporarily disabled for email verification testing
                 .layer(from_fn_with_state(
                     app_state.clone(),
                     auth::middleware::auth_middleware,
@@ -371,11 +370,6 @@ async fn main() -> Result<()> {
                 .route("/orders", get(trading::get_user_orders))
                 .route("/market", get(trading::get_market_data))
                 .route("/stats", get(trading::get_trading_stats))
-                // Phase 5 new endpoints - Temporarily disabled for email verification testing
-                // .route("/order-book", get(trading::get_order_book))
-                // .route("/orders/:id", axum::routing::delete(trading::cancel_order))
-                // .route("/epochs/current", get(trading::get_current_epoch_info))
-                // .route("/history", get(trading::get_trading_history))
                 // Blockchain trading routes
                 .route("/market/blockchain", get(trading::get_blockchain_market_data))
                 .route("/orders/blockchain", post(trading::create_blockchain_order))
@@ -495,7 +489,7 @@ async fn main() -> Result<()> {
                 .layer(axum::middleware::from_fn(middleware::request_logger_middleware))
                 .layer(TraceLayer::new_for_http())
                 .layer(TimeoutLayer::new(std::time::Duration::from_secs(30)))
-                .layer(CorsLayer::permissive()) // TODO: Configure proper CORS in production
+                .layer(CorsLayer::permissive())
         )
         .with_state(app_state);
 
