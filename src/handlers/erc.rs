@@ -216,8 +216,7 @@ pub async fn issue_certificate(
         })?;
 
     // Parse user wallet for blockchain operation
-    let user_wallet = state.blockchain_service
-        .parse_pubkey(&certificate.wallet_address)
+    let user_wallet = crate::services::blockchain_service::BlockchainService::parse_pubkey(&certificate.wallet_address)
         .map_err(|e| {
             error!("Failed to parse user wallet: {}", e);
             ApiError::BadRequest(format!("Invalid wallet address: {}", e))
@@ -229,15 +228,20 @@ pub async fn issue_certificate(
         .await
         .map_err(|e| {
             error!("Failed to get authority keypair: {}", e);
-            ApiError::ServiceUnavailable(format!("Authority wallet unavailable: {}", e))
+            ApiError::with_code(
+                crate::error::ErrorCode::ServiceUnavailable,
+                format!("Authority wallet unavailable: {}", e)
+            )
         })?;
 
     // Get governance program ID
-    let governance_program_id = state.blockchain_service
-        .get_governance_program_id()
+    let governance_program_id = crate::services::blockchain_service::BlockchainService::governance_program_id()
         .map_err(|e| {
             error!("Failed to get governance program ID: {}", e);
-            ApiError::Internal(format!("Governance program not configured: {}", e))
+            ApiError::with_code(
+                crate::error::ErrorCode::InternalServerError,
+                format!("Governance program not configured: {}", e)
+            )
         })?;
 
     // Extract renewable source and validation data from metadata

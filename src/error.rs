@@ -112,6 +112,8 @@ pub enum ErrorCode {
     ExternalServiceError,
     #[serde(rename = "EXT_8004")]
     EmailServiceFailed,
+    #[serde(rename = "EXT_8005")]
+    ServiceUnavailable,
     
     // Rate limiting errors (9xxx)
     #[serde(rename = "RATE_9001")]
@@ -189,6 +191,7 @@ impl ErrorCode {
             ErrorCode::ExternalServiceTimeout => 8002,
             ErrorCode::ExternalServiceError => 8003,
             ErrorCode::EmailServiceFailed => 8004,
+            ErrorCode::ServiceUnavailable => 8005,
             
             // Rate Limiting
             ErrorCode::RateLimitExceeded => 9001,
@@ -261,6 +264,7 @@ impl ErrorCode {
             ErrorCode::ExternalServiceTimeout => "External service request timed out",
             ErrorCode::ExternalServiceError => "External service error occurred",
             ErrorCode::EmailServiceFailed => "Failed to send email",
+            ErrorCode::ServiceUnavailable => "Service is currently unavailable",
             
             // Rate Limiting
             ErrorCode::RateLimitExceeded => "Rate limit exceeded. Please try again later",
@@ -515,7 +519,8 @@ impl ApiError {
             ApiError::Blockchain(_)
             | ApiError::ExternalService(_)
             | ApiError::WithCode(ErrorCode::BlockchainConnectionFailed, _)
-            | ApiError::WithCode(ErrorCode::ExternalServiceUnavailable, _) => StatusCode::BAD_GATEWAY,
+            | ApiError::WithCode(ErrorCode::ExternalServiceUnavailable, _)
+            | ApiError::WithCode(ErrorCode::ServiceUnavailable, _) => StatusCode::BAD_GATEWAY,
             
             ApiError::Database(_)
             | ApiError::Redis(_)

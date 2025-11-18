@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
-use std::net::IpAddr;
+use std::net::{IpAddr, IpAddr as NetworkIpAddr};
+use sqlx::types::ipnetwork::IpNetwork;
 
 use crate::{
     auth::middleware::AuthenticatedUser,
@@ -38,7 +39,7 @@ pub struct MeterRegistryResponse {
     pub verification_status: String,
     pub user_id: Uuid,
     pub manufacturer: Option<String>,
-    pub meter_type: String,
+    pub meter_type: Option<String>,
     pub location_address: Option<String>,
     pub installation_date: Option<chrono::NaiveDate>,
     pub verification_proof: Option<String>,
@@ -224,7 +225,8 @@ pub async fn verify_meter_handler(
     }
 
     // Extract client information for audit
-    let ip_address = extract_client_ip(&headers, None);
+    let ip_address = extract_client_ip(&headers, None)
+        .map(|ip| IpNetwork::from(ip));
     let user_agent = extract_user_agent(&headers);
 
     // Validate verification method
@@ -323,7 +325,7 @@ pub async fn get_registered_meters_handler(
             
             // Meter type filter
             if let Some(meter_type_filter) = &query.meter_type {
-                if meter.meter_type != *meter_type_filter {
+                if meter.meter_type.as_deref() != Some(meter_type_filter.as_str()) {
                     return false;
                 }
             }

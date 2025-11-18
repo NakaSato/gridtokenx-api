@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 use bigdecimal::BigDecimal;
@@ -79,8 +79,8 @@ impl MeterService {
         self.check_duplicate_reading(user_id, &request.reading_timestamp).await?;
 
         // Insert reading into database
-        let reading = sqlx::query_as!(
-            MeterReading,
+        let reading_id = Uuid::new_v4();
+        let row = sqlx::query(
             r#"
             INSERT INTO meter_readings (
                 id, user_id, wallet_address, kwh_amount, 
@@ -91,20 +91,33 @@ impl MeterService {
                 id, user_id, wallet_address, 
                 kwh_amount, reading_timestamp, submitted_at, 
                 minted, mint_tx_signature, meter_id, verification_status
-            "#,
-            Uuid::new_v4(),
-            user_id,
-            request.wallet_address,
-            request.kwh_amount,
-            request.reading_timestamp,
-            Utc::now(),
-            false,
-            meter_id: None,
-            verification_status,
+            "#
         )
+        .bind(reading_id)
+        .bind(user_id)
+        .bind(&request.wallet_address)
+        .bind(&request.kwh_amount)
+        .bind(&request.reading_timestamp)
+        .bind(&Utc::now())
+        .bind(&false)
+        .bind(&meter_id)
+        .bind(&verification_status)
         .fetch_one(&self.db_pool)
         .await
         .map_err(|e| anyhow!("Failed to insert meter reading: {}", e))?;
+
+        let reading = MeterReading {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            wallet_address: row.get("wallet_address"),
+            kwh_amount: row.get("kwh_amount"),
+            reading_timestamp: row.get("reading_timestamp"),
+            submitted_at: row.get("submitted_at"),
+            minted: row.get("minted"),
+            mint_tx_signature: row.get("mint_tx_signature"),
+            meter_id: row.get("meter_id"),
+            verification_status: row.get("verification_status"),
+        };
 
         info!(
             "Meter reading submitted: user={}, kwh={}, reading_id={}",
@@ -161,7 +174,7 @@ impl MeterService {
     ) -> Result<Vec<MeterReading>> {
         // Build query with dynamic sorting and filtering
         let query = if let Some(minted) = minted_filter {
-            format!(
+                format!(
                 r#"
                 SELECT 
                     id, user_id, wallet_address, 
@@ -190,8 +203,8 @@ impl MeterService {
             )
         };
 
-        let readings = if let Some(minted) = minted_filter {
-            sqlx::query_as::<_, MeterReading>(&query)
+        let rows = if let Some(minted) = minted_filter {
+            sqlx::query(&query)
                 .bind(user_id)
                 .bind(minted)
                 .bind(limit)
@@ -200,7 +213,7 @@ impl MeterService {
                 .await
                 .map_err(|e| anyhow!("Failed to fetch user readings: {}", e))?
         } else {
-            sqlx::query_as::<_, MeterReading>(&query)
+            sqlx::query(&query)
                 .bind(user_id)
                 .bind(limit)
                 .bind(offset)
@@ -208,6 +221,23 @@ impl MeterService {
                 .await
                 .map_err(|e| anyhow!("Failed to fetch user readings: {}", e))?
         };
+
+        let readings: Result<Vec<MeterReading>, anyhow::Error> = rows.into_iter().map(|row| {
+            Ok(MeterReading {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                wallet_address: row.get("wallet_address"),
+                kwh_amount: row.get("kwh_amount"),
+                reading_timestamp: row.get("reading_timestamp"),
+                submitted_at: row.get("submitted_at"),
+                minted: row.get("minted"),
+                mint_tx_signature: row.get("mint_tx_signature"),
+                meter_id: row.get("meter_id"),
+                verification_status: row.get("verification_status"),
+            })
+        }).collect();
+
+        let readings = readings.map_err(|e| anyhow!("Failed to parse user readings: {}", e))?;
 
         debug!("Retrieved {} readings for user {}", readings.len(), user_id);
 
@@ -283,8 +313,8 @@ impl MeterService {
             )
         };
 
-        let readings = if let Some(minted) = minted_filter {
-            sqlx::query_as::<_, MeterReading>(&query)
+        let rows = if let Some(minted) = minted_filter {
+            sqlx::query(&query)
                 .bind(wallet_address)
                 .bind(minted)
                 .bind(limit)
@@ -293,7 +323,7 @@ impl MeterService {
                 .await
                 .map_err(|e| anyhow!("Failed to fetch wallet readings: {}", e))?
         } else {
-            sqlx::query_as::<_, MeterReading>(&query)
+            sqlx::query(&query)
                 .bind(wallet_address)
                 .bind(limit)
                 .bind(offset)
@@ -301,6 +331,23 @@ impl MeterService {
                 .await
                 .map_err(|e| anyhow!("Failed to fetch wallet readings: {}", e))?
         };
+
+        let readings: Result<Vec<MeterReading>, anyhow::Error> = rows.into_iter().map(|row| {
+            Ok(MeterReading {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                wallet_address: row.get("wallet_address"),
+                kwh_amount: row.get("kwh_amount"),
+                reading_timestamp: row.get("reading_timestamp"),
+                submitted_at: row.get("submitted_at"),
+                minted: row.get("minted"),
+                mint_tx_signature: row.get("mint_tx_signature"),
+                meter_id: row.get("meter_id"),
+                verification_status: row.get("verification_status"),
+            })
+        }).collect();
+
+        let readings = readings.map_err(|e| anyhow!("Failed to parse wallet readings: {}", e))?;
 
         debug!("Retrieved {} readings for wallet {}", readings.len(), wallet_address);
 
@@ -337,8 +384,7 @@ impl MeterService {
 
     /// Get unminted readings (readings that haven't been converted to tokens yet)
     pub async fn get_unminted_readings(&self, limit: i64) -> Result<Vec<MeterReading>> {
-        let readings = sqlx::query_as!(
-            MeterReading,
+        let rows = sqlx::query(
             r#"
             SELECT 
                 id, user_id, wallet_address, 
@@ -348,13 +394,29 @@ impl MeterService {
             WHERE minted = false
             ORDER BY submitted_at ASC
             LIMIT $1
-            "#,
-            limit,
+            "#
         )
+        .bind(limit)
         .fetch_all(&self.db_pool)
         .await
         .map_err(|e| anyhow!("Failed to fetch unminted readings: {}", e))?;
 
+        let readings: Result<Vec<MeterReading>, anyhow::Error> = rows.into_iter().map(|row| {
+            Ok(MeterReading {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                wallet_address: row.get("wallet_address"),
+                kwh_amount: row.get("kwh_amount"),
+                reading_timestamp: row.get("reading_timestamp"),
+                submitted_at: row.get("submitted_at"),
+                minted: row.get("minted"),
+                mint_tx_signature: row.get("mint_tx_signature"),
+                meter_id: row.get("meter_id"),
+                verification_status: row.get("verification_status"),
+            })
+        }).collect();
+
+        let readings = readings.map_err(|e| anyhow!("Failed to parse unminted readings: {}", e))?;
         debug!("Retrieved {} unminted readings", readings.len());
 
         Ok(readings)
@@ -366,8 +428,7 @@ impl MeterService {
         reading_id: Uuid,
         tx_signature: &str,
     ) -> Result<MeterReading> {
-        let reading = sqlx::query_as!(
-            MeterReading,
+        let row = sqlx::query(
             r#"
             UPDATE meter_readings
             SET minted = true, mint_tx_signature = $2
@@ -376,13 +437,26 @@ impl MeterService {
                 id, user_id, wallet_address, 
                 kwh_amount, reading_timestamp, submitted_at, 
                 minted, mint_tx_signature, meter_id, verification_status
-            "#,
-            reading_id,
-            tx_signature,
+            "#
         )
+        .bind(reading_id)
+        .bind(tx_signature)
         .fetch_one(&self.db_pool)
         .await
         .map_err(|e| anyhow!("Failed to mark reading as minted: {}", e))?;
+
+        let reading = MeterReading {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            wallet_address: row.get("wallet_address"),
+            kwh_amount: row.get("kwh_amount"),
+            reading_timestamp: row.get("reading_timestamp"),
+            submitted_at: row.get("submitted_at"),
+            minted: row.get("minted"),
+            mint_tx_signature: row.get("mint_tx_signature"),
+            meter_id: row.get("meter_id"),
+            verification_status: row.get("verification_status"),
+        };
 
         info!(
             "Marked reading {} as minted with tx: {}",
@@ -394,8 +468,7 @@ impl MeterService {
 
     /// Get a specific reading by ID
     pub async fn get_reading_by_id(&self, reading_id: Uuid) -> Result<MeterReading> {
-        let reading = sqlx::query_as!(
-            MeterReading,
+        let row = sqlx::query(
             r#"
             SELECT 
                 id, user_id, wallet_address, 
@@ -403,13 +476,28 @@ impl MeterService {
                 minted, mint_tx_signature, meter_id, verification_status
             FROM meter_readings
             WHERE id = $1
-            "#,
-            reading_id,
+            "#
         )
+        .bind(reading_id)
         .fetch_optional(&self.db_pool)
         .await
-        .map_err(|e| anyhow!("Failed to fetch reading: {}", e))?
-        .ok_or_else(|| anyhow!("Reading not found"))?;
+        .map_err(|e| anyhow!("Failed to fetch reading: {}", e))?;
+
+        let reading = match row {
+            Some(row) => MeterReading {
+                id: row.get("id"),
+                user_id: row.get("user_id"),
+                wallet_address: row.get("wallet_address"),
+                kwh_amount: row.get("kwh_amount"),
+                reading_timestamp: row.get("reading_timestamp"),
+                submitted_at: row.get("submitted_at"),
+                minted: row.get("minted"),
+                mint_tx_signature: row.get("mint_tx_signature"),
+                meter_id: row.get("meter_id"),
+                verification_status: row.get("verification_status"),
+            },
+            None => return Err(anyhow!("Reading not found")),
+        };
 
         Ok(reading)
     }

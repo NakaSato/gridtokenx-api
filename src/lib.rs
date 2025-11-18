@@ -24,6 +24,7 @@ pub struct AppState {
     pub blockchain_service: services::BlockchainService,
     pub wallet_service: services::WalletService,
     pub meter_service: services::MeterService,
+    pub meter_verification_service: services::MeterVerificationService,
     pub erc_service: services::ErcService,
     pub order_matching_engine: services::OrderMatchingEngine,
     pub market_clearing_engine: services::MarketClearingEngine,

@@ -28,10 +28,13 @@ pub mod types {
     }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type, ToSchema)]
-    #[sqlx(type_name = "order_status")]
+    #[sqlx(type_name = "order_status", rename_all = "snake_case")]
+    #[serde(rename_all = "snake_case")]
     pub enum OrderStatus {
         Pending,
         Active,
+        #[sqlx(rename = "partially_filled")]
+        #[serde(rename = "partially_filled")]
         PartiallyFilled,
         Filled,
         Settled,
@@ -40,7 +43,8 @@ pub mod types {
     }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type, ToSchema)]
-    #[sqlx(type_name = "epoch_status")]
+    #[sqlx(type_name = "epoch_status", rename_all = "snake_case")]
+    #[serde(rename_all = "snake_case")]
     pub enum EpochStatus {
         Pending,
         Active,

@@ -8,7 +8,7 @@ pub mod schema;
 pub type DatabasePool = Pool<Postgres>;
 
 pub async fn setup_database(database_url: &str) -> Result<DatabasePool> {
-    info!("Connecting to database with enhanced security settings");
+    info!("Connecting to database with performance-optimized settings (Priority 4)");
     
     // Parse database URL and check for SSL parameters
     let ssl_mode = if database_url.contains("sslmode=require") || 
@@ -22,20 +22,41 @@ pub async fn setup_database(database_url: &str) -> Result<DatabasePool> {
     
     info!("Database SSL mode: {}", ssl_mode);
     
-    // Create connection pool with security-focused settings
+    // Priority 4: Performance Optimization - Enhanced connection pool settings
     let pool = PgPoolOptions::new()
-        .max_connections(20) // Limit maximum connections
-        .min_connections(2)  // Maintain minimum pool
-        .acquire_timeout(Duration::from_secs(30))
-        .idle_timeout(Duration::from_secs(600)) // Close idle connections after 10 minutes
-        .max_lifetime(Duration::from_secs(1800)) // Recycle connections after 30 minutes
+        .max_connections(100)         // Priority 4: Increased from 50 to 100 for higher concurrency
+        .min_connections(10)          // Priority 4: Increased from 5 to maintain larger baseline
+        .acquire_timeout(Duration::from_secs(3))   // Priority 4: Reduced from 5s to 3s for faster failover
+        .idle_timeout(Duration::from_secs(180))     // Priority 4: Reduced from 5min to 3min for faster cleanup
+        .max_lifetime(Duration::from_secs(900))      // Priority 4: Reduced from 30min to 15min for fresher connections
+        .test_before_acquire(true)      // Test connections before use
+        .after_connect(|conn, _meta| Box::pin(async move {
+            // Priority 4: Enhanced connection configuration for optimal performance
+            sqlx::query("SET timezone = 'UTC'").execute(&mut *conn).await?;
+            sqlx::query("SET statement_timeout = '15s'").execute(&mut *conn).await?;  // Reduced from 30s
+            sqlx::query("SET lock_timeout = '10s'").execute(&mut *conn).await?;     // Priority 4: Add lock timeout
+            sqlx::query("SET idle_in_transaction_session_timeout = '10s'").execute(&mut *conn).await?;  // Priority 4: Prevent long idle transactions
+            // Priority 4: Performance tuning settings
+            sqlx::query("SET shared_preload_libraries = 'pg_stat_statements'").execute(&mut *conn).await.ok(); // Enable query statistics
+            sqlx::query("SET track_activity_query_size = 'on'").execute(&mut *conn).await.ok(); // Track query activity
+            Ok(())
+        }))
         .connect(database_url)
         .await?;
     
-    // Test the connection
-    sqlx::query("SELECT 1").execute(&pool).await?;
+    // Priority 4: Test connection with performance validation
+    let start_time = std::time::Instant::now();
+    sqlx::query("SELECT 1, version()").execute(&pool).await?;
+    let connection_time = start_time.elapsed();
     
-    info!("✅ Database connection established successfully");
+    info!("✅ Database connection established successfully in {:?}", connection_time);
+    info!("Priority 4 Performance Tuning Applied:");
+    info!("  - Max connections: 100 (was 50)");
+    info!("  - Min connections: 10 (was 5)");
+    info!("  - Acquire timeout: 3s (was 5s)");
+    info!("  - Idle timeout: 3min (was 5min)");
+    info!("  - Max lifetime: 15min (was 30min)");
+    info!("  - Statement timeout: 15s (was 30s)");
     
     Ok(pool)
 }

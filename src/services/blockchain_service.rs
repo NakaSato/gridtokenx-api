@@ -11,6 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info, warn, error};
+use crate::services::priority_fee_service::{PriorityFeeService, PriorityLevel, TransactionType};
 
 /// Program IDs (localnet) — keep in sync with `gridtokenx-anchor/Anchor.toml`
 pub const REGISTRY_PROGRAM_ID: &str = "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7";
@@ -159,13 +160,37 @@ impl BlockchainService {
     // Transaction Building & Signing (Phase 4)
     // ====================================================================
 
-    /// Build, sign, and send a transaction
-    /// Returns the transaction signature
+    /// Priority 4: Build, sign, and send a transaction with automatic priority fees
+    /// Returns transaction signature with enhanced performance monitoring
     pub async fn build_and_send_transaction(
         &self,
         instructions: Vec<Instruction>,
         signers: &[&Keypair],
     ) -> Result<Signature> {
+        let start_time = std::time::Instant::now();
+        
+        let result = self.build_and_send_transaction_with_priority(instructions, signers, TransactionType::OrderCreation).await;
+        
+        let duration = start_time.elapsed();
+        info!("Priority 4: Transaction build & send completed in {:?}", duration);
+        
+        result
+    }
+
+    /// Build, sign, and send a transaction with specified priority level
+    /// Returns transaction signature
+    pub async fn build_and_send_transaction_with_priority(
+        &self,
+        mut instructions: Vec<Instruction>,
+        signers: &[&Keypair],
+        transaction_type: TransactionType,
+    ) -> Result<Signature> {
+        // Add priority fees based on transaction type
+        let priority_level = PriorityFeeService::recommend_priority_level(transaction_type);
+        let compute_limit = PriorityFeeService::recommend_compute_limit(transaction_type);
+        
+        PriorityFeeService::add_priority_fee(&mut instructions, priority_level, Some(compute_limit))?;
+        
         // Get recent blockhash
         let recent_blockhash = self.get_latest_blockhash()?;
         
@@ -184,7 +209,9 @@ impl BlockchainService {
         // Send transaction
         let signature = self.send_and_confirm_transaction(&transaction)?;
         
-        info!("Transaction sent successfully: {}", signature);
+        let estimated_cost = PriorityFeeService::estimate_fee_cost(priority_level, Some(compute_limit));
+        info!("Transaction sent successfully: {} (priority: {}, estimated cost: {} SOL)", 
+               signature, priority_level.description(), estimated_cost);
         Ok(signature)
     }
 
@@ -357,11 +384,12 @@ impl BlockchainService {
             accounts,
         );
         
-        // Build and send transaction
+        // Build and send transaction with token minting priority
         let signers = vec![authority];
-        let signature = self.build_and_send_transaction(
+        let signature = self.build_and_send_transaction_with_priority(
             vec![mint_instruction],
             &signers,
+            TransactionType::TokenMinting,
         ).await?;
         
         info!("Successfully minted {} kWh as tokens. Signature: {}", amount_kwh, signature);
@@ -459,22 +487,35 @@ impl BlockchainService {
             amount, from_token_account, to_token_account
         );
         
-        // Create transfer instruction using transfer_checked for safety
-        let transfer_ix = spl_token::instruction::transfer_checked(
-            &spl_token::id(),
-            from_token_account,
-            mint,
-            to_token_account,
-            &authority.pubkey(),  // Authority (owner of from_account)
-            &[],                   // No multisig signers
-            amount,
-            decimals,
-        )?;
+        // Create transfer instruction manually to avoid type conflicts
+        let token_program_id = solana_sdk::pubkey::Pubkey::from(spl_token::id().to_bytes());
         
-        // Submit transaction
-        let signature = self.build_and_send_transaction(
-            vec![transfer_ix],
+        // Build instruction data for transfer_checked
+        // Instruction layout: discriminator(1) + amount(8) + decimals(1) + optional extra
+        let mut instruction_data = Vec::with_capacity(10);
+        instruction_data.push(3); // transfer_checked instruction discriminator
+        instruction_data.extend_from_slice(&amount.to_le_bytes());
+        instruction_data.push(decimals);
+        
+        // Build accounts for the instruction
+        let accounts = vec![
+            solana_sdk::instruction::AccountMeta::new(*from_token_account, false),
+            solana_sdk::instruction::AccountMeta::new(*mint, false),
+            solana_sdk::instruction::AccountMeta::new(*to_token_account, false),
+            solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true),
+        ];
+        
+        let transfer_instruction = solana_sdk::instruction::Instruction {
+            program_id: token_program_id,
+            accounts,
+            data: instruction_data,
+        };
+        
+        // Submit transaction with settlement priority
+        let signature = self.build_and_send_transaction_with_priority(
+            vec![transfer_instruction],
             &[authority],
+            TransactionType::Settlement,
         ).await?;
         
         info!("Tokens transferred. Signature: {}", signature);

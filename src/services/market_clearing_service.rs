@@ -538,7 +538,7 @@ impl MarketClearingService {
                 return Err(ApiError::Forbidden("Order does not belong to user".to_string()).into());
             }
 
-            if !matches!(order.status, Some(OrderStatus::Pending)) {
+            if !matches!(order.status, OrderStatus::Pending) {
                 return Err(ApiError::BadRequest("Order cannot be cancelled".to_string()).into());
             }
 

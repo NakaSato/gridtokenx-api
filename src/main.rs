@@ -45,6 +45,7 @@ pub struct AppState {
     pub websocket_service: services::WebSocketService,
     pub health_checker: services::HealthChecker,
     pub audit_logger: services::AuditLogger,
+    pub cache_service: services::CacheService,
 }
 
 #[tokio::main]
@@ -239,6 +240,10 @@ async fn main() -> Result<()> {
     let audit_logger = services::AuditLogger::new(db_pool.clone());
     info!("✅ Audit logger initialized for security event tracking");
 
+    // Initialize cache service for performance optimization
+    let cache_service = services::CacheService::new(&config.redis_url).await?;
+    info!("✅ Cache service initialized for performance optimization");
+
     // Create application state
     let app_state = AppState {
         db: db_pool,
@@ -259,6 +264,7 @@ async fn main() -> Result<()> {
         websocket_service: websocket_service.clone(),
         health_checker,
         audit_logger,
+        cache_service,
     };
 
     // Build API routes

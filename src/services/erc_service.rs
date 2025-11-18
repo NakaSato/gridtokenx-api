@@ -7,7 +7,7 @@ use uuid::Uuid;
 use bigdecimal::BigDecimal;
 use solana_sdk::{
     pubkey::Pubkey,
-    signature::Keypair,
+    signature::{Keypair, Signer},
     instruction::{Instruction, AccountMeta},
 };
 use std::str::FromStr;
@@ -148,7 +148,7 @@ impl ErcService {
             AccountMeta::new(certificate_pda, false),
             AccountMeta::new_readonly(*user_wallet, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
+            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
         ];
         
         let issue_erc_ix = Instruction::new_with_bytes(
@@ -352,7 +352,7 @@ impl ErcService {
             AccountMeta::new_readonly(*from_wallet, false),
             AccountMeta::new(*to_wallet, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
+            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
         ];
         
         let transfer_erc_ix = Instruction::new_with_bytes(
@@ -404,7 +404,7 @@ impl ErcService {
         let accounts = vec![
             AccountMeta::new(certificate_pda, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
+            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
         ];
         
         let retire_erc_ix = Instruction::new_with_bytes(

@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use std::str::FromStr;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -15,7 +16,8 @@ use redis::AsyncCommands;
 
 use crate::error::ApiError;
 use crate::services::WebSocketService;
-use crate::services::SettlementService;
+use crate::services::settlement_service::SettlementService;
+use tracing::error;
 
 /// Order side (Buy or Sell)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -508,12 +510,12 @@ impl MarketClearingEngine {
         }
 
         // Load from database
-        let orders = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, DateTime<Utc>, DateTime<Utc>)>(
+        let orders = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, DateTime<Utc>, DateTime<Utc>, Uuid, Uuid)>(
             r#"
             SELECT 
                 id, user_id, side::text, energy_amount::text, 
                 price_per_kwh::text, filled_amount::text,
-                created_at, expires_at
+                created_at, expires_at, buyer_id, seller_id
             FROM trading_orders
             WHERE status = 'Pending' 
                 AND expires_at > NOW()
@@ -527,7 +529,7 @@ impl MarketClearingEngine {
         let mut book = self.order_book.write().await;
         let mut loaded_count = 0;
 
-        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at) in orders {
+        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at, buyer_id, seller_id) in orders {
             let side = match side_str.as_str() {
                 "Buy" => OrderSide::Buy,
                 "Sell" => OrderSide::Sell,
@@ -976,10 +978,10 @@ impl MarketClearingEngine {
     /// Execute settlements for matched trades
     async fn execute_settlements_for_matches(&self, settlement_service: &SettlementService) -> Result<(), ApiError> {
         // Get recent trades that need settlement (status = 'Pending')
-        let trades = sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String, String, String, DateTime<Utc>)>(
+        let trades = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, String, DateTime<Utc>)>(
             r#"
             SELECT 
-                id, buyer_id, seller_id, 
+                id, buyer_id, seller_id,
                 quantity::text, price::text, total_value::text,
                 executed_at
             FROM trades 
@@ -1003,7 +1005,7 @@ impl MarketClearingEngine {
 
         for (trade_id, buyer_id, seller_id, quantity_str, price_str, total_value_str, executed_at) in trades {
             // Convert TradeMatch to settlement format
-            let quantity = Decimal::from_str_exact(&quantity_str)
+            let quantity = Decimal::from_str(&quantity_str)
                 .map_err(|_| ApiError::Internal("Invalid quantity".into()))?;
             let price = Decimal::from_str_exact(&price_str)
                 .map_err(|_| ApiError::Internal("Invalid price".into()))?;

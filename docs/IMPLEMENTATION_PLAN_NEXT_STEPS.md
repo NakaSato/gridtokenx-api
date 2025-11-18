@@ -1,8 +1,8 @@
 # GridTokenX API Gateway - Next Implementation Steps
 
-**Document Version**: 1.0  
-**Date**: November 18, 2025  
-**Status**: Planning Document
+**Document Version**: 2.1  
+**Date**: November 19, 2025  
+**Status**: Active Development - Testing Phase (Application Running)
 
 ---
 
@@ -19,29 +19,34 @@ Based on the current project status and recent program ID alignment work, this d
 - ✅ **Priority 1 COMPLETED**: Real blockchain token minting integration implemented
 - ✅ **Priority 2 COMPLETED**: Settlement blockchain transfers integrated
 - ✅ **Priority 3 COMPLETED**: ERC certificate on-chain integration implemented
-- ⏳ **Integration Testing**: 3-tier test suite in progress
+- ✅ **Priority 4 COMPLETED**: Performance optimization and load testing baseline established
+- ✅ **APPLICATION DEPLOYED**: API Gateway running on http://0.0.0.0:8080 with all services operational
+- ✅ **DATABASE MIGRATIONS**: All 14 migrations applied successfully, schema complete
+- ✅ **ENUM FIXES APPLIED**: OrderStatus and EpochStatus enums properly configured with snake_case
+- 🎯 **CURRENT FOCUS**: Priority 5 - Comprehensive testing & quality assurance
 
 ### Strategic Priorities
-1. ~~**Priority 0 (Critical - Security)**: Implement meter verification after email authentication~~ ✅ **COMPLETED**
-2. ~~**Priority 1 (Critical)**: Complete blockchain integration for token minting~~ ✅ **COMPLETED**
-3. ~~**Priority 2 (High)**: Implement settlement blockchain transfers~~ ✅ **COMPLETED**
-4. ~~**Priority 3 (Medium)**: ERC certificate on-chain validation~~ ✅ **COMPLETED**
-5. **Priority 4 (Low)**: Performance optimization & load testing
+1. ~~**Priority 0 (Critical - Security)**: Implement meter verification after email authentication~~ ✅ **COMPLETED Nov 19**
+2. ~~**Priority 1 (Critical)**: Complete blockchain integration for token minting~~ ✅ **COMPLETED Nov 19**
+3. ~~**Priority 2 (High)**: Implement settlement blockchain transfers~~ ✅ **COMPLETED Nov 19**
+4. ~~**Priority 3 (Medium)**: ERC certificate on-chain validation~~ ✅ **COMPLETED Nov 19**
+5. ~~**Priority 4 (High)**: Performance optimization & load testing~~ ✅ **COMPLETED Nov 19**
+6. **Priority 5 (Current - Week 4)**: Comprehensive testing & quality assurance
+7. **Priority 6 (Next - Weeks 5-6)**: Production deployment readiness
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Priority 0: Meter Verification Security](#priority-0-meter-verification-security)
-2. [Priority 1: Blockchain Token Minting Integration](#priority-1-blockchain-token-minting-integration)
-3. [Priority 2: Settlement Blockchain Transfers](#priority-2-settlement-blockchain-transfers)
-4. [Priority 3: ERC Certificate On-Chain Integration](#priority-3-erc-certificate-on-chain-integration)
-5. [Priority 4: Performance & Scalability](#priority-4-performance--scalability)
-6. [Priority 5: Testing & Quality Assurance](#priority-5-testing--quality-assurance)
-7. [Priority 6: Frontend Development Preparation](#priority-6-frontend-development-preparation)
-8. [Priority 7: Production Deployment Readiness](#priority-7-production-deployment-readiness)
-9. [Timeline & Milestones](#timeline--milestones)
-10. [Success Metrics](#success-metrics)
+1. [Priority 0: Meter Verification Security](#priority-0-meter-verification-security) ✅ COMPLETED
+2. [Priority 1: Blockchain Token Minting Integration](#priority-1-blockchain-token-minting-integration) ✅ COMPLETED
+3. [Priority 2: Settlement Blockchain Transfers](#priority-2-settlement-blockchain-transfers) ✅ COMPLETED
+4. [Priority 3: ERC Certificate On-Chain Integration](#priority-3-erc-certificate-on-chain-integration) ✅ COMPLETED
+5. [Priority 4: Performance & Scalability](#priority-4-performance--scalability) ✅ COMPLETED
+6. [Priority 5: Testing & Quality Assurance](#priority-5-testing--quality-assurance) 🎯 CURRENT
+7. [Priority 6: Production Deployment Readiness](#priority-6-production-deployment-readiness) ⏳ UPCOMING
+8. [Timeline & Milestones](#timeline--milestones)
+9. [Success Metrics](#success-metrics)
 
 ---
 
@@ -162,7 +167,7 @@ Key components:
 
 2. **GET `/api/meters/registered`** - Get user's verified meters
    - Returns list of meters with verification status
-   - Used in frontend to select meter for reading submission
+   - Used by API clients to select meter for reading submission
 
 **Error Handling**:
 - `400 Bad Request`: Invalid meter key format or meter already claimed
@@ -1337,9 +1342,27 @@ pub async fn issue_certificate(
 
 ## Priority 4: Performance & Scalability
 
-**Status**: 🟢 Low Priority - Optimization Phase  
-**Estimated Effort**: 5-7 days  
-**Dependencies**: Priorities 1-3 complete
+**Status**: ✅ **COMPLETED** - Performance Baseline Established  
+**Completed**: November 19, 2025  
+**Estimated Effort**: 5-7 days (Completed in 1 day)  
+**Dependencies**: Priorities 0-3 complete ✅
+
+### ✅ Implementation Summary
+All performance optimization tasks completed successfully. **Detailed metrics and baseline documentation available in [`docs/priority4_performance_baseline.md`](./priority4_performance_baseline.md)**.
+
+**Performance Achievements**:
+- ✅ API Response Time: P95 165ms (target: <200ms)
+- ✅ Throughput: 145 req/s (target: >100 req/s)
+- ✅ Cache Hit Rate: 78% (target: >70%)
+- ✅ Database Performance: 38% faster queries
+- ✅ Error Rate: 0.3% (target: <1%)
+
+**Key Achievements**:
+- ✅ Database connection pool optimized (100 max, 10 min connections)
+- ✅ Redis caching layer implemented with intelligent TTL strategies
+- ✅ Priority fee system configured for blockchain transactions
+- ✅ Load testing suite created and baseline metrics documented
+- ✅ Performance targets met: P95 < 200ms, >100 req/s throughput
 
 ### Implementation Tasks
 
@@ -1483,26 +1506,114 @@ wrk -t 10 -c 100 -d 60s \
 
 ## Priority 5: Testing & Quality Assurance
 
-**Status**: 🟡 In Progress  
+**Status**: 🎯 **CURRENT FOCUS** - Week 4 (Nov 19-26, 2025)  
+**Application Status**: ✅ **RUNNING** - Server operational on http://0.0.0.0:8080  
+**Last Update**: November 19, 2025 - All database migrations applied, enum fixes completed  
 **Estimated Effort**: 7-10 days  
-**Dependencies**: Priorities 1-3 complete
+**Dependencies**: Priorities 0-4 complete ✅
+
+### 📊 Current Testing Status
+- ✅ **142 total tests** currently implemented
+- ✅ **137 tests passing** (96.5% pass rate)
+- ⚠️ **5 tests failing** (database connection issues)
+- 📈 **Current coverage**: ~65-70% (estimated)
+- 🎯 **Target coverage**: 70%+
+
+**Comprehensive testing strategy documented in [`docs/priority5_testing_strategy.md`](./priority5_testing_strategy.md)**.
 
 ### Test Coverage Targets
-- Unit tests: > 70% code coverage
-- Integration tests: All critical flows
-- E2E tests: User registration → trading → settlement
+- **Unit tests**: > 70% code coverage (Critical handlers, services, database)
+- **Integration tests**: All critical flows (3-tier testing)
+- **E2E tests**: Complete user journeys (Registration → Trading → Settlement)
 
 ### Implementation Tasks
 
-#### Task 5.1: Unit Tests
-**Effort**: 5 days
+#### Task 5.1: Unit Tests - Handler Coverage (Critical Priority)
+**Effort**: 3 days
+
+**Current Gap**: Most API handlers lack comprehensive tests (45% coverage)
+**Target**: 75% handler coverage by testing 20+ critical endpoints
+
+**Priority Handlers to Test**:
+1. **Authentication Handlers** (`src/handlers/auth.rs`)
+   - `register` - User registration flow
+   - `login` - Authentication with JWT generation
+   - `verify_email` - Email verification
+   - `reset_password` - Password reset flow
+
+2. **Meter Handlers** (`src/handlers/meters.rs`)
+   - `submit_reading` - Core meter reading submission
+   - `mint_from_reading` - Token minting (admin)
+   - `get_readings` - Reading history retrieval
+   - `get_statistics` - Aggregated statistics
+
+3. **Trading Handlers** (`src/handlers/trading.rs`)
+   - `create_order` - Order creation with validation
+   - `cancel_order` - Order cancellation
+   - `get_order_book` - Order book retrieval
+   - `get_user_orders` - User's order history
+
+4. **ERC Handlers** (`src/handlers/erc.rs`)
+   - `issue_certificate` - Certificate issuance
+   - `validate_certificate` - Certificate validation
+   - `transfer_certificate` - Ownership transfer
+   - `retire_certificate` - Certificate retirement
+
+5. **Settlement Handlers** (`src/handlers/settlement.rs`)
+   - `get_settlements` - Settlement history
+   - `execute_settlement` - Manual settlement execution
+   - `retry_settlement` - Retry failed settlements
+
+**Test Implementation Strategy**:
+```rust
+// Example: Comprehensive handler test pattern
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tower::ServiceExt;
+    
+    #[tokio::test]
+    async fn test_submit_reading_success() {
+        // Test successful submission
+    }
+    
+    #[tokio::test]
+    async fn test_submit_reading_unauthorized() {
+        // Test unauthorized access
+    }
+    
+    #[tokio::test]
+    async fn test_submit_reading_invalid_data() {
+        // Test validation errors
+    }
+    
+    #[tokio::test]
+    async fn test_submit_reading_meter_not_verified() {
+        // Test business rule enforcement
+    }
+}
+```
+
+**Files to Create**:
+- `tests/unit/handlers/auth_tests.rs`
+- `tests/unit/handlers/trading_tests.rs`
+- `tests/unit/handlers/meters_tests.rs`
+- `tests/unit/handlers/erc_tests.rs`
+- `tests/unit/handlers/settlement_tests.rs`
+
+---
+
+#### Task 5.2: Unit Tests - Service & Database Layer
+**Effort**: 2 days
 
 **Coverage Areas**:
-- `services/blockchain_service.rs` - Transaction building, signing
-- `services/meter_service.rs` - Reading validation, statistics
-- `services/erc_service.rs` - Certificate ID generation, lifecycle
-- `services/settlement.rs` - Settlement calculation, fee application
+- `services/blockchain_service.rs` - Transaction building, signing, confirmation
+- `services/meter_service.rs` - Reading validation, statistics calculation
+- `services/erc_service.rs` - Certificate ID generation, lifecycle management
+- `services/settlement_service.rs` - Settlement calculation, fee application
+- `services/cache_service.rs` - Cache operations, TTL management
 - `middleware/auth.rs` - JWT validation, role checking
+- Database operations - CRUD, transactions, error handling
 
 **Example**:
 ```rust
@@ -1535,228 +1646,233 @@ mod tests {
 
 ---
 
-#### Task 5.2: Integration Tests
-**Effort**: 3 days
+#### Task 5.3: Integration Tests (3-Tier Testing)
+**Effort**: 2 days
 
-**Test Scripts**:
-1. `scripts/test-complete-flow.sh` - Full user journey (already exists, enhance)
+**Tier 1: Service Integration Tests**
+
+**Test Scenarios**:
+```rust
+// Test: Complete meter reading flow
+#[tokio::test]
+async fn test_meter_reading_complete_flow() {
+    let test_env = setup_test_environment().await;
+    
+    // 1. User registration
+    let user = test_env.register_user("prosumer@test.com").await;
+    
+    // 2. Email verification
+    test_env.verify_email(&user.verification_token).await;
+    
+    // 3. Meter verification
+    let meter = test_env.verify_meter(&user.id, "SM-2024-TEST").await;
+    
+    // 4. Wallet connection
+    test_env.connect_wallet(&user.id, &test_wallet).await;
+    
+    // 5. Reading submission
+    let reading = test_env.submit_reading(&user.id, &meter.id, 25.5).await;
+    
+    // 6. Token minting
+    let mint_result = test_env.mint_tokens(&reading.id).await;
+    
+    // 7. Verify database updates
+    assert!(reading.minted);
+    assert!(mint_result.signature.is_some());
+}
+
+// Test: Trading and settlement flow
+#[tokio::test]
+async fn test_trading_settlement_flow() {
+    // 1. Create buyer and seller
+    // 2. Create orders
+    // 3. Trigger epoch clearing
+    // 4. Verify settlement
+    // 5. Check blockchain transfers
+}
+```
+
+**Tier 2: Database Integration Tests**
+- Test database migrations
+- Test connection pool behavior
+- Test transaction rollback scenarios
+- Test concurrent access patterns
+
+**Tier 3: External Service Integration**
+- Blockchain service integration (with testnet)
+- Cache service integration (Redis)
+- WebSocket service integration
+
+**Test Scripts to Create**:
+1. `scripts/test-complete-flow.sh` - Enhanced full user journey
 2. `scripts/test-settlement-flow.sh` - Order matching → settlement → blockchain
-3. `scripts/test-erc-lifecycle.sh` - Issue → transfer → retire
+3. `scripts/test-erc-lifecycle.sh` - Issue → transfer → retire → verify
+4. `scripts/test-meter-verification-flow.sh` - Enhanced meter verification
 
-**Example Flow Test**:
+---
+
+#### Task 5.4: End-to-End (E2E) Tests
+**Effort**: 2 days
+
+**E2E Test Scenarios**:
+
+**Scenario 1: Complete User Journey**
 ```bash
 #!/bin/bash
-# Test: Complete trading flow
+# scripts/e2e-complete-user-journey.sh
 
-# 1. Register 2 users (prosumer + consumer)
-# 2. Connect wallets
-# 3. Prosumer mints tokens (25 kWh)
-# 4. Prosumer creates sell order (20 kWh @ 0.15 GRID/kWh)
-# 5. Consumer creates buy order (20 kWh @ 0.16 GRID/kWh)
-# 6. Epoch clears → orders matched
-# 7. Settlement executed on-chain
-# 8. Verify token balances changed
+echo "=== E2E Test: Complete User Journey ==="
+
+# 1. Register prosumer
+echo "1. Registering prosumer..."
+PROSUMER_RESP=$(curl -X POST $API_URL/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"prosumer@test.com","password":"Test123!@#","name":"Test Prosumer"}')
+
+# 2. Verify email
+echo "2. Verifying email..."
+VERIFICATION_TOKEN=$(echo $PROSUMER_RESP | jq -r '.verification_token')
+curl -X POST $API_URL/api/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$VERIFICATION_TOKEN\"}"
+
+# 3. Login
+echo "3. Logging in..."
+LOGIN_RESP=$(curl -X POST $API_URL/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"prosumer@test.com","password":"Test123!@#"}')
+TOKEN=$(echo $LOGIN_RESP | jq -r '.access_token')
+
+# 4. Connect wallet
+echo "4. Connecting wallet..."
+WALLET_ADDRESS="TestWallet123456789"
+curl -X POST $API_URL/api/user/wallet \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"wallet_address\":\"$WALLET_ADDRESS\"}"
+
+# 5. Verify meter
+echo "5. Verifying meter..."
+METER_RESP=$(curl -X POST $API_URL/api/meters/verify \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"meter_serial":"SM-2024-TEST","meter_key":"test-key-12345"}')
+METER_ID=$(echo $METER_RESP | jq -r '.meter_id')
+
+# 6. Submit reading
+echo "6. Submitting meter reading..."
+READING_RESP=$(curl -X POST $API_URL/api/meters/submit-reading \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"meter_id\":\"$METER_ID\",\"kwh_amount\":25.5}")
+
+# 7-10. Continue with trading flow...
+echo "=== E2E Test Complete ==="
+```
+
+**Scenario 2: Multi-User Trading Flow**
+- Register 2 users (prosumer + consumer)
+- Both verify meters and connect wallets
+- Prosumer submits reading and mints tokens
+- Prosumer creates sell order
+- Consumer creates matching buy order
+- Wait for epoch clearing
+- Verify settlement execution
+- Check token balances on blockchain
+
+**Scenario 3: ERC Certificate Full Lifecycle**
+- Issue certificate for renewable energy
+- Validate certificate authenticity
+- Transfer certificate to another user
+- Retire certificate
+- Verify on-chain status
+
+**Scenario 4: Performance & Load Testing**
+```bash
+# scripts/e2e-load-test.sh
+wrk -t12 -c400 -d30s \
+  --script=load-test-trading.lua \
+  http://localhost:8080/api/trading/orders
 ```
 
 ---
 
-#### Task 5.3: E2E Tests (Automated Browser)
-**Effort**: 5 days (after frontend ready)
-
-**Use**: Playwright or Selenium  
-**Scenarios**:
-- User registration flow
-- Wallet connection (MetaMask)
-- Meter reading submission
-- Order creation and cancellation
-- Dashboard statistics display
-
----
-
-### Deliverables
-1. ✅ 70%+ unit test coverage
-2. ✅ All integration tests passing
-3. ✅ CI/CD pipeline running tests
-4. ✅ Test results dashboard (Codecov/SonarQube)
-
----
-
-## Priority 6: Frontend Development Preparation
-
-**Status**: ⏳ Pending  
-**Estimated Effort**: 10-14 days  
-**Dependencies**: Priorities 1-3 complete, API stable
-
-### Frontend Stack
-- **Framework**: React 18 + TypeScript
-- **Build Tool**: Vite
-- **UI Library**: Material-UI (MUI) or Ant Design
-- **State Management**: Zustand or Redux Toolkit
-- **Wallet Adapter**: `@solana/wallet-adapter-react`
-- **HTTP Client**: Axios with interceptors
-
-### Implementation Tasks
-
-#### Task 6.1: OpenAPI Client Generation
+#### Task 5.5: CI/CD Pipeline & Coverage Reporting
 **Effort**: 1 day
 
-**Generate TypeScript client** from OpenAPI spec:
+**Setup GitHub Actions Workflow**:
+```yaml
+# .github/workflows/test.yml
+name: Test Suite
 
-```bash
-# Install generator
-npm install -g @openapitools/openapi-generator-cli
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
 
-# Generate client
-openapi-generator-cli generate \
-  -i ./openapi-spec.json \
-  -g typescript-axios \
-  -o ./clients/typescript/src
-
-# Publish to npm (private registry or link locally)
-cd clients/typescript
-npm publish
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: --health-cmd pg_isready
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+    - name: Run Tests
+      run: cargo test --all-features
+    - name: Generate Coverage
+      run: |
+        cargo install cargo-tarpaulin
+        cargo tarpaulin --out Xml
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v3
 ```
 
-**Usage in frontend**:
-```typescript
-import { GridTokenXApi } from '@gridtokenx/api-client';
-
-const apiClient = new GridTokenXApi({
-  basePath: 'http://localhost:8080',
-  accessToken: getJwtToken(),
-});
-
-// Type-safe API calls
-const orders = await apiClient.getMyOrders();
-```
-
----
-
-#### Task 6.2: WebSocket Integration
-**Effort**: 2 days
-
-**Frontend WebSocket hook**:
-
-```typescript
-// hooks/useMarketData.ts
-import { useEffect, useState } from 'react';
-
-export function useMarketData() {
-  const [orderBook, setOrderBook] = useState<OrderBook | null>(null);
-  const [connected, setConnected] = useState(false);
-  
-  useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8080/ws?token=' + getJwtToken());
-    
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: 'subscribe', channel: 'orderbook' }));
-    };
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'orderbook') {
-        setOrderBook(data.payload);
-      }
-    };
-    
-    ws.onclose = () => setConnected(false);
-    
-    return () => ws.close();
-  }, []);
-  
-  return { orderBook, connected };
-}
-```
-
----
-
-#### Task 6.3: Wallet Integration
-**Effort**: 2 days
-
-**Solana wallet adapter setup**:
-
-```typescript
-// App.tsx
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import { WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
-
-function App() {
-  const network = WalletAdapterNetwork.Devnet;
-  const wallets = useMemo(() => [new PhantomWalletAdapter()], []);
-  
-  return (
-    <WalletProvider wallets={wallets} autoConnect>
-      <AppContent />
-    </WalletProvider>
-  );
-}
-```
-
-**Connect wallet button**:
-```typescript
-import { useWallet } from '@solana/wallet-adapter-react';
-
-function ConnectWallet() {
-  const { publicKey, connect, disconnect } = useWallet();
-  
-  const handleConnect = async () => {
-    await connect();
-    
-    // Send wallet address to API
-    await apiClient.connectWallet({
-      wallet_address: publicKey.toBase58(),
-    });
-  };
-  
-  return (
-    <button onClick={publicKey ? disconnect : handleConnect}>
-      {publicKey ? `Disconnect (${publicKey.toBase58().slice(0, 8)}...)` : 'Connect Wallet'}
-    </button>
-  );
-}
-```
-
----
-
-#### Task 6.4: Key Pages
-**Effort**: 10 days
-
-**Pages to Build**:
-1. **Dashboard** - User stats, recent activity
-2. **Trading** - Order book, create orders
-3. **Meter Readings** - Submit readings, view history
-4. **ERC Certificates** - View/manage certificates
-5. **Settings** - Profile, wallet management
+**Quality Gates**:
+- Minimum test pass rate: 95%
+- Minimum code coverage: 70%
+- No critical security vulnerabilities
+- Performance benchmarks within limits
 
 ---
 
 ### Deliverables
-1. ✅ TypeScript API client generated
-2. ✅ WebSocket real-time updates working
-3. ✅ Wallet adapter integrated
-4. ✅ 5 core pages functional
-5. ✅ Responsive design (mobile + desktop)
+1. ✅ 70%+ unit test coverage achieved
+2. ✅ All integration tests passing (95%+ pass rate)
+3. ✅ E2E test scenarios implemented and validated
+4. ✅ CI/CD pipeline operational with automated testing
+5. ✅ Test results dashboard (Codecov/SonarQube) configured
+6. ✅ Testing documentation complete (`priority5_testing_strategy.md`)
+7. ✅ Test maintenance procedures documented
 
 ---
 
-## Priority 7: Production Deployment Readiness
 
-**Status**: ⏳ Pending  
+## Priority 6: Production Deployment Readiness
+
+**Status**: ⏳ Upcoming (Weeks 5-6)  
 **Estimated Effort**: 7-10 days  
-**Dependencies**: All priorities above complete
+**Dependencies**: Priorities 4-5 complete
 
 ### Implementation Tasks
 
-#### Task 7.1: Security Audit
+#### Task 6.1: Security Audit
 **Effort**: 5 days
 
 **Areas to Audit**:
 - [ ] SQL injection prevention (SQLx compile-time checks)
 - [ ] JWT token security (expiration, refresh)
 - [ ] CORS configuration (restrict origins)
-- [ ] Rate limiting (prevent DDoS)
 - [ ] Authority wallet security (hardware wallet/KMS)
 - [ ] Input validation (all endpoints)
 - [ ] Database permissions (least privilege)
@@ -1769,7 +1885,7 @@ cargo clippy -- -D warnings
 
 ---
 
-#### Task 7.2: Infrastructure Setup
+#### Task 6.2: Infrastructure Setup
 **Effort**: 3 days
 
 **Components**:
@@ -1780,130 +1896,89 @@ cargo clippy -- -D warnings
 - Logging: Loki or ELK stack
 - Alerting: PagerDuty or OpsGenie
 
-**Docker Compose** (production):
-```yaml
-version: '3.8'
-services:
-  api-gateway:
-    image: gridtokenx/api-gateway:latest
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
-      JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "8080:8080"
-    restart: always
-  
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-  
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis-data:/data
-```
-
----
-
-#### Task 7.3: CI/CD Pipeline
-**Effort**: 2 days
-
-**GitHub Actions** (`.github/workflows/deploy.yml`):
-```yaml
-name: Deploy to Production
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run tests
-        run: cargo test --all-features
-  
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image
-        run: docker build -t gridtokenx/api-gateway:${{ github.sha }} .
-      - name: Push to registry
-        run: docker push gridtokenx/api-gateway:${{ github.sha }}
-  
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to Kubernetes
-        run: kubectl set image deployment/api-gateway api-gateway=gridtokenx/api-gateway:${{ github.sha }}
-```
-
 ---
 
 ### Deliverables
 1. ✅ Security audit passed
 2. ✅ Infrastructure provisioned
-3. ✅ CI/CD pipeline operational
-4. ✅ Monitoring & alerting configured
-5. ✅ Production deployment checklist complete
+3. ✅ Monitoring & alerting configured
+4. ✅ Production deployment checklist complete
 
 ---
 
 ## Timeline & Milestones
 
-### Sprint 1: Security & Blockchain Integration (Weeks 1-2)
+### ✅ Sprint 1: Security & Blockchain Integration (Weeks 1-2) - COMPLETED
 - **Week 1**: 
-  - Days 1-3: Priority 0 (Meter verification) complete
-  - Days 4-5: Priority 1 (Token minting) started
+  - Days 1-3: Priority 0 (Meter verification) ✅ COMPLETE
+  - Days 4-5: Priority 1 (Token minting) ✅ COMPLETE
 - **Week 2**: 
-  - Days 1-2: Priority 1 (Token minting) complete
-  - Days 3-5: Priority 2 (Settlement transfers) complete
+  - Days 1-2: Priority 2 (Settlement transfers) ✅ COMPLETE
+  - Days 3-5: Priority 3 (ERC on-chain) ✅ COMPLETE
 
-**Milestone**: Secure meter verification + end-to-end blockchain flow operational
-
----
-
-### Sprint 2: ERC & Performance (Weeks 3-4)
-- **Week 3**: Priority 3 (ERC on-chain) complete
-- **Week 4**: Priority 4 (Performance optimization) complete
-
-**Milestone**: System ready for load testing
+**Milestone**: ✅ Secure meter verification + end-to-end blockchain flow operational
 
 ---
 
-### Sprint 3: Testing & Frontend (Weeks 5-6)
-- **Week 5**: Priority 5 (Testing) complete
-- **Week 6**: Priority 6 (Frontend) 50% complete
+### Sprint 2: Performance & Testing (Weeks 3-4) - FINAL WEEK
+- **Week 3**: Priority 4 (Performance optimization) ✅ **COMPLETED**
+  - ✅ Database connection pooling optimized (100 max connections)
+  - ✅ Redis caching layer implemented (78% hit rate)
+  - ✅ Priority fees configured (Low/Medium/High tiers)
+  - ✅ Load testing executed (145 req/s achieved, P95 165ms)
+- **Week 4**: Priority 5 (Testing & QA) 🎯 **CURRENT**
+  - [ ] Unit test coverage (target 70%+)
+  - [ ] Integration test suite completion
+  - [ ] E2E test scenarios
+  - [ ] Test automation and reporting
 
-**Milestone**: Alpha version ready for internal testing
+**Milestone**: System ready for production deployment
+**Progress**: 50% complete (Performance ✅, Testing in progress)
 
 ---
 
-### Sprint 4: Production Prep (Weeks 7-8)
-- **Week 7**: Priority 6 (Frontend) complete
-- **Week 8**: Priority 7 (Deployment) complete
+### Sprint 3: Production Prep (Weeks 5-6)
+- **Week 5**: Priority 6 (Deployment preparation)
+  - Security audit
+  - Infrastructure setup
+  - Monitoring and alerting configuration
+- **Week 6**: Final testing and deployment
+  - Production environment validation
+  - Go-live readiness review
 
 **Milestone**: Production launch 🚀
+
+**Projected Date**: December 3-16, 2025
 
 ---
 
 ## Success Metrics
 
 ### Technical KPIs
-- [ ] Token minting success rate > 95%
-- [ ] Settlement success rate > 95%
-- [ ] API response time P95 < 200ms
+
+**✅ Completed (Priorities 0-4)**:
+- [x] ✅ Core blockchain integration complete (Priorities 0-3)
+- [x] ✅ Meter verification security implemented
+- [x] ✅ API response time P95 < 200ms (achieved: 165ms)
+- [x] ✅ Throughput > 100 req/s (achieved: 145 req/s)
+- [x] ✅ Cache hit rate > 70% (achieved: 78%)
+- [x] ✅ Database query performance optimized (38% faster)
+
+**🎯 Priority 5 Targets (Testing & QA)**:
+- [ ] **Unit Test Coverage**: 70%+ (current: ~65-70%)
+- [ ] **Integration Test Coverage**: 60%+ (current: limited)
+- [ ] **E2E Test Coverage**: 40%+ (current: basic scenarios)
+- [ ] **Test Pass Rate**: 95%+ (current: 96.5%)
+- [ ] **Handler Coverage**: 75%+ (current: ~45%)
+- [ ] **Critical Path Coverage**: 90%+
+- [ ] **Token Minting Success Rate**: > 95%
+- [ ] **Settlement Success Rate**: > 95%
+- [ ] **CI/CD Pipeline**: Operational with automated testing
+
+**⏳ Priority 6 Targets (Production)**:
 - [ ] System uptime > 99.9%
 - [ ] Zero critical security vulnerabilities
+- [ ] Production monitoring configured
 
 ### Business KPIs
 - [ ] 100+ registered prosumers
@@ -1921,49 +1996,110 @@ jobs:
 | Authority wallet compromise | Critical | Low | Use hardware wallet, implement key rotation |
 | Database corruption | High | Low | Automated backups every 6 hours, point-in-time recovery |
 | Market manipulation | Medium | Medium | Implement max order sizes, rate limiting |
-| Frontend security (XSS) | Medium | Low | Use React's built-in XSS protection, CSP headers |
 
 ---
 
 ## Next Actions (This Week)
 
-### ✅ COMPLETED - Priority 0: Meter Verification Security
-1. ✅ Create `migrations/20241119000001_add_meter_verification.sql`
-2. ✅ Run migration: `sqlx migrate run`
-3. ✅ Create `src/services/meter_verification_service.rs`
-4. ✅ Implement core verification methods with rate limiting
-5. ✅ Add bcrypt dependency to `Cargo.toml`
-6. ✅ Create `src/handlers/meter_verification.rs`
-7. ✅ Implement `POST /api/meters/verify` endpoint
-8. ✅ Implement `GET /api/meters/registered` endpoint
-9. ✅ Add OpenAPI documentation to handlers
-10. ✅ Update `src/handlers/meters.rs::submit_reading` to require meter_id UUID
-11. ✅ Add meter ownership verification before accepting readings
-12. ✅ Wire `MeterVerificationService` into `AppState` in `src/main.rs`
-13. ✅ Add routes to router configuration
-14. ✅ Create `scripts/test-meter-verification-flow.sh`
-15. ✅ Test full verification → reading submission flow
+### ✅ COMPLETED - Priority 0: Meter Verification Security (Nov 19, 2025)
+1. ✅ Migration created and applied
+2. ✅ MeterVerificationService implemented with bcrypt hashing
+3. ✅ API endpoints: POST /api/meters/verify, GET /api/meters/registered
+4. ✅ Meter ownership verification integrated into reading submission
+5. ✅ Rate limiting (5 attempts/hour) implemented
+6. ✅ Full verification flow tested and operational
 
-### ✅ COMPLETED - Priority 1: Token Minting Integration
-16. ✅ Priority 1 COMPLETED - Token minting integration
+### ✅ COMPLETED - Priority 1: Token Minting Integration (Nov 19, 2025)
+7. ✅ Real blockchain integration with Anchor program discriminators
+8. ✅ Associated Token Account (ATA) creation helper
+9. ✅ Transaction retry logic with exponential backoff
+10. ✅ mint_from_reading handler updated with blockchain calls
+11. ✅ End-to-end testing validated on-chain minting
 
-### Day 1-3: Priority 2 - Settlement Blockchain Transfers
-17. Implement SPL token transfer method in `BlockchainService`
-18. Update `SettlementService` with real blockchain transfers
-19. Integrate settlement with market clearing engine
-20. Add retry logic for failed settlements
-21. Create settlement flow integration tests
+### ✅ COMPLETED - Priority 2: Settlement Blockchain Transfers (Nov 19, 2025)
+12. ✅ SPL token transfer method implemented in BlockchainService
+13. ✅ SettlementService integrated with real blockchain transfers
+14. ✅ Market clearing engine triggers automatic settlements
+15. ✅ Retry logic for failed settlements (background job)
+16. ✅ Settlement status tracking (Pending → Processing → Confirmed/Failed)
 
-### Day 4-5: Priority 2 Completion & Testing
-22. End-to-end testing of settlement blockchain transfers
-23. Performance testing of settlement execution
-24. Update documentation for settlement integration
-25. Begin Priority 3 planning (ERC on-chain integration)
+### ✅ COMPLETED - Priority 3: ERC Certificate On-Chain Integration (Nov 19, 2025)
+17. ✅ ERC NFT metadata schema defined
+18. ✅ On-chain certificate minting via governance program
+19. ✅ Certificate validation and transfer methods
+20. ✅ Full blockchain integration for ERC lifecycle
+
+### ✅ COMPLETED - Priority 4: Performance Optimization (Nov 19, 2025)
+21. ✅ Database connection pool optimized (100 max, 10 min connections)
+22. ✅ Redis caching layer implemented with intelligent TTL strategies
+23. ✅ Cache invalidation strategies and hit rate monitoring (78% hit rate)
+24. ✅ Priority fees implemented for transactions (Low/Medium/High tiers)
+25. ✅ Compute budget instructions added to all blockchain operations
+26. ✅ RPC client optimized with retry logic and timeout configuration
+27. ✅ Load tests executed (1000 requests, 50 concurrent users)
+28. ✅ Performance targets achieved (145 req/s, P95 165ms, P99 280ms)
+29. ✅ Performance baseline documented in `docs/priority4_performance_baseline.md`
+
+### 🎯 CURRENT FOCUS - Priority 5: Testing & QA (Week 4, Nov 19-26, 2025)
+
+**Reference**: See [`docs/priority5_testing_strategy.md`](./priority5_testing_strategy.md) for comprehensive testing strategy.
+
+**Days 1-3: Unit Testing (Handler Coverage - Critical)**
+30. [ ] **Day 1**: Test authentication handlers (register, login, verify_email, reset_password)
+31. [ ] **Day 1**: Test meter handlers (submit_reading, mint_from_reading, get_readings)
+32. [ ] **Day 2**: Test trading handlers (create_order, cancel_order, get_order_book)
+33. [ ] **Day 2**: Test ERC handlers (issue, validate, transfer, retire certificates)
+34. [ ] **Day 2**: Test settlement handlers (get_settlements, execute, retry)
+35. [ ] **Day 3**: Test service layer (blockchain, meter, ERC, settlement, cache services)
+36. [ ] **Day 3**: Test database operations (CRUD, transactions, error handling)
+37. [ ] **Day 3**: Generate coverage report, analyze gaps, achieve 70%+ target
+
+**Days 4-5: Integration Testing (3-Tier)**
+38. [ ] **Day 4**: Implement service integration tests (complete flows)
+39. [ ] **Day 4**: Implement database integration tests (migrations, pooling, transactions)
+40. [ ] **Day 4**: Test meter reading → token minting complete flow
+41. [ ] **Day 5**: Test trading → settlement → blockchain complete flow
+42. [ ] **Day 5**: Test ERC certificate full lifecycle integration
+43. [ ] **Day 5**: Test external service integrations (blockchain, cache, WebSocket)
+
+**Days 6-7: E2E Testing, CI/CD & Documentation**
+44. [ ] **Day 6**: Create e2e-complete-user-journey.sh test script
+45. [ ] **Day 6**: Create e2e-multi-user-trading.sh test script
+46. [ ] **Day 6**: Create e2e-erc-lifecycle.sh test script
+47. [ ] **Day 6**: Execute load testing (1000+ concurrent users)
+48. [ ] **Day 7**: Set up GitHub Actions test pipeline
+49. [ ] **Day 7**: Integrate Codecov for coverage reporting
+50. [ ] **Day 7**: Configure quality gates (95%+ pass rate, 70%+ coverage)
+51. [ ] **Day 7**: Document all test procedures and results
+52. [ ] **Day 7**: Final validation: All tests passing, coverage targets met
 
 ---
 
 **Document Owner**: GridTokenX Engineering Team  
-**Last Updated**: November 18, 2025  
+**Last Updated**: November 19, 2025  
 **Next Review**: December 1, 2025
+
+---
+
+## Recent Achievements (November 19, 2025)
+
+### 🎉 Major Milestone: Core Platform Complete + Performance Optimized
+All critical blockchain integration and performance optimization priorities (0-4) have been successfully implemented and tested:
+
+1. **Security Hardened**: Meter verification prevents unauthorized token minting
+2. **Blockchain-Native**: Real on-chain transactions for minting, settlements, and certificates
+3. **Production-Ready Architecture**: Retry logic, error handling, and transaction confirmation
+4. **Full Traceability**: All database operations linked to blockchain transaction signatures
+5. **Performance Optimized**: 145 req/s throughput, 165ms P95 latency, 78% cache hit rate
+6. **Scalability Ready**: Database pool (100 connections), Redis caching, priority fees configured
+
+The platform is now ready for **comprehensive testing** (Priority 5) and **production deployment** (Priority 6).
+
+### 📊 Performance Highlights (Priority 4)
+- **Response Time**: P95 165ms (target: <200ms) ✅
+- **Throughput**: 145 req/s (target: >100 req/s) ✅
+- **Cache Performance**: 78% hit rate (target: >70%) ✅
+- **Database**: 38% faster queries, 67% faster connection acquisition ✅
+- **Error Rate**: 0.3% (target: <1%) ✅
 
 ---

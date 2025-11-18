@@ -48,3 +48,5 @@ docs/_build/
 # Temporary files
 tmp/
 temp/
+
+test-ledger/
