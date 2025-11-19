@@ -51,7 +51,6 @@ pub struct UpdateWalletRequest {
     #[validate(length(min = 32, max = 44))]
     #[schema(example = "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP8")]
     pub wallet_address: String,
-    
     pub verify_ownership: Option<bool>,
 }
 
@@ -101,17 +100,7 @@ pub struct UserActivityResponse {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterResponse {
     pub message: String,
-    pub user: BasicUserInfo,
     pub email_verification_sent: bool,
-    pub verification_required: bool,
-}
-
-/// Basic user information for registration response
-#[derive(Debug, Serialize, ToSchema)]
-pub struct BasicUserInfo {
-    pub username: String,
-    pub email: String,
-    pub role: String,
 }
 
 /// Enhanced user registration with email verification
@@ -162,7 +151,7 @@ pub async fn register(
         "INSERT INTO users (id, username, email, password_hash, role,
                            first_name, last_name, is_active, 
                            email_verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, ($5)::user_role, $6, $7, true, false, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, false, NOW(), NOW())"
     )
     .bind(user_id)
     .bind(&request.username)
@@ -261,13 +250,7 @@ pub async fn register(
         } else {
             "Registration successful! Email verification is pending. Please contact support if you don't receive the email.".to_string()
         },
-        user: BasicUserInfo {
-            username: request.username,
-            email: request.email,
-            role: request.role,
-        },
         email_verification_sent: email_sent,
-        verification_required: state.config.email.verification_required,
     };
 
     Ok((StatusCode::CREATED, Json(response)))
@@ -464,7 +447,7 @@ pub async fn admin_update_user(
         param_count += 1;
     }
     if request.role.is_some() {
-        query_parts.push(format!("role = (${}::text)::user_role", param_count));
+        query_parts.push(format!("role = ${}", param_count));
         param_count += 1;
     }
     if request.is_active.is_some() {

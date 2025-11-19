@@ -75,7 +75,6 @@ pub struct UserInfo {
     pub email: String,
     pub role: String,
     pub wallet_address: Option<String>,
-    pub blockchain_registered: bool,
 }
 
 /// Secure user information for login responses (excludes sensitive data)

@@ -193,7 +193,7 @@ pub async fn register_with_wallet(
     sqlx::query(
         "INSERT INTO users (id, username, email, password_hash, role,
                            first_name, last_name, wallet_address, is_active, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, ($5)::user_role, $6, $7, $8, true, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW(), NOW())"
     )
     .bind(user_id)
     .bind(&request.username)

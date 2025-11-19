@@ -152,7 +152,7 @@ impl OrderMatchingEngine {
             let buy_energy_amount: BigDecimal = buy_order.try_get("energy_amount")?;
             let buy_filled_amount: BigDecimal = buy_order.try_get("filled_amount")?;
             let buy_price_per_kwh: BigDecimal = buy_order.try_get("price_per_kwh")?;
-            let epoch_id: Uuid = buy_order.try_get("epoch_id")?;
+            let epoch_id: Option<Uuid> = buy_order.try_get("epoch_id")?;
 
             // Calculate remaining amount needed
             let remaining_buy_amount = &buy_energy_amount - &buy_filled_amount;
@@ -168,15 +168,20 @@ impl OrderMatchingEngine {
                 let sell_energy_amount: BigDecimal = sell_order.try_get("energy_amount")?;
                 let sell_filled_amount: BigDecimal = sell_order.try_get("filled_amount")?;
                 let sell_price_per_kwh: BigDecimal = sell_order.try_get("price_per_kwh")?;
-                let sell_epoch_id: Uuid = sell_order.try_get("epoch_id")?;
+                let sell_epoch_id: Option<Uuid> = sell_order.try_get("epoch_id")?;
 
                 // Check if sell order is compatible
                 if sell_price_per_kwh > buy_price_per_kwh {
                     continue; // Sell price too high
                 }
 
-                if sell_epoch_id != epoch_id {
-                    continue; // Different epochs
+                // Skip matching if either order has no epoch_id or if epochs don't match
+                if let (Some(buy_epoch), Some(sell_epoch)) = (epoch_id, sell_epoch_id) {
+                    if sell_epoch != buy_epoch {
+                        continue; // Different epochs
+                    }
+                } else {
+                    continue; // One or both orders have no epoch_id
                 }
 
                 // Calculate remaining amount available to sell
@@ -200,16 +205,16 @@ impl OrderMatchingEngine {
                     buy_order_id, sell_order_id, match_amount, match_price, total_price
                 );
 
-                // Create order match
+                // Create order match - safe to unwrap since we validated both epochs above
                 match self
                     .create_order_match(
-                        epoch_id,
+                        epoch_id.unwrap(),
                         buy_order_id,
                         sell_order_id,
                         buyer_id,
                         seller_id,
-                        match_amount.clone(),
-                        match_price.clone(),
+                        match_amount.to_string().parse::<f64>().unwrap_or(0.0),
+                        match_price.to_string().parse::<f64>().unwrap_or(0.0),
                         total_price.clone(),
                     )
                     .await
@@ -283,11 +288,11 @@ impl OrderMatchingEngine {
         epoch_id: Uuid,
         buy_order_id: Uuid,
         sell_order_id: Uuid,
-        buyer_id: Uuid,
-        seller_id: Uuid,
-        energy_amount: BigDecimal,
-        price_per_kwh: BigDecimal,
-        total_price: BigDecimal,
+        _buyer_id: Uuid,
+        _seller_id: Uuid,
+        energy_amount: f64,
+        price_per_kwh: f64,
+        _total_price: BigDecimal,
     ) -> Result<Uuid> {
         let match_id = Uuid::new_v4();
 

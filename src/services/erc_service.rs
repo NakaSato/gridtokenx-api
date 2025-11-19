@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tracing::{debug, info, error};
+use tracing::{debug, info};
 use uuid::Uuid;
 use bigdecimal::BigDecimal;
 use solana_sdk::{
@@ -10,7 +10,6 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     instruction::{Instruction, AccountMeta},
 };
-use std::str::FromStr;
 use sha2::{Sha256, Digest};
 
 /// Energy Renewable Certificate

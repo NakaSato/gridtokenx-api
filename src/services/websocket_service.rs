@@ -187,7 +187,7 @@ impl WebSocketService {
                         info!("Client requested close");
                         break;
                     }
-                    Message::Ping(data) => {
+                    Message::Ping(_data) => {
                         // Handled automatically by axum
                     }
                     Message::Pong(_) => {}

@@ -489,7 +489,8 @@ impl ApiError {
             | ApiError::Unauthorized(_) 
             | ApiError::WithCode(ErrorCode::TokenExpired, _)
             | ApiError::WithCode(ErrorCode::TokenInvalid, _)
-            | ApiError::WithCode(ErrorCode::TokenMissing, _) => StatusCode::UNAUTHORIZED,
+            | ApiError::WithCode(ErrorCode::TokenMissing, _)
+            | ApiError::WithCode(ErrorCode::EmailNotVerified, _) => StatusCode::UNAUTHORIZED,
             
             ApiError::Authorization(_) 
             | ApiError::Forbidden(_)

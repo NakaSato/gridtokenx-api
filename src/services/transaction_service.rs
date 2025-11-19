@@ -21,7 +21,7 @@ impl TransactionService {
     /// Submit a transaction to blockchain
     pub async fn submit_transaction(
         &self,
-        transaction: &str,
+        _transaction: &str,
         _payer_keypair: Option<&str>, // Simplified - would be Keypair in real implementation
     ) -> Result<TransactionSubmissionResult, AppError> {
         // Simplified implementation - in reality this would parse and submit to Solana

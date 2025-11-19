@@ -1,21 +1,20 @@
 use axum::{
-    extract::{Request, State},
-    http::{StatusCode, HeaderMap},
+    extract::State,
+    http::HeaderMap,
     Json,
-    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
-use std::net::{IpAddr, IpAddr as NetworkIpAddr};
+use std::net::IpAddr;
 use sqlx::types::ipnetwork::IpNetwork;
 
 use crate::{
     auth::middleware::AuthenticatedUser,
     error::ApiError,
     services::meter_verification_service::{
-        MeterVerificationService, VerifyMeterRequest, VerifyMeterResponse, 
+        VerifyMeterRequest, VerifyMeterResponse, 
         MeterRegistry, VerificationStats
     },
     AppState,

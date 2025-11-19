@@ -85,8 +85,10 @@ async fn main() -> Result<()> {
     }
 
     // Run database migrations (PostgreSQL only - TimescaleDB has its own schema)
-    database::run_migrations(&db_pool).await?;
-    info!("Database migrations completed successfully");
+    // TODO: Fix migration issue temporarily commented out for testing
+    // database::run_migrations(&db_pool).await?;
+    // info!("Database migrations completed successfully");
+    info!("⚠️  Database migrations skipped temporarily");
 
     // Setup Redis connection with authentication support
     let redis_client = redis::Client::open(config.redis_url.as_str())?;
@@ -286,8 +288,8 @@ async fn main() -> Result<()> {
         // Public market endpoints
         .route("/api/market/epoch", get(epochs::get_current_epoch))
         .route("/api/market/epoch/status", get(epochs::get_epoch_status))
-        .route("/api/market/orderbook", get(handlers::energy_trading_simple::get_orderbook))
-        .route("/api/market/stats", get(handlers::energy_trading_simple::get_market_stats))
+        .route("/api/market/orderbook", get(handlers::energy_trading::get_orderbook))
+        .route("/api/market/stats", get(handlers::energy_trading::get_market_stats))
         
         // WebSocket endpoints
         .route("/api/market/ws", get(handlers::websocket::market_websocket_handler))
@@ -296,19 +298,6 @@ async fn main() -> Result<()> {
         // Swagger UI
         .merge(SwaggerUi::new("/api/docs")
             .url("/api/docs/openapi.json", openapi::ApiDoc::openapi()));
-    
-    // V1 routes (for backward compatibility)
-    let v1_routes = public_routes.clone();
-    
-    // Versioned public routes
-    let versioned_public_routes = Router::new()
-        .nest("/api/v1", v1_routes)
-        .fallback(get(|| async { 
-            axum::Json(serde_json::json!({
-                "error": "Version not specified. Use /api/v1/",
-                "supported_versions": ["v1"]
-            }))
-        }));
     
     // Protected routes (authentication required)
     let protected_routes = Router::new()
@@ -389,8 +378,8 @@ async fn main() -> Result<()> {
             .route("/status", get(governance::get_governance_status))
         )
         
-        // P2P Energy Trading routes (authenticated users)
-        .nest("/api/market", Router::new()
+        // P2P Energy Trading routes (authenticated users) - moved to /api/market-data to avoid conflicts
+        .nest("/api/market-data", Router::new()
             .route("/depth", get(handlers::market_data::get_order_book_depth))
             .route("/depth-chart", get(handlers::market_data::get_market_depth_chart))
             .route("/clearing-price", get(handlers::market_data::get_clearing_price))
@@ -399,8 +388,8 @@ async fn main() -> Result<()> {
         
         // Simplified Energy Trading routes
         .nest("/api/trading", Router::new()
-            .route("/orders", post(handlers::energy_trading_simple::create_order))
-            .route("/orders", get(handlers::energy_trading_simple::list_orders))
+            .route("/orders", post(handlers::energy_trading::create_order))
+            .route("/orders", get(handlers::energy_trading::list_orders))
         )
         
         // Analytics routes
@@ -442,20 +431,11 @@ async fn main() -> Result<()> {
         .layer(from_fn_with_state(app_state.clone(), auth::middleware::auth_middleware))
         .layer(axum::middleware::from_fn(middleware::auth_logger_middleware));
 
-    // V1 protected routes (for backward compatibility)
-    let v1_protected_routes = protected_routes.clone();
-    
-    // Versioned protected routes
-    let versioned_protected_routes = Router::new()
-        .nest("/api/v1", v1_protected_routes);
-
     // Combine all routes
-    let app = versioned_public_routes
-        .merge(versioned_protected_routes)
+    let app = public_routes
+        .merge(protected_routes)
         .layer(
             ServiceBuilder::new()
-                .layer(axum::middleware::from_fn(middleware::versioning_middleware))
-                .layer(axum::middleware::from_fn(middleware::version_check_middleware))
                 .layer(axum::middleware::from_fn(middleware::add_security_headers))
                 .layer(axum::middleware::from_fn(middleware::metrics_middleware))
                 .layer(axum::middleware::from_fn(middleware::active_requests_middleware))

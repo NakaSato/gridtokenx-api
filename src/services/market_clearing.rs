@@ -510,14 +510,14 @@ impl MarketClearingEngine {
         }
 
         // Load from database
-        let orders = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, DateTime<Utc>, DateTime<Utc>, Uuid, Uuid)>(
+        let orders = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, DateTime<Utc>, DateTime<Utc>)>(
             r#"
             SELECT 
                 id, user_id, side::text, energy_amount::text, 
                 price_per_kwh::text, filled_amount::text,
-                created_at, expires_at, buyer_id, seller_id
+                created_at, expires_at
             FROM trading_orders
-            WHERE status = 'Pending' 
+            WHERE status = 'pending'
                 AND expires_at > NOW()
             ORDER BY created_at ASC
             "#
@@ -529,7 +529,7 @@ impl MarketClearingEngine {
         let mut book = self.order_book.write().await;
         let mut loaded_count = 0;
 
-        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at, buyer_id, seller_id) in orders {
+        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at) in orders {
             let side = match side_str.as_str() {
                 "Buy" => OrderSide::Buy,
                 "Sell" => OrderSide::Sell,
@@ -565,7 +565,7 @@ impl MarketClearingEngine {
         // Save to Redis for future quick restores
         if loaded_count > 0 {
             if let Err(e) = self.save_order_book_snapshot().await {
-                warn!("⚠️  Failed to save order book to Redis: {}", e);
+                warn!("Failed to save order book to Redis: {}", e);
             }
         }
 
@@ -640,7 +640,7 @@ impl MarketClearingEngine {
             // Update database to mark as expired
             for order_id in expired {
                 let _ = sqlx::query(
-                    "UPDATE trading_orders SET status = 'Expired' WHERE id = $1"
+                    "UPDATE trading_orders SET status = 'expired' WHERE id = $1"
                 )
                 .bind(order_id)
                 .execute(&self.db)

@@ -139,7 +139,6 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::user_management::UserActivity,
         crate::handlers::user_management::UserActivityResponse,
         crate::handlers::user_management::RegisterResponse,
-        crate::handlers::user_management::BasicUserInfo,
         crate::handlers::user_management::ActivityQuery,
         crate::handlers::user_management::ActivityListResponse,
         

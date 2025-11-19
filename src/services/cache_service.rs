@@ -1,5 +1,5 @@
 use anyhow::Result;
-use redis::{Client, RedisResult, RedisError, Commands, ConnectionLike, AsyncCommands};
+use redis::{Client, RedisResult, AsyncCommands};
 use redis::aio::ConnectionManager;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn, error, debug};

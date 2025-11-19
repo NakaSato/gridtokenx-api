@@ -264,7 +264,7 @@ pub async fn login(
             username: user.username,
             email: user.email,
             role: user.role,
-            blockchain_registered: user.blockchain_registered,
+            blockchain_registered: user.wallet_address.is_some(),
         },
     };
 
@@ -309,7 +309,6 @@ pub async fn get_profile(
         email: user_data.email,
         role: user_data.role,
         wallet_address: user_data.wallet_address,
-        blockchain_registered: user_data.blockchain_registered,
     };
 
     Ok(Json(profile))
@@ -496,11 +495,11 @@ pub async fn get_user(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserInfo>> {
-    let user_data = sqlx::query_as::<_, UserRow>(
+    let user = sqlx::query_as::<_, UserRow>(
         "SELECT id, username, email, password_hash, role::text as role,
                 first_name, last_name, wallet_address, blockchain_registered,
                 is_active, email_verified, created_at, updated_at
-         FROM users 
+         FROM users
          WHERE id = $1"
     )
     .bind(user_id)
@@ -508,7 +507,7 @@ pub async fn get_user(
     .await
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
-    let user_data = user_data.ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
+    let user_data = user.ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
 
     let user_info = UserInfo {
         id: user_data.id,
@@ -516,7 +515,6 @@ pub async fn get_user(
         email: user_data.email,
         role: user_data.role,
         wallet_address: user_data.wallet_address,
-        blockchain_registered: user_data.blockchain_registered,
     };
 
     Ok(Json(user_info))
@@ -588,7 +586,7 @@ pub async fn list_users(
     let users_query = format!(
         "SELECT id, username, email, password_hash, role::text as role,
                 first_name, last_name, wallet_address, blockchain_registered,
-                is_active, created_at, updated_at
+                is_active, email_verified, created_at, updated_at
          FROM users 
          WHERE {} 
          ORDER BY {} {}
@@ -611,7 +609,6 @@ pub async fn list_users(
             email: user.email,
             role: user.role,
             wallet_address: user.wallet_address,
-            blockchain_registered: user.blockchain_registered,
         })
         .collect();
 

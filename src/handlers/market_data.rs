@@ -184,26 +184,29 @@ pub async fn get_my_trade_history(
 ) -> Result<Json<TradeHistory>, ApiError> {
     let user_id = user.0.sub;
 
+    // Query order_matches table and join with trading_orders to get user information
     let trades = sqlx::query_as::<_, (String, String, String, String, String, String, String, String, String, String, String)>(
         r#"
         SELECT 
-            id::text,
-            buy_order_id::text,
-            sell_order_id::text,
-            buyer_id::text,
-            seller_id::text,
-            quantity::text,
-            price::text,
-            total_value::text,
-            executed_at::text,
-            status,
+            om.id::text,
+            om.buy_order_id::text,
+            om.sell_order_id::text,
+            buy_order.user_id::text as buyer_id,
+            sell_order.user_id::text as seller_id,
+            om.matched_amount::text as quantity,
+            om.match_price::text as price,
+            (om.matched_amount * om.match_price)::text as total_value,
+            om.match_time::text as executed_at,
+            om.status,
             CASE 
-                WHEN buyer_id = $1 THEN 'buyer'
+                WHEN buy_order.user_id = $1 THEN 'buyer'
                 ELSE 'seller'
             END as role
-        FROM trades
-        WHERE buyer_id = $1 OR seller_id = $1
-        ORDER BY executed_at DESC
+        FROM order_matches om
+        INNER JOIN trading_orders buy_order ON om.buy_order_id = buy_order.id
+        INNER JOIN trading_orders sell_order ON om.sell_order_id = sell_order.id
+        WHERE buy_order.user_id = $1 OR sell_order.user_id = $1
+        ORDER BY om.match_time DESC
         LIMIT 50
         "#
     )

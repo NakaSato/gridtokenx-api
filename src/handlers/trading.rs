@@ -251,7 +251,7 @@ pub async fn create_order(
     )
 )]
 pub async fn get_user_orders(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     user: AuthenticatedUser,
     Query(mut params): Query<OrderQuery>,
 ) -> Result<Json<TradingOrdersResponse>> {
@@ -293,7 +293,7 @@ pub async fn get_user_orders(
     }
     
     let total = count_sqlx
-        .fetch_one(&state.db)
+        .fetch_one(&_state.db)
         .await
         .map_err(|e| {
             tracing::error!("Failed to count trading orders: {}", e);
@@ -325,7 +325,7 @@ pub async fn get_user_orders(
     sqlx_query = sqlx_query.bind(offset);
 
     let orders = sqlx_query
-        .fetch_all(&state.db)
+        .fetch_all(&_state.db)
         .await
         .map_err(|e| {
             tracing::error!("Failed to fetch trading orders: {}", e);
@@ -366,7 +366,7 @@ pub async fn get_user_orders(
     )
 )]
 pub async fn get_market_data(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     _user: AuthenticatedUser,
 ) -> Result<Json<MarketData>> {
     tracing::info!("Fetching current market data");
@@ -416,7 +416,7 @@ pub struct TradingStats {
     )
 )]
 pub async fn get_trading_stats(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<Json<TradingStats>> {
     tracing::info!("Fetching trading stats for user: {}", user.0.sub);
@@ -462,7 +462,7 @@ pub struct BlockchainMarketData {
     )
 )]
 pub async fn get_blockchain_market_data(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     _user: AuthenticatedUser,
 ) -> Result<Json<BlockchainMarketData>> {
     info!("Fetching blockchain trading market data");
@@ -481,7 +481,7 @@ pub async fn get_blockchain_market_data(
     info!("Market PDA: {}", market_pda);
 
     // Check if the account exists
-    let account_exists = state
+    let account_exists = _state
         .blockchain_service
         .account_exists(&market_pda)
         .map_err(|e| {
@@ -496,7 +496,7 @@ pub async fn get_blockchain_market_data(
     }
 
     // Get the account data
-    let account_data = state
+    let account_data = _state
         .blockchain_service
         .get_account_data(&market_pda)
         .map_err(|e| {
@@ -609,7 +609,7 @@ pub struct CreateBlockchainOrderResponse {
     )
 )]
 pub async fn create_blockchain_order(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     user: AuthenticatedUser,
     Json(payload): Json<CreateBlockchainOrderRequest>,
 ) -> Result<Json<CreateBlockchainOrderResponse>> {
@@ -681,7 +681,7 @@ pub struct MatchOrdersResponse {
     )
 )]
 pub async fn match_blockchain_orders(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     user: AuthenticatedUser,
 ) -> Result<Json<MatchOrdersResponse>> {
     info!("Order matching request from user: {}", user.0.sub);
@@ -691,7 +691,7 @@ pub async fn match_blockchain_orders(
         "SELECT id, role::text as role FROM users WHERE id = $1",
         user.0.sub
     )
-    .fetch_optional(&state.db)
+    .fetch_optional(&_state.db)
     .await
     .map_err(|e| {
         error!("Failed to fetch user: {}", e);

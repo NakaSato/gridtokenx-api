@@ -11,7 +11,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, info, warn, error};
-use crate::services::priority_fee_service::{PriorityFeeService, PriorityLevel, TransactionType};
+use crate::services::priority_fee_service::{PriorityFeeService, TransactionType};
 
 /// Program IDs (localnet) — keep in sync with `gridtokenx-anchor/Anchor.toml`
 pub const REGISTRY_PROGRAM_ID: &str = "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7";

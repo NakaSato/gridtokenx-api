@@ -289,7 +289,6 @@ fn extract_user_info(headers: &HeaderMap) -> Option<String> {
         })
         .and_then(|token| {
             // Decode JWT without verification (just to get user ID)
-            use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
             use serde::{Deserialize, Serialize};
 
             #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,10 +298,7 @@ fn extract_user_info(headers: &HeaderMap) -> Option<String> {
             }
 
             // Try to decode without verification (just for logging)
-            let mut validation = Validation::new(Algorithm::HS256);
-            validation.insecure_disable_signature_validation();
-            
-            decode::<Claims>(&token, &DecodingKey::from_secret(&[]), &validation)
+            jsonwebtoken::dangerous::insecure_decode::<Claims>(&token)
                 .ok()
                 .map(|data| {
                     if let Some(email) = data.claims.email {
