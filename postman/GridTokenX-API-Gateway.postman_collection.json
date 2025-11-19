@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "gridtokenx-api-gateway-2025",
 		"name": "GridTokenX API Gateway",
-		"description": "Complete API collection for GridTokenX Platform - Peer-to-peer renewable energy trading platform built on Solana blockchain.\n\n**Version**: 1.0.0\n**Updated**: 2025-11-09\n**Base URL**: Configure via environment variables\n\n## Authentication\nMost endpoints require JWT authentication. Use the login endpoint to obtain a token, which will be automatically saved to your environment.\n\n## Endpoints Summary\n- Health & Status: 1 endpoint\n- Authentication: 6 endpoints\n- User Management: 7 endpoints\n- Blockchain: 7 endpoints\n- Oracle: 3 endpoints\n- Governance: 3 endpoints\n- Trading: 6 endpoints\n- Tokens: 2 endpoints\n- Energy Meters: 10 endpoints\n- ERC Certificates: 6 endpoints\n- Admin Operations: 12 endpoints\n\n**Total**: 55+ endpoints",
+		"description": "Complete API collection for GridTokenX Platform - Peer-to-peer renewable energy trading platform built on Solana blockchain.\n\n**Version**: 1.1.0\n**Updated**: 2025-11-19\n**Base URL**: Configure via environment variables\n\n## Authentication\nMost endpoints require JWT authentication. Use the login endpoint to obtain a token, which will be automatically saved to your environment.\n\n## API Structure\nAll API routes are prefixed with `/api/`. Public routes include health checks and authentication endpoints. Protected routes require JWT authentication.\n\n## Endpoints Summary\n- Health & Status: 1 endpoint\n- Authentication: 6 endpoints\n- User Management: 7 endpoints\n- Blockchain: 7 endpoints\n- Oracle: 3 endpoints\n- Governance: 3 endpoints\n- Trading: 6 endpoints\n- Tokens: 3 endpoints\n- Energy Meters: 10 endpoints\n- ERC Certificates: 6 endpoints\n- Market Data: 4 endpoints\n- Analytics: 2 endpoints\n- Admin Operations: 15 endpoints\n- Testing: 3 endpoints\n- Audit & Security: 3 endpoints\n- Epoch Management: 4 endpoints\n- WebSocket: 2 endpoints\n- Meter Verification: 4 endpoints\n\n**Total**: 75+ endpoints",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -93,6 +93,23 @@
 						"description": "Check API health status. No authentication required."
 					},
 					"response": []
+				},
+				{
+					"name": "Metrics",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/metrics",
+							"host": ["{{base_url}}"],
+							"path": ["metrics"]
+						},
+						"description": "Get Prometheus metrics endpoint."
+					},
+					"response": []
 				}
 			],
 			"description": "System health and status endpoints"
@@ -156,9 +173,9 @@
 							"raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"SecurePass123!\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/login",
+							"raw": "{{base_url}}/api/auth/login",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "login"]
+							"path": ["api", "auth", "login"]
 						},
 						"description": "Authenticate user with username and password. Returns JWT token."
 					},
@@ -201,9 +218,9 @@
 							"raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"role\": \"consumer\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/register",
+							"raw": "{{base_url}}/api/auth/register",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "register"]
+							"path": ["api", "auth", "register"]
 						},
 						"description": "Register a new user account. Email verification may be required."
 					},
@@ -227,9 +244,9 @@
 							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\",\n  \"signature\": \"base58_encoded_signature\",\n  \"message\": \"Login to GridTokenX\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/wallet/login",
+							"raw": "{{base_url}}/api/auth/wallet/login",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "wallet", "login"]
+							"path": ["api", "auth", "wallet", "login"]
 						},
 						"description": "Authenticate using Solana wallet signature."
 					},
@@ -253,9 +270,9 @@
 							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\",\n  \"signature\": \"base58_encoded_signature\",\n  \"message\": \"Register to GridTokenX\",\n  \"username\": \"wallet_user\",\n  \"email\": \"wallet@example.com\",\n  \"role\": \"prosumer\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/wallet/register",
+							"raw": "{{base_url}}/api/auth/wallet/register",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "wallet", "register"]
+							"path": ["api", "auth", "wallet", "register"]
 						},
 						"description": "Register new account using Solana wallet."
 					},
@@ -270,9 +287,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/auth/verify-email?token=verification_token_here",
+							"raw": "{{base_url}}/api/auth/verify-email?token=verification_token_here",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "verify-email"],
+							"path": ["api", "auth", "verify-email"],
 							"query": [
 								{
 									"key": "token",
@@ -302,9 +319,9 @@
 							"raw": "{\n  \"email\": \"user@example.com\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/resend-verification",
+							"raw": "{{base_url}}/api/auth/resend-verification",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "resend-verification"]
+							"path": ["api", "auth", "resend-verification"]
 						},
 						"description": "Resend email verification link."
 					},
@@ -322,9 +339,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/auth/profile",
+							"raw": "{{base_url}}/api/auth/profile",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "profile"]
+							"path": ["api", "auth", "profile"]
 						},
 						"description": "Get current user's profile information. Requires JWT token."
 					},
@@ -345,9 +362,9 @@
 							"raw": "{\n  \"email\": \"newemail@example.com\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Smith\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/profile",
+							"raw": "{{base_url}}/api/auth/profile/update",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "profile"]
+							"path": ["api", "auth", "profile", "update"]
 						},
 						"description": "Update current user's profile information."
 					},
@@ -368,9 +385,9 @@
 							"raw": "{\n  \"current_password\": \"OldPass123!\",\n  \"new_password\": \"NewSecurePass456!\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/auth/password",
+							"raw": "{{base_url}}/api/auth/password",
 							"host": ["{{base_url}}"],
-							"path": ["auth", "password"]
+							"path": ["api", "auth", "password"]
 						},
 						"description": "Change user password. Requires current password."
 					},
@@ -391,9 +408,9 @@
 							"raw": "{\n  \"wallet_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/user/wallet",
+							"raw": "{{base_url}}/api/user/wallet",
 							"host": ["{{base_url}}"],
-							"path": ["user", "wallet"]
+							"path": ["api", "user", "wallet"]
 						},
 						"description": "Link Solana wallet address to user account."
 					},
@@ -405,9 +422,9 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/user/wallet",
+							"raw": "{{base_url}}/api/user/wallet",
 							"host": ["{{base_url}}"],
-							"path": ["user", "wallet"]
+							"path": ["api", "user", "wallet"]
 						},
 						"description": "Unlink wallet address from user account."
 					},
@@ -419,9 +436,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/user/activity?page=1&per_page=20",
+							"raw": "{{base_url}}/api/user/activity?page=1&per_page=20",
 							"host": ["{{base_url}}"],
-							"path": ["user", "activity"],
+							"path": ["api", "user", "activity"],
 							"query": [
 								{
 									"key": "page",
@@ -458,9 +475,9 @@
 							"raw": "{\n  \"transaction\": \"base58_encoded_transaction\",\n  \"program\": \"energy-token\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/blockchain/transactions",
+							"raw": "{{base_url}}/api/blockchain/transactions",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "transactions"]
+							"path": ["api", "blockchain", "transactions"]
 						},
 						"description": "Submit a signed transaction to the blockchain."
 					},
@@ -472,9 +489,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/blockchain/transactions?limit=50",
+							"raw": "{{base_url}}/api/blockchain/transactions?limit=50",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "transactions"],
+							"path": ["api", "blockchain", "transactions"],
 							"query": [
 								{
 									"key": "limit",
@@ -492,9 +509,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/blockchain/transactions/:signature",
+							"raw": "{{base_url}}/api/blockchain/transactions/:signature",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "transactions", ":signature"],
+							"path": ["api", "blockchain", "transactions", ":signature"],
 							"variable": [
 								{
 									"key": "signature",
@@ -521,9 +538,9 @@
 							"raw": "{\n  \"instruction\": \"transfer\",\n  \"params\": {\n    \"amount\": 100,\n    \"recipient\": \"wallet_address\"\n  }\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/blockchain/programs/:name",
+							"raw": "{{base_url}}/api/blockchain/programs/:name",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "programs", ":name"],
+							"path": ["api", "blockchain", "programs", ":name"],
 							"variable": [
 								{
 									"key": "name",
@@ -541,9 +558,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/blockchain/accounts/:address",
+							"raw": "{{base_url}}/api/blockchain/accounts/:address",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "accounts", ":address"],
+							"path": ["api", "blockchain", "accounts", ":address"],
 							"variable": [
 								{
 									"key": "address",
@@ -561,9 +578,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/blockchain/network",
+							"raw": "{{base_url}}/api/blockchain/network",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "network"]
+							"path": ["api", "blockchain", "network"]
 						},
 						"description": "Get Solana network status and statistics."
 					},
@@ -575,9 +592,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/blockchain/users/:wallet_address",
+							"raw": "{{base_url}}/api/blockchain/users/:wallet_address",
 							"host": ["{{base_url}}"],
-							"path": ["blockchain", "users", ":wallet_address"],
+							"path": ["api", "blockchain", "users", ":wallet_address"],
 							"variable": [
 								{
 									"key": "wallet_address",
@@ -607,12 +624,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"energy_price\": 0.15,\n  \"currency\": \"USD\",\n  \"timestamp\": \"2025-11-09T12:00:00Z\"\n}"
+							"raw": "{\n  \"energy_price\": 0.15,\n  \"currency\": \"USD\",\n  \"timestamp\": \"2025-11-19T12:00:00Z\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/oracle/prices",
+							"raw": "{{base_url}}/api/oracle/prices",
 							"host": ["{{base_url}}"],
-							"path": ["oracle", "prices"]
+							"path": ["api", "oracle", "prices"]
 						},
 						"description": "Submit energy price data to oracle (admin/oracle role)."
 					},
@@ -624,9 +641,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/oracle/prices/current",
+							"raw": "{{base_url}}/api/oracle/prices/current",
 							"host": ["{{base_url}}"],
-							"path": ["oracle", "prices", "current"]
+							"path": ["api", "oracle", "prices", "current"]
 						},
 						"description": "Get current energy prices from oracle."
 					},
@@ -638,9 +655,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/oracle/data",
+							"raw": "{{base_url}}/api/oracle/data",
 							"host": ["{{base_url}}"],
-							"path": ["oracle", "data"]
+							"path": ["api", "oracle", "data"]
 						},
 						"description": "Get complete oracle data and statistics."
 					},
@@ -658,11 +675,39 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/governance/status",
+							"raw": "{{base_url}}/api/governance/status",
 							"host": ["{{base_url}}"],
-							"path": ["governance", "status"]
+							"path": ["api", "governance", "status"]
 						},
 						"description": "Get current governance status and configuration."
+					},
+					"response": []
+				},
+				{
+					"name": "Emergency Pause",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/governance/emergency-pause",
+							"host": ["{{base_url}}"],
+							"path": ["api", "governance", "emergency-pause"]
+						},
+						"description": "Emergency pause all platform operations (admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Emergency Unpause",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/governance/emergency-unpause",
+							"host": ["{{base_url}}"],
+							"path": ["api", "governance", "emergency-unpause"]
+						},
+						"description": "Resume platform operations (admin only)."
 					},
 					"response": []
 				}
@@ -687,9 +732,9 @@
 							"raw": "{\n  \"order_type\": \"buy\",\n  \"amount\": 100,\n  \"price\": 0.15,\n  \"duration_hours\": 24\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/trading/orders",
+							"raw": "{{base_url}}/api/trading/orders",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "orders"]
+							"path": ["api", "trading", "orders"]
 						},
 						"description": "Create a new trading order."
 					},
@@ -701,9 +746,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/trading/orders?status=active",
+							"raw": "{{base_url}}/api/trading/orders?status=active",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "orders"],
+							"path": ["api", "trading", "orders"],
 							"query": [
 								{
 									"key": "status",
@@ -721,9 +766,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/trading/market",
+							"raw": "{{base_url}}/api/market/orderbook",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "market"]
+							"path": ["api", "market", "orderbook"]
 						},
 						"description": "Get current market data and order book."
 					},
@@ -735,9 +780,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/trading/stats",
+							"raw": "{{base_url}}/api/market/stats",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "stats"]
+							"path": ["api", "market", "stats"]
 						},
 						"description": "Get trading statistics and volumes."
 					},
@@ -749,9 +794,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/trading/market/blockchain",
+							"raw": "{{base_url}}/api/trading/market/blockchain",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "market", "blockchain"]
+							"path": ["api", "trading", "market", "blockchain"]
 						},
 						"description": "Get market data from blockchain trading program."
 					},
@@ -772,9 +817,9 @@
 							"raw": "{\n  \"order_type\": \"sell\",\n  \"amount\": 50,\n  \"price_per_kwh\": 0.18\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/trading/orders/blockchain",
+							"raw": "{{base_url}}/api/trading/orders/blockchain",
 							"host": ["{{base_url}}"],
-							"path": ["trading", "orders", "blockchain"]
+							"path": ["api", "trading", "orders", "blockchain"]
 						},
 						"description": "Create order directly on blockchain."
 					},
@@ -792,9 +837,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/tokens/balance/:wallet_address",
+							"raw": "{{base_url}}/api/tokens/balance/:wallet_address",
 							"host": ["{{base_url}}"],
-							"path": ["tokens", "balance", ":wallet_address"],
+							"path": ["api", "tokens", "balance", ":wallet_address"],
 							"variable": [
 								{
 									"key": "wallet_address",
@@ -812,11 +857,34 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/tokens/info",
+							"raw": "{{base_url}}/api/tokens/info",
 							"host": ["{{base_url}}"],
-							"path": ["tokens", "info"]
+							"path": ["api", "tokens", "info"]
 						},
 						"description": "Get energy token information and metadata."
+					},
+					"response": []
+				},
+				{
+					"name": "Mint Tokens from Reading",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reading_id\": \"reading_id_here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/tokens/mint-from-reading",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tokens", "mint-from-reading"]
+						},
+						"description": "Mint tokens from a meter reading."
 					},
 					"response": []
 				}
@@ -838,12 +906,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"reading_kwh\": 125.5,\n  \"timestamp\": \"2025-11-09T12:00:00Z\",\n  \"location\": \"Building A, Floor 3\"\n}"
+							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"reading_kwh\": 125.5,\n  \"timestamp\": \"2025-11-19T12:00:00Z\",\n  \"location\": \"Building A, Floor 3\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/meters/submit-reading",
+							"raw": "{{base_url}}/api/meters/submit-reading",
 							"host": ["{{base_url}}"],
-							"path": ["meters", "submit-reading"]
+							"path": ["api", "meters", "submit-reading"]
 						},
 						"description": "Submit new energy meter reading (Prosumer role)."
 					},
@@ -855,9 +923,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/meters/my-readings?page=1&limit=20",
+							"raw": "{{base_url}}/api/meters/my-readings?page=1&limit=20",
 							"host": ["{{base_url}}"],
-							"path": ["meters", "my-readings"],
+							"path": ["api", "meters", "my-readings"],
 							"query": [
 								{
 									"key": "page",
@@ -879,9 +947,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/meters/readings/:wallet_address",
+							"raw": "{{base_url}}/api/meters/readings/:wallet_address",
 							"host": ["{{base_url}}"],
-							"path": ["meters", "readings", ":wallet_address"],
+							"path": ["api", "meters", "readings", ":wallet_address"],
 							"variable": [
 								{
 									"key": "wallet_address",
@@ -899,102 +967,11 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/meters/stats",
+							"raw": "{{base_url}}/api/meters/stats",
 							"host": ["{{base_url}}"],
-							"path": ["meters", "stats"]
+							"path": ["api", "meters", "stats"]
 						},
 						"description": "Get current user's energy statistics."
-					},
-					"response": []
-				},
-				{
-					"name": "Submit Energy Reading (Legacy)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"value\": 150.75,\n  \"unit\": \"kWh\",\n  \"timestamp\": \"2025-11-09T12:00:00Z\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/meters/readings",
-							"host": ["{{base_url}}"],
-							"path": ["meters", "readings"]
-						},
-						"description": "Submit energy reading (legacy endpoint)."
-					},
-					"response": []
-				},
-				{
-					"name": "Get Energy Readings (Legacy)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/meters/readings?start_date=2025-11-01&end_date=2025-11-09",
-							"host": ["{{base_url}}"],
-							"path": ["meters", "readings"],
-							"query": [
-								{
-									"key": "start_date",
-									"value": "2025-11-01"
-								},
-								{
-									"key": "end_date",
-									"value": "2025-11-09"
-								}
-							]
-						},
-						"description": "Get energy readings (legacy endpoint)."
-					},
-					"response": []
-				},
-				{
-					"name": "Get Reading by ID",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/meters/readings/:id",
-							"host": ["{{base_url}}"],
-							"path": ["meters", "readings", ":id"],
-							"variable": [
-								{
-									"key": "id",
-									"value": "reading_id_here"
-								}
-							]
-						},
-						"description": "Get specific meter reading by ID."
-					},
-					"response": []
-				},
-				{
-					"name": "Get Aggregated Readings",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/meters/aggregated?period=daily&days=30",
-							"host": ["{{base_url}}"],
-							"path": ["meters", "aggregated"],
-							"query": [
-								{
-									"key": "period",
-									"value": "daily"
-								},
-								{
-									"key": "days",
-									"value": "30"
-								}
-							]
-						},
-						"description": "Get aggregated energy readings."
 					},
 					"response": []
 				}
@@ -1016,12 +993,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"energy_amount_kwh\": 1000,\n  \"energy_source\": \"solar\",\n  \"generation_date\": \"2025-11-09\",\n  \"location\": \"Building A\"\n}"
+							"raw": "{\n  \"energy_amount_kwh\": 1000,\n  \"energy_source\": \"solar\",\n  \"generation_date\": \"2025-11-19\",\n  \"location\": \"Building A\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/erc/issue",
+							"raw": "{{base_url}}/api/erc/issue",
 							"host": ["{{base_url}}"],
-							"path": ["erc", "issue"]
+							"path": ["api", "erc", "issue"]
 						},
 						"description": "Issue new Energy Renewable Certificate."
 					},
@@ -1033,9 +1010,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/erc/my-certificates?status=active",
+							"raw": "{{base_url}}/api/erc/my-certificates?status=active",
 							"host": ["{{base_url}}"],
-							"path": ["erc", "my-certificates"],
+							"path": ["api", "erc", "my-certificates"],
 							"query": [
 								{
 									"key": "status",
@@ -1053,9 +1030,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/erc/my-stats",
+							"raw": "{{base_url}}/api/erc/my-stats",
 							"host": ["{{base_url}}"],
-							"path": ["erc", "my-stats"]
+							"path": ["api", "erc", "my-stats"]
 						},
 						"description": "Get current user's certificate statistics."
 					},
@@ -1067,9 +1044,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/erc/:certificate_id",
+							"raw": "{{base_url}}/api/erc/:certificate_id",
 							"host": ["{{base_url}}"],
-							"path": ["erc", ":certificate_id"],
+							"path": ["api", "erc", ":certificate_id"],
 							"variable": [
 								{
 									"key": "certificate_id",
@@ -1096,9 +1073,9 @@
 							"raw": "{\n  \"reason\": \"Carbon offset\"\n}"
 						},
 						"url": {
-							"raw": "{{base_url}}/erc/:certificate_id/retire",
+							"raw": "{{base_url}}/api/erc/:certificate_id/retire",
 							"host": ["{{base_url}}"],
-							"path": ["erc", ":certificate_id", "retire"],
+							"path": ["api", "erc", ":certificate_id", "retire"],
 							"variable": [
 								{
 									"key": "certificate_id",
@@ -1116,9 +1093,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/erc/wallet/:wallet_address",
+							"raw": "{{base_url}}/api/erc/wallet/:wallet_address",
 							"host": ["{{base_url}}"],
-							"path": ["erc", "wallet", ":wallet_address"],
+							"path": ["api", "erc", "wallet", ":wallet_address"],
 							"variable": [
 								{
 									"key": "wallet_address",
@@ -1134,7 +1111,371 @@
 			"description": "Energy Renewable Certificates (ERC) management"
 		},
 		{
-			"name": "10. Admin Operations",
+			"name": "10. Market Data",
+			"item": [
+				{
+					"name": "Get Order Book Depth",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market-data/depth",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market-data", "depth"]
+						},
+						"description": "Get order book depth data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Market Depth Chart",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market-data/depth-chart",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market-data", "depth-chart"]
+						},
+						"description": "Get market depth chart data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Clearing Price",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market-data/clearing-price",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market-data", "clearing-price"]
+						},
+						"description": "Get current clearing price data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Trade History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market-data/trades/my-history",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market-data", "trades", "my-history"]
+						},
+						"description": "Get current user's trade history."
+					},
+					"response": []
+				}
+			],
+			"description": "Market data and analytics endpoints"
+		},
+		{
+			"name": "11. Analytics",
+			"item": [
+				{
+					"name": "Get Market Analytics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/analytics/market",
+							"host": ["{{base_url}}"],
+							"path": ["api", "analytics", "market"]
+						},
+						"description": "Get comprehensive market analytics."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Trading Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/analytics/my-stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "analytics", "my-stats"]
+						},
+						"description": "Get current user's trading statistics."
+					},
+					"response": []
+				}
+			],
+			"description": "Analytics and reporting endpoints"
+		},
+		{
+			"name": "12. Epoch Management",
+			"item": [
+				{
+					"name": "Get Current Epoch",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market/epoch",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market", "epoch"]
+						},
+						"description": "Get current epoch information."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Epoch Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/market/epoch/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market", "epoch", "status"]
+						},
+						"description": "Get epoch status information."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Epoch History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/admin/epochs",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "epochs"]
+						},
+						"description": "Get epoch history (admin only)."
+					},
+					"response": []
+				},
+				{
+					"name": "Trigger Manual Clearing",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/admin/epochs/:epoch_id/trigger",
+							"host": ["{{base_url}}"],
+							"path": ["api", "admin", "epochs", ":epoch_id", "trigger"],
+							"variable": [
+								{
+									"key": "epoch_id",
+									"value": "12345"
+								}
+							]
+						},
+						"description": "Manually trigger epoch clearing (admin only)."
+					},
+					"response": []
+				}
+			],
+			"description": "Epoch-based trading management"
+		},
+		{
+			"name": "13. Meter Verification",
+			"item": [
+				{
+					"name": "Verify Meter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"meter_id\": \"METER-001\",\n  \"location\": \"Building A\",\n  \"verification_method\": \"physical_inspection\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/meters/verify",
+							"host": ["{{base_url}}"],
+							"path": ["api", "meters", "verify"]
+						},
+						"description": "Verify a new energy meter."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Registered Meters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/meters/registered",
+							"host": ["{{base_url}}"],
+							"path": ["api", "meters", "registered"]
+						},
+						"description": "Get list of registered meters."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Verification Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/meters/verification-stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "meters", "verification-stats"]
+						},
+						"description": "Get meter verification statistics."
+					},
+					"response": []
+				},
+				{
+					"name": "Verification Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/meters/verification-health",
+							"host": ["{{base_url}}"],
+							"path": ["api", "meters", "verification-health"]
+						},
+						"description": "Check meter verification system health."
+					},
+					"response": []
+				}
+			],
+			"description": "Energy meter verification and registration"
+		},
+		{
+			"name": "14. WebSocket",
+			"item": [
+				{
+					"name": "General WebSocket",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Connection",
+								"value": "Upgrade"
+							},
+							{
+								"key": "Upgrade",
+								"value": "websocket"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/ws",
+							"host": ["{{base_url}}"],
+							"path": ["ws"]
+						},
+						"description": "General WebSocket connection for real-time updates."
+					},
+					"response": []
+				},
+				{
+					"name": "Market WebSocket",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Connection",
+								"value": "Upgrade"
+							},
+							{
+								"key": "Upgrade",
+								"value": "websocket"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/market/ws",
+							"host": ["{{base_url}}"],
+							"path": ["api", "market", "ws"]
+						},
+						"description": "Market-specific WebSocket for trading updates."
+					},
+					"response": []
+				},
+				{
+					"name": "WebSocket Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/ws/stats",
+							"host": ["{{base_url}}"],
+							"path": ["ws", "stats"]
+						},
+						"description": "Get WebSocket connection statistics."
+					},
+					"response": []
+				}
+			],
+			"description": "WebSocket connections for real-time data"
+		},
+		{
+			"name": "15. Testing",
+			"item": [
+				{
+					"name": "Create Test Transaction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"test_type\": \"basic_transfer\",\n  \"amount\": 100\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/test/transactions",
+							"host": ["{{base_url}}"],
+							"path": ["api", "test", "transactions"]
+						},
+						"description": "Create a test transaction for development."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Test Transaction Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test/transactions/:signature",
+							"host": ["{{base_url}}"],
+							"path": ["api", "test", "transactions", ":signature"],
+							"variable": [
+								{
+									"key": "signature",
+									"value": "test_signature_here"
+								}
+							]
+						},
+						"description": "Get test transaction status."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Test Statistics",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/test/statistics",
+							"host": ["{{base_url}}"],
+							"path": ["api", "test", "statistics"]
+						},
+						"description": "Get testing environment statistics."
+					},
+					"response": []
+				}
+			],
+			"description": "Testing and development endpoints"
+		},
+		{
+			"name": "16. Admin Operations",
 			"item": [
 				{
 					"name": "User Management",
@@ -1145,9 +1486,9 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{base_url}}/users/:id",
+									"raw": "{{base_url}}/api/users/:id",
 									"host": ["{{base_url}}"],
-									"path": ["users", ":id"],
+									"path": ["api", "users", ":id"],
 									"variable": [
 										{
 											"key": "id",
@@ -1174,9 +1515,9 @@
 									"raw": "{\n  \"role\": \"prosumer\",\n  \"is_active\": true\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/users/:id",
+									"raw": "{{base_url}}/api/users/:id",
 									"host": ["{{base_url}}"],
-									"path": ["users", ":id"],
+									"path": ["api", "users", ":id"],
 									"variable": [
 										{
 											"key": "id",
@@ -1194,9 +1535,9 @@
 								"method": "POST",
 								"header": [],
 								"url": {
-									"raw": "{{base_url}}/users/:id/deactivate",
+									"raw": "{{base_url}}/api/users/:id/deactivate",
 									"host": ["{{base_url}}"],
-									"path": ["users", ":id", "deactivate"],
+									"path": ["api", "users", ":id", "deactivate"],
 									"variable": [
 										{
 											"key": "id",
@@ -1214,9 +1555,9 @@
 								"method": "POST",
 								"header": [],
 								"url": {
-									"raw": "{{base_url}}/users/:id/reactivate",
+									"raw": "{{base_url}}/api/users/:id/reactivate",
 									"host": ["{{base_url}}"],
-									"path": ["users", ":id", "reactivate"],
+									"path": ["api", "users", ":id", "reactivate"],
 									"variable": [
 										{
 											"key": "id",
@@ -1234,9 +1575,9 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{base_url}}/users/:id/activity",
+									"raw": "{{base_url}}/api/users/:id/activity",
 									"host": ["{{base_url}}"],
-									"path": ["users", ":id", "activity"],
+									"path": ["api", "users", ":id", "activity"],
 									"variable": [
 										{
 											"key": "id",
@@ -1254,9 +1595,9 @@
 								"method": "GET",
 								"header": [],
 								"url": {
-									"raw": "{{base_url}}/users?page=1&per_page=20&role=all",
+									"raw": "{{base_url}}/api/users?page=1&per_page=20&role=all",
 									"host": ["{{base_url}}"],
-									"path": ["users"],
+									"path": ["api", "users"],
 									"query": [
 										{
 											"key": "page",
@@ -1287,177 +1628,3 @@
 								"method": "POST",
 								"header": [
 									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"new_role\": \"prosumer\"\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/admin/users/:id/update-role",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "users", ":id", "update-role"],
-									"variable": [
-										{
-											"key": "id",
-											"value": "{{user_id}}"
-										}
-									]
-								},
-								"description": "Update user role on blockchain (admin only)."
-							},
-							"response": []
-						}
-					]
-				},
-				{
-					"name": "Governance Admin",
-					"item": [
-						{
-							"name": "Emergency Pause",
-							"request": {
-								"method": "POST",
-								"header": [],
-								"url": {
-									"raw": "{{base_url}}/admin/governance/emergency-pause",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "governance", "emergency-pause"]
-								},
-								"description": "Emergency pause all platform operations (admin only)."
-							},
-							"response": []
-						},
-						{
-							"name": "Unpause",
-							"request": {
-								"method": "POST",
-								"header": [],
-								"url": {
-									"raw": "{{base_url}}/admin/governance/unpause",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "governance", "unpause"]
-								},
-								"description": "Resume platform operations (admin only)."
-							},
-							"response": []
-						}
-					]
-				},
-				{
-					"name": "Token Admin",
-					"item": [
-						{
-							"name": "Mint Tokens",
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"recipient\": \"wallet_address_here\",\n  \"amount\": 1000,\n  \"reason\": \"Energy production reward\"\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/admin/tokens/mint",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "tokens", "mint"]
-								},
-								"description": "Mint new energy tokens (admin only)."
-							},
-							"response": []
-						}
-					]
-				},
-				{
-					"name": "Trading Admin",
-					"item": [
-						{
-							"name": "Match Orders",
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"epoch_id\": 12345\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/admin/trading/match-orders",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "trading", "match-orders"]
-								},
-								"description": "Manually trigger order matching (admin only)."
-							},
-							"response": []
-						}
-					]
-				},
-				{
-					"name": "Meter Admin",
-					"item": [
-						{
-							"name": "Get Unminted Readings",
-							"request": {
-								"method": "GET",
-								"header": [],
-								"url": {
-									"raw": "{{base_url}}/admin/meters/unminted?limit=50",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "meters", "unminted"],
-									"query": [
-										{
-											"key": "limit",
-											"value": "50"
-										}
-									]
-								},
-								"description": "Get meter readings pending token minting (admin only)."
-							},
-							"response": []
-						},
-						{
-							"name": "Mint from Reading",
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"reading_id\": \"reading_id_here\"\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/admin/meters/mint-from-reading",
-									"host": ["{{base_url}}"],
-									"path": ["admin", "meters", "mint-from-reading"]
-								},
-								"description": "Mint tokens from meter reading (admin only)."
-							},
-							"response": []
-						}
-					]
-				}
-			],
-			"description": "Administrative operations (admin role required)"
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8080",
-			"type": "string"
-		}
-	]
-}

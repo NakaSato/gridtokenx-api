@@ -481,8 +481,8 @@ impl SettlementService {
         // Fetch settlements with status = 'Failed' and retry_count < max_retries
         let failed = sqlx::query!(
             r#"
-            SELECT id FROM settlements 
-            WHERE status = 'Failed' 
+            SELECT id FROM settlements
+            WHERE status = 'Failed'
             AND retry_count < $1
             "#,
             max_retries as i32
