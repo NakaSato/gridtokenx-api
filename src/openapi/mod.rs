@@ -35,6 +35,7 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::user_management::register,
         crate::handlers::user_management::update_wallet_address,
         crate::handlers::user_management::remove_wallet_address,
+        crate::handlers::user_management::get_my_activity,
         crate::handlers::user_management::get_user_activity,
         crate::handlers::user_management::admin_update_user,
         crate::handlers::user_management::admin_deactivate_user,

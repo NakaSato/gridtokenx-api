@@ -4,15 +4,15 @@ use axum::{
     response::Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
-use utoipa::ToSchema;
 
+use crate::AppState;
 use crate::auth::UserInfo;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::auth::password::PasswordService;
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// user registration request with additional validation
 #[derive(Debug, Deserialize, Serialize, Validate, ToSchema)]
@@ -21,23 +21,22 @@ pub struct RegisterRequest {
     #[validate(length(min = 3, max = 50))]
     #[schema(example = "john_doe")]
     pub username: String,
-    
+
     #[validate(email)]
     #[schema(example = "john.doe@example.com")]
     pub email: String,
-    
+
     #[validate(length(min = 8, max = 128))]
     #[schema(example = "SecurePassword123!")]
     pub password: String,
-    
+
     #[validate(length(min = 1, max = 100))]
     #[schema(example = "John")]
     pub first_name: String,
-    
+
     #[validate(length(min = 1, max = 100))]
     #[schema(example = "Doe")]
     pub last_name: String,
-    
     // wallet_address removed - assigned after email verification via /api/users/wallet endpoint
     // role removed - all users default to "user" role
 }
@@ -56,21 +55,21 @@ pub struct UpdateWalletRequest {
 pub struct AdminUpdateUserRequest {
     #[validate(email)]
     pub email: Option<String>,
-    
+
     #[validate(length(min = 1, max = 100))]
     pub first_name: Option<String>,
-    
+
     #[validate(length(min = 1, max = 100))]
     pub last_name: Option<String>,
-    
+
     #[validate(length(min = 1, max = 20))]
     pub role: Option<String>,
-    
+
     pub is_active: Option<bool>,
-    
+
     #[validate(length(min = 32, max = 44))]
     pub wallet_address: Option<String>,
-    
+
     pub blockchain_registered: Option<bool>,
 }
 
@@ -117,7 +116,8 @@ pub async fn register(
     Json(request): Json<RegisterRequest>,
 ) -> Result<(StatusCode, Json<RegisterResponse>)> {
     // Validate request
-    request.validate()
+    request
+        .validate()
         .map_err(|e| ApiError::BadRequest(format!("Validation error: {}", e)))?;
 
     // All new users default to "user" role
@@ -125,7 +125,7 @@ pub async fn register(
 
     // Check if username already exists
     let existing_user = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM users WHERE username = $1 OR email = $2"
+        "SELECT COUNT(*) FROM users WHERE username = $1 OR email = $2",
     )
     .bind(&request.username)
     .bind(&request.email)
@@ -134,7 +134,9 @@ pub async fn register(
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
     if existing_user > 0 {
-        return Err(ApiError::BadRequest("Username or email already exists".to_string()));
+        return Err(ApiError::BadRequest(
+            "Username or email already exists".to_string(),
+        ));
     }
 
     // Hash password
@@ -147,7 +149,7 @@ pub async fn register(
         "INSERT INTO users (id, username, email, password_hash, role,
                            first_name, last_name, is_active, 
                            email_verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true, false, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, false, NOW(), NOW())",
     )
     .bind(user_id)
     .bind(&request.username)
@@ -163,7 +165,7 @@ pub async fn register(
     // Generate verification token
     let token = crate::services::TokenService::generate_verification_token();
     let token_hash = crate::services::TokenService::hash_token(&token);
-    
+
     // Calculate expiration time from config
     let expiry_hours = state.config.email.verification_expiry_hours;
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(expiry_hours);
@@ -174,7 +176,7 @@ pub async fn register(
          email_verification_token = $1,
          email_verification_sent_at = NOW(),
          email_verification_expires_at = $2
-         WHERE id = $3"
+         WHERE id = $3",
     )
     .bind(&token_hash)
     .bind(expires_at)
@@ -201,7 +203,8 @@ pub async fn register(
                     })),
                     None,
                     None,
-                ).await;
+                )
+                .await;
                 true
             }
             Err(e) => {
@@ -217,7 +220,8 @@ pub async fn register(
                     })),
                     None,
                     None,
-                ).await;
+                )
+                .await;
                 false
             }
         }
@@ -237,7 +241,8 @@ pub async fn register(
         })),
         None,
         None,
-    ).await;
+    )
+    .await;
 
     // Return registration response (NO JWT - user must verify email first)
     let response = RegisterResponse {
@@ -274,18 +279,18 @@ pub async fn update_wallet_address(
     Json(request): Json<UpdateWalletRequest>,
 ) -> Result<Json<UserInfo>> {
     // Validate request
-    request.validate()
+    request
+        .validate()
         .map_err(|e| ApiError::BadRequest(format!("Validation error: {}", e)))?;
 
     // Check if email is verified (required before wallet connection)
-    let user_verified = sqlx::query_scalar::<_, bool>(
-        "SELECT email_verified FROM users WHERE id = $1"
-    )
-    .bind(user.0.sub)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?
-    .ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
+    let user_verified =
+        sqlx::query_scalar::<_, bool>("SELECT email_verified FROM users WHERE id = $1")
+            .bind(user.0.sub)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?
+            .ok_or_else(|| ApiError::NotFound("User not found".to_string()))?;
 
     if !user_verified {
         return Err(ApiError::email_not_verified());
@@ -293,12 +298,14 @@ pub async fn update_wallet_address(
 
     // Validate wallet address format
     if !is_valid_solana_address(&request.wallet_address) {
-        return Err(ApiError::BadRequest("Invalid Solana wallet address format".to_string()));
+        return Err(ApiError::BadRequest(
+            "Invalid Solana wallet address format".to_string(),
+        ));
     }
 
     // Check if wallet address is already in use
     let existing_wallet = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM users WHERE wallet_address = $1 AND id != $2"
+        "SELECT COUNT(*) FROM users WHERE wallet_address = $1 AND id != $2",
     )
     .bind(&request.wallet_address)
     .bind(user.0.sub)
@@ -307,7 +314,9 @@ pub async fn update_wallet_address(
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
     if existing_wallet > 0 {
-        return Err(ApiError::BadRequest("Wallet address is already in use".to_string()));
+        return Err(ApiError::BadRequest(
+            "Wallet address is already in use".to_string(),
+        ));
     }
 
     // Update wallet address
@@ -334,7 +343,8 @@ pub async fn update_wallet_address(
         })),
         None,
         None,
-    ).await;
+    )
+    .await;
 
     // Return updated profile
     crate::handlers::auth::get_profile(State(state), user).await
@@ -361,7 +371,7 @@ pub async fn remove_wallet_address(
     // Update wallet address to null
     let result = sqlx::query(
         "UPDATE users SET wallet_address = NULL, blockchain_registered = false, updated_at = NOW() 
-         WHERE id = $1 AND is_active = true"
+         WHERE id = $1 AND is_active = true",
     )
     .bind(user.0.sub)
     .execute(&state.db)
@@ -380,7 +390,8 @@ pub async fn remove_wallet_address(
         None,
         None,
         None,
-    ).await;
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -417,7 +428,8 @@ pub async fn admin_update_user(
     }
 
     // Validate request
-    request.validate()
+    request
+        .validate()
         .map_err(|e| ApiError::BadRequest(format!("Validation error: {}", e)))?;
 
     // Validate role if provided
@@ -471,7 +483,7 @@ pub async fn admin_update_user(
     );
 
     let mut query_builder = sqlx::query(&query);
-    
+
     if let Some(email) = &request.email {
         query_builder = query_builder.bind(email);
     }
@@ -493,7 +505,7 @@ pub async fn admin_update_user(
     if let Some(blockchain_registered) = request.blockchain_registered {
         query_builder = query_builder.bind(blockchain_registered);
     }
-    
+
     query_builder = query_builder.bind(user_id);
 
     let result = query_builder
@@ -516,7 +528,8 @@ pub async fn admin_update_user(
         })),
         None,
         None,
-    ).await;
+    )
+    .await;
 
     // Return updated user info
     crate::handlers::auth::get_user(State(state), Path(user_id)).await
@@ -553,17 +566,18 @@ pub async fn admin_deactivate_user(
 
     // Cannot deactivate self
     if user_id == user.0.sub {
-        return Err(ApiError::BadRequest("Cannot deactivate your own account".to_string()));
+        return Err(ApiError::BadRequest(
+            "Cannot deactivate your own account".to_string(),
+        ));
     }
 
     // Deactivate user
-    let result = sqlx::query(
-        "UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1"
-    )
-    .bind(user_id)
-    .execute(&state.db)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to deactivate user: {}", e)))?;
+    let result =
+        sqlx::query("UPDATE users SET is_active = false, updated_at = NOW() WHERE id = $1")
+            .bind(user_id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to deactivate user: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("User not found".to_string()));
@@ -579,7 +593,8 @@ pub async fn admin_deactivate_user(
         })),
         None,
         None,
-    ).await;
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -613,13 +628,11 @@ pub async fn admin_reactivate_user(
     }
 
     // Reactivate user
-    let result = sqlx::query(
-        "UPDATE users SET is_active = true, updated_at = NOW() WHERE id = $1"
-    )
-    .bind(user_id)
-    .execute(&state.db)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Failed to reactivate user: {}", e)))?;
+    let result = sqlx::query("UPDATE users SET is_active = true, updated_at = NOW() WHERE id = $1")
+        .bind(user_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to reactivate user: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("User not found".to_string()));
@@ -635,9 +648,88 @@ pub async fn admin_reactivate_user(
         })),
         None,
         None,
-    ).await;
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Get current user's activity log
+#[utoipa::path(
+    get,
+    path = "/api/user/activity",
+    tag = "users",
+    params(
+        ("page" = Option<u32>, Query, description = "Page number"),
+        ("per_page" = Option<u32>, Query, description = "Items per page")
+    ),
+    responses(
+        (status = 200, description = "User activity retrieved successfully", body = ActivityListResponse),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_my_activity(
+    State(state): State<AppState>,
+    Query(params): Query<ActivityQuery>,
+    user: AuthenticatedUser,
+) -> Result<Json<ActivityListResponse>> {
+    // Use the current user's ID from the JWT token
+    let user_id = user.0.sub;
+
+    let page = params.page.unwrap_or(1).max(1);
+    let per_page = params.per_page.unwrap_or(20).min(100).max(1);
+    let offset = (page - 1) * per_page;
+
+    // Get activities - using correct column names from migration
+    let activities = sqlx::query_as::<_, ActivityRow>(
+        "SELECT id, user_id, activity_type, description, ip_address, user_agent, created_at
+         FROM user_activities 
+         WHERE user_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT $2 OFFSET $3",
+    )
+    .bind(user_id)
+    .bind(per_page as i64)
+    .bind(offset as i64)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    // Get total count
+    let total =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM user_activities WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    let activity_list: Vec<UserActivity> = activities
+        .into_iter()
+        .map(|row| UserActivity {
+            id: row.id,
+            user_id: row.user_id,
+            action: row.activity_type, // Map activity_type to action
+            details: row.description,  // Map description to details
+            ip_address: row.ip_address,
+            user_agent: row.user_agent,
+            created_at: row.created_at,
+        })
+        .collect();
+
+    let total_pages = ((total as u32) + per_page - 1) / per_page;
+
+    let response = ActivityListResponse {
+        activities: activity_list,
+        total: total as u64,
+        page,
+        per_page,
+        total_pages,
+    };
+
+    Ok(Json(response))
 }
 
 /// Get user activity log (admin only)
@@ -668,7 +760,9 @@ pub async fn get_user_activity(
 ) -> Result<Json<ActivityListResponse>> {
     // Check admin permissions or self-access
     if !user.0.has_any_role(&["admin"]) && user_id != user.0.sub {
-        return Err(ApiError::Authorization("Admin access required or can only view own activity".to_string()));
+        return Err(ApiError::Authorization(
+            "Admin access required or can only view own activity".to_string(),
+        ));
     }
 
     let page = params.page.unwrap_or(1).max(1);
@@ -681,7 +775,7 @@ pub async fn get_user_activity(
          FROM user_activities 
          WHERE user_id = $1 
          ORDER BY created_at DESC 
-         LIMIT $2 OFFSET $3"
+         LIMIT $2 OFFSET $3",
     )
     .bind(user_id)
     .bind(per_page as i64)
@@ -691,20 +785,19 @@ pub async fn get_user_activity(
     .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
     // Get total count
-    let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM user_activities WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+    let total =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM user_activities WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
     let activity_list: Vec<UserActivity> = activities
         .into_iter()
         .map(|row| UserActivity {
             id: row.id,
             user_id: row.user_id,
-            action: row.activity_type,  // Map activity_type to action
+            action: row.activity_type, // Map activity_type to action
             details: row.description,  // Map description to details
             ip_address: row.ip_address,
             user_agent: row.user_agent,
@@ -736,7 +829,7 @@ async fn log_user_activity(
     user_agent: Option<String>,
 ) -> Result<()> {
     let activity_id = Uuid::new_v4();
-    
+
     // Use correct column names from migration
     let _ = sqlx::query(
         "INSERT INTO user_activities (id, user_id, activity_type, description, ip_address, user_agent, created_at)
@@ -759,7 +852,7 @@ fn is_valid_solana_address(address: &str) -> bool {
     if address.len() < 32 || address.len() > 44 {
         return false;
     }
-    
+
     // Check if it's valid base58
     bs58::decode(address).into_vec().is_ok()
 }
@@ -785,8 +878,8 @@ pub struct ActivityListResponse {
 struct ActivityRow {
     id: Uuid,
     user_id: Uuid,
-    activity_type: String,  // Correct column name from migration
-    description: Option<serde_json::Value>,  // Correct column name from migration
+    activity_type: String, // Correct column name from migration
+    description: Option<serde_json::Value>, // Correct column name from migration
     ip_address: Option<String>,
     user_agent: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
