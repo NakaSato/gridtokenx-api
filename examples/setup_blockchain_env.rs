@@ -65,7 +65,10 @@ async fn main() -> Result<()> {
     println!("-------------------------------------------");
 
     print!("Checking authority balance... ");
-    let balance = match blockchain_service.get_balance_sol(&authority.pubkey()).await {
+    let balance = match blockchain_service
+        .get_balance_sol(&authority.pubkey())
+        .await
+    {
         Ok(bal) => {
             println!("✅");
             println!("  Current Balance: {} SOL", bal);
@@ -100,7 +103,9 @@ async fn main() -> Result<()> {
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
                     // Check new balance
-                    if let Ok(new_balance) = blockchain_service.get_balance_sol(&authority.pubkey()).await
+                    if let Ok(new_balance) = blockchain_service
+                        .get_balance_sol(&authority.pubkey())
+                        .await
                     {
                         println!("  New Balance: {} SOL", new_balance);
                     }
@@ -211,7 +216,8 @@ async fn main() -> Result<()> {
     println!("-----------------------------------------");
 
     let governance_program_id = Pubkey::from_str("4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe")?;
-    let (poa_config_pda, _bump) = Pubkey::find_program_address(&[b"poa_config"], &governance_program_id);
+    let (poa_config_pda, _bump) =
+        Pubkey::find_program_address(&[b"poa_config"], &governance_program_id);
 
     print!("Checking if Governance Program is initialized... ");
     let account_data = blockchain_service.get_account_data(&poa_config_pda).await;
@@ -231,7 +237,7 @@ async fn main() -> Result<()> {
         let mut hasher = Sha256::new();
         hasher.update(b"global:initialize_poa");
         let hash = hasher.finalize();
-        
+
         let mut instruction_data = Vec::new();
         instruction_data.extend_from_slice(&hash[0..8]);
 
@@ -250,7 +256,10 @@ async fn main() -> Result<()> {
             accounts,
         );
 
-        match blockchain_service.build_and_send_transaction(vec![instruction], &[&authority]).await {
+        match blockchain_service
+            .build_and_send_transaction(vec![instruction], &[&authority])
+            .await
+        {
             Ok(sig) => {
                 println!("✅");
                 println!("  Signature: {}", sig);
@@ -258,6 +267,69 @@ async fn main() -> Result<()> {
             Err(e) => {
                 println!("❌");
                 println!("  Error initializing governance program: {}", e);
+                // Don't fail the script, just warn
+            }
+        }
+    }
+
+    // ========================================
+    // Step 7: Initialize Oracle Program
+    // ========================================
+    println!("\n📋 Step 7: Initialize Oracle Program");
+    println!("--------------------------------------");
+
+    let oracle_program_id = Pubkey::from_str("DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE")?;
+    let (oracle_data_pda, _bump) =
+        Pubkey::find_program_address(&[b"oracle_data"], &oracle_program_id);
+
+    print!("Checking if Oracle Program is initialized... ");
+    let account_data = blockchain_service.get_account_data(&oracle_data_pda).await;
+    let is_initialized = match account_data {
+        Ok(data) => data.len() > 0,
+        Err(_) => false,
+    };
+
+    if is_initialized {
+        println!("✅ (Already initialized)");
+    } else {
+        println!("⚠️  (Not initialized)");
+        print!("Initializing Oracle Program... ");
+
+        // Build initialize instruction
+        let mut instruction_data = Vec::new();
+
+        // Use discriminator from IDL: [175, 175, 109, 31, 13, 152, 155, 237]
+        instruction_data.extend_from_slice(&[175, 175, 109, 31, 13, 152, 155, 237]);
+
+        // Add api_gateway argument (authority pubkey for testing)
+        instruction_data.extend_from_slice(&authority.pubkey().to_bytes());
+
+        let accounts = vec![
+            solana_sdk::instruction::AccountMeta::new(oracle_data_pda, false),
+            solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
+                false,
+            ),
+        ];
+
+        let instruction = solana_sdk::instruction::Instruction::new_with_bytes(
+            oracle_program_id,
+            &instruction_data,
+            accounts,
+        );
+
+        match blockchain_service
+            .build_and_send_transaction(vec![instruction], &[&authority])
+            .await
+        {
+            Ok(sig) => {
+                println!("✅");
+                println!("  Signature: {}", sig);
+            }
+            Err(e) => {
+                println!("❌");
+                println!("  Error initializing oracle program: {}", e);
                 // Don't fail the script, just warn
             }
         }

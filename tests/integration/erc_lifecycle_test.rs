@@ -47,12 +47,14 @@ async fn setup_meter_with_generation(
     // 1. Create user keypair and airdrop SOL
     let user_keypair = Keypair::new();
     let pubkey = user_keypair.pubkey();
-    
+
     println!("   Creating user: {}", pubkey);
     let signature = blockchain_service
         .request_airdrop(&pubkey, 1_000_000_000)
         .await?; // 1 SOL
-    blockchain_service.wait_for_confirmation(&signature, 30).await?;
+    blockchain_service
+        .wait_for_confirmation(&signature, 30)
+        .await?;
 
     // 2. Register user
     println!("   Registering user on-chain...");
@@ -75,11 +77,8 @@ async fn setup_meter_with_generation(
 
     blockchain_service
         .submit_meter_reading_on_chain(
-            authority,
-            &meter_id,
-            produced,
-            consumed,
-            timestamp,
+            authority, // Oracle program expects the authority, not user
+            &meter_id, produced, consumed, timestamp,
         )
         .await?;
 
@@ -107,11 +106,8 @@ async fn test_erc_issuance_on_chain() -> Result<()> {
     // Step 3: Setup user and meter with generation
     println!("\n📋 Step 3: Setup user and meter");
     let energy_amount = 100.0;
-    let (user_keypair, meter_id) = setup_meter_with_generation(
-        &blockchain_service,
-        &authority,
-        energy_amount
-    ).await?;
+    let (user_keypair, meter_id) =
+        setup_meter_with_generation(&blockchain_service, &authority, energy_amount).await?;
     println!("✅ User and meter setup complete");
 
     // Step 4: Issue certificate on-chain
@@ -172,12 +168,9 @@ async fn test_erc_transfer_on_chain() -> Result<()> {
     let governance_program_id = BlockchainService::governance_program_id()?;
 
     let energy_amount = 50.0;
-    let (from_keypair, meter_id) = setup_meter_with_generation(
-        &blockchain_service,
-        &authority,
-        energy_amount
-    ).await?;
-    
+    let (from_keypair, meter_id) =
+        setup_meter_with_generation(&blockchain_service, &authority, energy_amount).await?;
+
     let to_wallet = solana_sdk::pubkey::Pubkey::new_unique();
 
     println!("✅ From wallet: {}", from_keypair.pubkey());
@@ -247,13 +240,10 @@ async fn test_erc_retirement_on_chain() -> Result<()> {
     println!("📋 Step 1: Setup test environment");
     let authority = blockchain_service.get_authority_keypair().await?;
     let governance_program_id = BlockchainService::governance_program_id()?;
-    
+
     let energy_amount = 75.0;
-    let (user_keypair, meter_id) = setup_meter_with_generation(
-        &blockchain_service,
-        &authority,
-        energy_amount
-    ).await?;
+    let (user_keypair, meter_id) =
+        setup_meter_with_generation(&blockchain_service, &authority, energy_amount).await?;
 
     // Step 2: Issue certificate
     println!("\n📋 Step 2: Issue certificate to retire");
@@ -305,12 +295,9 @@ async fn test_complete_erc_lifecycle() -> Result<()> {
     let governance_program_id = BlockchainService::governance_program_id()?;
 
     let energy_amount = 200.0;
-    let (original_owner_keypair, meter_id) = setup_meter_with_generation(
-        &blockchain_service,
-        &authority,
-        energy_amount
-    ).await?;
-    
+    let (original_owner_keypair, meter_id) =
+        setup_meter_with_generation(&blockchain_service, &authority, energy_amount).await?;
+
     let new_owner = solana_sdk::pubkey::Pubkey::new_unique();
 
     // Use a shorter ID to satisfy Solana seed limit (32 bytes)

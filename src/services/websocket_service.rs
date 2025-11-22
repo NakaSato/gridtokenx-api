@@ -1,9 +1,9 @@
 use axum::extract::ws::{Message, WebSocket};
-use futures::{stream::SplitSink, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, stream::SplitSink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -98,6 +98,45 @@ pub enum MarketEvent {
         sell_orders_count: usize,
         spread_percentage: Option<f64>,
     },
+
+    /// Meter reading received event
+    MeterReadingReceived {
+        user_id: Uuid,
+        wallet_address: String,
+        meter_serial: String,
+        kwh_amount: f64,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+
+    /// Tokens minted event
+    TokensMinted {
+        user_id: Uuid,
+        wallet_address: String,
+        meter_serial: String,
+        kwh_amount: f64,
+        tokens_minted: u64,
+        transaction_signature: String,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+
+    /// Meter reading validation failed event
+    MeterReadingValidationFailed {
+        user_id: Uuid,
+        wallet_address: String,
+        meter_serial: String,
+        kwh_amount: f64,
+        error_reason: String,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+
+    /// Batch minting completed event
+    BatchMintingCompleted {
+        batch_id: String,
+        total_readings: u32,
+        successful_mints: u32,
+        failed_mints: u32,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Price level for order book updates
@@ -136,21 +175,21 @@ impl WebSocketService {
 
         // Store the client sender
         self.clients.write().await.insert(client_id, tx);
-        
+
         info!("✅ WebSocket client connected: {}", client_id);
 
         // Spawn task to forward messages to this client
         let clients = self.clients.clone();
         tokio::spawn(async move {
             let mut sender = sender;
-            
+
             // Send welcome message
             let welcome = serde_json::json!({
                 "type": "connected",
                 "client_id": client_id.to_string(),
                 "message": "Connected to GridTokenX market feed"
             });
-            
+
             if let Ok(json) = serde_json::to_string(&welcome) {
                 let _ = sender.send(Message::Text(json.into())).await;
             }
@@ -203,12 +242,15 @@ impl WebSocketService {
     pub async fn broadcast(&self, event: MarketEvent) {
         let clients = self.clients.read().await;
         let client_count = clients.len();
-        
+
         if client_count == 0 {
             return; // No clients connected, skip broadcasting
         }
 
-        info!("📢 Broadcasting event to {} clients: {:?}", client_count, event);
+        info!(
+            "📢 Broadcasting event to {} clients: {:?}",
+            client_count, event
+        );
 
         // Send to all clients
         for (client_id, tx) in clients.iter() {
@@ -402,6 +444,7 @@ impl WebSocketService {
     }
 
     /// Broadcast trade execution
+    /// Broadcast trade executed event
     pub async fn broadcast_trade_executed(
         &self,
         trade_id: String,
@@ -412,6 +455,7 @@ impl WebSocketService {
         quantity: String,
         price: String,
         total_value: String,
+        executed_at: String,
     ) {
         self.broadcast(MarketEvent::TradeExecuted {
             trade_id,
@@ -422,7 +466,7 @@ impl WebSocketService {
             quantity,
             price,
             total_value,
-            executed_at: chrono::Utc::now().to_rfc3339(),
+            executed_at,
         })
         .await;
     }
@@ -442,6 +486,84 @@ impl WebSocketService {
             buy_orders_count,
             sell_orders_count,
             spread_percentage,
+        })
+        .await;
+    }
+
+    /// Broadcast meter reading received event
+    pub async fn broadcast_meter_reading_received(
+        &self,
+        user_id: &uuid::Uuid,
+        wallet_address: &str,
+        meter_serial: &str,
+        kwh_amount: f64,
+    ) {
+        self.broadcast(MarketEvent::MeterReadingReceived {
+            user_id: *user_id,
+            wallet_address: wallet_address.to_string(),
+            meter_serial: meter_serial.to_string(),
+            kwh_amount,
+            timestamp: chrono::Utc::now(),
+        })
+        .await;
+    }
+
+    /// Broadcast tokens minted event
+    pub async fn broadcast_tokens_minted(
+        &self,
+        user_id: &uuid::Uuid,
+        wallet_address: &str,
+        meter_serial: &str,
+        kwh_amount: f64,
+        tokens_minted: u64,
+        transaction_signature: &str,
+    ) {
+        self.broadcast(MarketEvent::TokensMinted {
+            user_id: *user_id,
+            wallet_address: wallet_address.to_string(),
+            meter_serial: meter_serial.to_string(),
+            kwh_amount,
+            tokens_minted,
+            transaction_signature: transaction_signature.to_string(),
+            timestamp: chrono::Utc::now(),
+        })
+        .await;
+    }
+
+    /// Broadcast meter reading validation failed event
+    pub async fn broadcast_meter_reading_validation_failed(
+        &self,
+        user_id: &uuid::Uuid,
+        wallet_address: &str,
+        meter_serial: &str,
+        kwh_amount: f64,
+        error_reason: &str,
+    ) {
+        self.broadcast(MarketEvent::MeterReadingValidationFailed {
+            user_id: *user_id,
+            wallet_address: wallet_address.to_string(),
+            meter_serial: meter_serial.to_string(),
+            kwh_amount,
+            error_reason: error_reason.to_string(),
+            timestamp: chrono::Utc::now(),
+        })
+        .await;
+    }
+
+    /// Broadcast batch minting completed event
+    pub async fn broadcast_batch_minting_completed(
+        &self,
+        batch_id: &str,
+        total_readings: u32,
+        successful_mints: u32,
+        failed_mints: u32,
+    ) {
+        self.broadcast(MarketEvent::BatchMintingCompleted {
+            batch_id: batch_id.to_string(),
+            total_readings,
+            successful_mints,
+            failed_mints,
+            timestamp: chrono::Utc::now(),
         })
         .await;
     }

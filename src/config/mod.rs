@@ -2,6 +2,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::env;
 
+pub mod tokenization;
+pub use tokenization::{ConfigError, TokenizationConfig, ValidationError};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub environment: String,
@@ -23,6 +26,7 @@ pub struct Config {
     pub audit_log_enabled: bool,
     pub test_mode: bool,
     pub email: EmailConfig,
+    pub tokenization: TokenizationConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,10 +70,12 @@ impl Config {
                 .map_err(|_| anyhow::anyhow!("SOLANA_RPC_URL environment variable is required"))?,
             solana_ws_url: env::var("SOLANA_WS_URL")
                 .map_err(|_| anyhow::anyhow!("SOLANA_WS_URL environment variable is required"))?,
-            energy_token_mint: env::var("ENERGY_TOKEN_MINT")
-                .map_err(|_| anyhow::anyhow!("ENERGY_TOKEN_MINT environment variable is required"))?,
-            engineering_api_key: env::var("ENGINEERING_API_KEY")
-                .map_err(|_| anyhow::anyhow!("ENGINEERING_API_KEY environment variable is required"))?,
+            energy_token_mint: env::var("ENERGY_TOKEN_MINT").map_err(|_| {
+                anyhow::anyhow!("ENERGY_TOKEN_MINT environment variable is required")
+            })?,
+            engineering_api_key: env::var("ENGINEERING_API_KEY").map_err(|_| {
+                anyhow::anyhow!("ENGINEERING_API_KEY environment variable is required")
+            })?,
             max_connections: env::var("MAX_CONNECTIONS")
                 .map_err(|_| anyhow::anyhow!("MAX_CONNECTIONS environment variable is required"))?
                 .parse()?,
@@ -92,16 +98,14 @@ impl Config {
                 .parse()
                 .unwrap_or(false),
             email: EmailConfig {
-                smtp_host: env::var("SMTP_HOST")
-                    .unwrap_or_else(|_| "smtp.gmail.com".to_string()),
+                smtp_host: env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".to_string()),
                 smtp_port: env::var("SMTP_PORT")
                     .unwrap_or_else(|_| "587".to_string())
                     .parse()
                     .unwrap_or(587),
                 smtp_username: env::var("SMTP_USERNAME")
                     .unwrap_or_else(|_| "noreply@gridtokenx.com".to_string()),
-                smtp_password: env::var("SMTP_PASSWORD")
-                    .unwrap_or_else(|_| "".to_string()),
+                smtp_password: env::var("SMTP_PASSWORD").unwrap_or_else(|_| "".to_string()),
                 from_name: env::var("EMAIL_FROM_NAME")
                     .unwrap_or_else(|_| "GridTokenX Platform".to_string()),
                 from_address: env::var("EMAIL_FROM_ADDRESS")
@@ -125,6 +129,8 @@ impl Config {
                     .parse()
                     .unwrap_or(true),
             },
+            tokenization: TokenizationConfig::from_env()
+                .map_err(|e| anyhow::anyhow!("Failed to load tokenization config: {}", e))?,
         })
     }
 }

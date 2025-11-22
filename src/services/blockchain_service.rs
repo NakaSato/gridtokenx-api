@@ -536,8 +536,7 @@ impl BlockchainService {
             solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true), // Payer (signer)
             solana_sdk::instruction::AccountMeta::new(*mint, false),       // Mint
             solana_sdk::instruction::AccountMeta::new_readonly(
-                Pubkey::from_str("11111111111111111111111111111112")
-                    .expect("Valid system program ID"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ), // System program
             solana_sdk::instruction::AccountMeta::new_readonly(token_program_id, false), // Token program
@@ -682,7 +681,7 @@ impl BlockchainService {
         info!("Registering user on-chain: {}", authority.pubkey());
 
         let registry_program_id = Self::registry_program_id()?;
-        
+
         // Derive PDAs
         let (registry_pda, _) = Pubkey::find_program_address(&[b"registry"], &registry_program_id);
         let (user_account_pda, _) = Pubkey::find_program_address(
@@ -692,7 +691,7 @@ impl BlockchainService {
 
         // Build instruction data
         let mut instruction_data = Vec::new();
-        
+
         // Discriminator for "register_user"
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
@@ -711,18 +710,16 @@ impl BlockchainService {
             solana_sdk::instruction::AccountMeta::new(user_account_pda, false),
             solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),
             solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ),
         ];
 
-        let instruction = Instruction::new_with_bytes(
-            registry_program_id,
-            &instruction_data,
-            accounts,
-        );
+        let instruction =
+            Instruction::new_with_bytes(registry_program_id, &instruction_data, accounts);
 
-        self.build_and_send_transaction(vec![instruction], &[authority]).await
+        self.build_and_send_transaction(vec![instruction], &[authority])
+            .await
     }
 
     /// Register a meter on-chain
@@ -742,14 +739,12 @@ impl BlockchainService {
             &[b"user", authority.pubkey().as_ref()],
             &registry_program_id,
         );
-        let (meter_account_pda, _) = Pubkey::find_program_address(
-            &[b"meter", meter_id.as_bytes()],
-            &registry_program_id,
-        );
+        let (meter_account_pda, _) =
+            Pubkey::find_program_address(&[b"meter", meter_id.as_bytes()], &registry_program_id);
 
         // Build instruction data
         let mut instruction_data = Vec::new();
-        
+
         // Discriminator for "register_meter"
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
@@ -769,18 +764,16 @@ impl BlockchainService {
             solana_sdk::instruction::AccountMeta::new(meter_account_pda, false),
             solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),
             solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ),
         ];
 
-        let instruction = Instruction::new_with_bytes(
-            registry_program_id,
-            &instruction_data,
-            accounts,
-        );
+        let instruction =
+            Instruction::new_with_bytes(registry_program_id, &instruction_data, accounts);
 
-        self.build_and_send_transaction(vec![instruction], &[authority]).await
+        self.build_and_send_transaction(vec![instruction], &[authority])
+            .await
     }
 
     /// Submit meter reading on-chain (via Oracle)
@@ -798,21 +791,16 @@ impl BlockchainService {
         let registry_program_id = Self::registry_program_id()?;
 
         // Derive PDAs
-        let (oracle_data_pda, _) = Pubkey::find_program_address(&[b"oracle_data"], &oracle_program_id);
-        let (meter_account_pda, _) = Pubkey::find_program_address(
-            &[b"meter", meter_id.as_bytes()],
-            &registry_program_id,
-        );
+        let (oracle_data_pda, _) =
+            Pubkey::find_program_address(&[b"oracle_data"], &oracle_program_id);
+        let (meter_account_pda, _) =
+            Pubkey::find_program_address(&[b"meter", meter_id.as_bytes()], &registry_program_id);
 
         // Build instruction data
         let mut instruction_data = Vec::new();
-        
-        // Discriminator for "submit_meter_reading"
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(b"global:submit_meter_reading");
-        let hash = hasher.finalize();
-        instruction_data.extend_from_slice(&hash[0..8]);
+
+        // Use discriminator from IDL for submit_meter_reading: [181, 247, 196, 139, 78, 88, 192, 206]
+        instruction_data.extend_from_slice(&[181, 247, 196, 139, 78, 88, 192, 206]);
 
         // Arguments
         instruction_data.extend_from_slice(&(meter_id.len() as u32).to_le_bytes());
@@ -821,21 +809,17 @@ impl BlockchainService {
         instruction_data.extend_from_slice(&consumed.to_le_bytes());
         instruction_data.extend_from_slice(&timestamp.to_le_bytes());
 
-        // Accounts
+        // Accounts - matching IDL (oracle_data, authority)
         let accounts = vec![
             solana_sdk::instruction::AccountMeta::new(oracle_data_pda, false),
-            solana_sdk::instruction::AccountMeta::new(meter_account_pda, false),
             solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true),
-            solana_sdk::instruction::AccountMeta::new_readonly(registry_program_id, false),
         ];
 
-        let instruction = Instruction::new_with_bytes(
-            oracle_program_id,
-            &instruction_data,
-            accounts,
-        );
+        let instruction =
+            Instruction::new_with_bytes(oracle_program_id, &instruction_data, accounts);
 
-        self.build_and_send_transaction(vec![instruction], &[authority]).await
+        self.build_and_send_transaction(vec![instruction], &[authority])
+            .await
     }
 }
 
@@ -863,6 +847,282 @@ pub mod transaction_utils {
             .try_sign(signers, recent_blockhash)
             .map_err(|e| anyhow!("Failed to sign transaction: {}", e))?;
         Ok(())
+    }
+
+    /// Data structure for batch minting operations
+    #[derive(Debug, Clone)]
+    pub struct MintBatchData {
+        pub user_wallet: Pubkey,
+        pub user_token_account: Pubkey,
+        pub amount_kwh: f64,
+        pub tokens_to_mint: u64,
+    }
+
+    /// Result of a batch minting operation
+    #[derive(Debug, Clone)]
+    pub struct MintBatchResult {
+        pub user_wallet: Pubkey,
+        pub success: bool,
+        pub error: Option<String>,
+        pub tx_signature: Option<String>,
+    }
+
+    /// Mint energy tokens in batch for multiple users
+    /// This method groups users by token account and processes them in batches
+    /// to optimize transaction fees and reduce blockchain load
+    pub async fn mint_energy_tokens_batch(
+        &self,
+        authority: &Keypair,
+        mint: &Pubkey,
+        batch_data: &[MintBatchData],
+        max_tx_per_batch: usize,
+    ) -> Result<Vec<MintBatchResult>> {
+        info!("Starting batch minting for {} users", batch_data.len());
+
+        if batch_data.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Get energy token program ID
+        let energy_token_program = BlockchainService::energy_token_program_id()?;
+
+        // Get the token info PDA (shared across all operations)
+        let (token_info_pda, _bump) =
+            Pubkey::find_program_address(&[b"token_info"], &energy_token_program);
+
+        // Group by token account to optimize batch processing
+        let mut user_groups: std::collections::HashMap<Pubkey, Vec<&MintBatchData>> =
+            std::collections::HashMap::new();
+
+        for data in batch_data {
+            user_groups
+                .entry(data.user_token_account)
+                .or_default()
+                .push(data);
+        }
+
+        let mut all_results = Vec::new();
+        let token_program_id = spl_token::id();
+
+        // Process each token account group
+        for (token_account, user_data_list) in user_groups {
+            // Split into sub-batches to respect max_tx_per_batch
+            for chunk in user_data_list.chunks(max_tx_per_batch) {
+                // Build mint instructions for this chunk
+                let mut mint_instructions = Vec::with_capacity(chunk.len());
+
+                for data in chunk {
+                    // Build the instruction data: discriminator (8 bytes) + amount (8 bytes)
+                    let mut instruction_data = Vec::with_capacity(16);
+
+                    // Calculate Anchor discriminator for "mint_tokens_direct"
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    hasher.update(b"global:mint_tokens_direct");
+                    let hash = hasher.finalize();
+                    instruction_data.extend_from_slice(&hash[0..8]);
+
+                    // Add amount as u64 (little-endian)
+                    instruction_data.extend_from_slice(&data.tokens_to_mint.to_le_bytes());
+
+                    // Build accounts for the instruction
+                    let accounts = vec![
+                        solana_sdk::instruction::AccountMeta::new(token_info_pda, false),
+                        solana_sdk::instruction::AccountMeta::new(*mint, false),
+                        solana_sdk::instruction::AccountMeta::new(data.user_token_account, false),
+                        solana_sdk::instruction::AccountMeta::new_readonly(
+                            authority.pubkey(),
+                            true,
+                        ),
+                        solana_sdk::instruction::AccountMeta::new_readonly(
+                            token_program_id.clone(),
+                            false,
+                        ),
+                    ];
+
+                    let mint_instruction = Instruction::new_with_bytes(
+                        energy_token_program,
+                        &instruction_data,
+                        accounts,
+                    );
+
+                    mint_instructions.push((
+                        data.user_wallet,
+                        data.tokens_to_mint,
+                        mint_instruction,
+                    ));
+                }
+
+                // If only one instruction, use the single transaction method
+                if mint_instructions.len() == 1 {
+                    let (_, amount, instruction) = &mint_instructions[0];
+                    match self
+                        .build_and_send_transaction_with_priority(
+                            vec![instruction.clone()],
+                            &[authority],
+                            TransactionType::Settlement,
+                        )
+                        .await
+                    {
+                        Ok(signature) => {
+                            all_results.push(MintBatchResult {
+                                user_wallet: mint_instructions[0].0,
+                                success: true,
+                                error: None,
+                                tx_signature: Some(signature),
+                            });
+                        }
+                        Err(e) => {
+                            error!(
+                                "Failed to mint tokens for {}: {}",
+                                mint_instructions[0].0, e
+                            );
+                            all_results.push(MintBatchResult {
+                                user_wallet: mint_instructions[0].0,
+                                success: false,
+                                error: Some(e.to_string()),
+                                tx_signature: None,
+                            });
+                        }
+                    }
+                } else {
+                    // For multiple instructions, we can either:
+                    // 1. Create one transaction with all instructions (if compatible)
+                    // 2. Create separate transactions in parallel
+
+                    // For now, we'll use parallel transactions to avoid instruction compatibility issues
+                    let mut handles = Vec::new();
+
+                    for (user_wallet, _amount, instruction) in mint_instructions {
+                        let blockchain_service = self.clone();
+                        let authority = authority.clone();
+
+                        let handle = tokio::spawn(async move {
+                            blockchain_service
+                                .build_and_send_transaction_with_priority(
+                                    vec![instruction],
+                                    &[&authority],
+                                    TransactionType::Settlement,
+                                )
+                                .await
+                        });
+
+                        handles.push((user_wallet, handle));
+                    }
+
+                    // Wait for all transactions to complete
+                    for (user_wallet, handle) in handles {
+                        match handle.await {
+                            Ok(Ok(signature)) => {
+                                all_results.push(MintBatchResult {
+                                    user_wallet,
+                                    success: true,
+                                    error: None,
+                                    tx_signature: Some(signature),
+                                });
+                            }
+                            Ok(Err(e)) => {
+                                error!("Failed to mint tokens for {}: {}", user_wallet, e);
+                                all_results.push(MintBatchResult {
+                                    user_wallet,
+                                    success: false,
+                                    error: Some(e.to_string()),
+                                    tx_signature: None,
+                                });
+                            }
+                            Err(e) => {
+                                error!("Task error for {}: {}", user_wallet, e);
+                                all_results.push(MintBatchResult {
+                                    user_wallet,
+                                    success: false,
+                                    error: Some(e.to_string()),
+                                    tx_signature: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Count successful mints
+        let successful_count = all_results.iter().filter(|r| r.success).count();
+        info!(
+            "Batch minting completed: {}/{} successful",
+            successful_count,
+            all_results.len()
+        );
+
+        Ok(all_results)
+    }
+
+    /// Helper method to create MintBatchData from user wallet and kWh amount
+    pub fn create_mint_batch_data(
+        user_wallet: Pubkey,
+        kwh_amount: f64,
+        kwh_to_token_ratio: f64,
+        decimals: u8,
+    ) -> Result<MintBatchData> {
+        // Calculate tokens to mint
+        let tokens_to_mint =
+            (kwh_amount * kwh_to_token_ratio * 10_f64.powi(decimals as i32)) as u64;
+
+        // Get or create associated token account
+        let token_program_id = Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+            .map_err(|e| anyhow!("Invalid token program ID: {}", e))?;
+
+        let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+            .map_err(|e| anyhow!("Invalid ATA program ID: {}", e))?;
+
+        // Get energy token mint
+        let mint = Pubkey::from_str(
+            &std::env::var("ENERGY_TOKEN_MINT")
+                .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?,
+        )?;
+
+        // Calculate ATA address
+        let (user_token_account, _bump) = Pubkey::find_program_address(
+            &[
+                user_wallet.as_ref(),
+                token_program_id.as_ref(),
+                mint.as_ref(),
+            ],
+            &ata_program_id,
+        );
+
+        Ok(MintBatchData {
+            user_wallet,
+            user_token_account,
+            amount_kwh: kwh_amount,
+            tokens_to_mint,
+        })
+    }
+
+    /// Optimized version of mint_tokens_direct that accepts a wallet address string
+    /// and converts it internally
+    pub async fn mint_tokens_direct(&self, user_wallet: &Pubkey, amount: u64) -> Result<Signature> {
+        // Get authority keypair
+        let authority = self.get_authority_keypair().await?;
+
+        // Get energy token mint
+        let mint = Pubkey::from_str(
+            &std::env::var("ENERGY_TOKEN_MINT")
+                .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?,
+        )?;
+
+        // Ensure user has an associated token account
+        let user_token_account = self
+            .ensure_token_account_exists(&authority, user_wallet, &mint)
+            .await?;
+
+        // Call the original method
+        self.mint_energy_tokens(
+            &authority,
+            &user_token_account,
+            &mint,
+            amount as f64 / 1_000_000_000.0,
+        )
+        .await
     }
 }
 

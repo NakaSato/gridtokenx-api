@@ -1,20 +1,20 @@
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
+use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
-use utoipa::{ToSchema, IntoParams};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
-use bigdecimal::BigDecimal;
 // use solana_sdk::{pubkey::Pubkey, signature::Keypair}; // Not used yet
 
 use crate::{
-    error::ApiError,
-    auth::middleware::AuthenticatedUser,
-    services::{BlockchainService}, // MeterService, WalletService used through state
-    utils::{PaginationParams},
     AppState,
+    auth::middleware::AuthenticatedUser,
+    error::ApiError,
+    services::BlockchainService, // MeterService, WalletService used through state
+    utils::PaginationParams,
 };
 
 // ============================================================================
@@ -24,9 +24,10 @@ use crate::{
 /// Check if user has required role
 fn require_role(user: &crate::auth::Claims, required_role: &str) -> Result<(), ApiError> {
     if user.role != required_role {
-        return Err(ApiError::Forbidden(
-            format!("Required role: {}", required_role),
-        ));
+        return Err(ApiError::Forbidden(format!(
+            "Required role: {}",
+            required_role
+        )));
     }
     Ok(())
 }
@@ -64,18 +65,18 @@ pub struct GetReadingsQuery {
     /// Page number (1-indexed)
     #[serde(default = "default_page")]
     pub page: u32,
-    
+
     /// Number of items per page (max 100)
     #[serde(default = "default_page_size")]
     pub page_size: u32,
-    
+
     /// Sort field: "submitted_at", "reading_timestamp", "kwh_amount"
     pub sort_by: Option<String>,
-    
+
     /// Sort direction: "asc" or "desc"
     #[serde(default = "default_sort_order")]
     pub sort_order: crate::utils::SortOrder,
-    
+
     /// Filter by minted status
     pub minted: Option<bool>,
 }
@@ -97,42 +98,44 @@ impl GetReadingsQuery {
         if self.page < 1 {
             self.page = 1;
         }
-        
+
         if self.page_size < 1 {
             self.page_size = 20;
         } else if self.page_size > 100 {
             self.page_size = 100;
         }
-        
+
         // Validate sort field
         if let Some(sort_by) = &self.sort_by {
             match sort_by.as_str() {
                 "submitted_at" | "reading_timestamp" | "kwh_amount" => {}
-                _ => return Err(ApiError::validation_error(
-                    "Invalid sort_by field. Allowed values: submitted_at, reading_timestamp, kwh_amount",
-                    Some("sort_by"),
-                )),
+                _ => {
+                    return Err(ApiError::validation_error(
+                        "Invalid sort_by field. Allowed values: submitted_at, reading_timestamp, kwh_amount",
+                        Some("sort_by"),
+                    ));
+                }
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn limit(&self) -> i64 {
         self.page_size as i64
     }
-    
+
     pub fn offset(&self) -> i64 {
         ((self.page - 1) * self.page_size) as i64
     }
-    
+
     pub fn sort_direction(&self) -> &str {
         match self.sort_order {
             crate::utils::SortOrder::Asc => "ASC",
             crate::utils::SortOrder::Desc => "DESC",
         }
     }
-    
+
     pub fn get_sort_field(&self) -> &str {
         self.sort_by.as_deref().unwrap_or("submitted_at")
     }
@@ -175,7 +178,7 @@ pub struct UserStatsResponse {
 
 /// Submit a new meter reading
 /// POST /api/meters/submit-reading
-/// 
+///
 /// Prosumers submit their smart meter readings for token minting
 #[utoipa::path(
     post,
@@ -196,7 +199,10 @@ pub async fn submit_reading(
     AuthenticatedUser(user): AuthenticatedUser,
     Json(request): Json<SubmitReadingRequest>,
 ) -> Result<Json<MeterReadingResponse>, ApiError> {
-    info!("User {} submitting meter reading: {} kWh", user.sub, request.kwh_amount);
+    info!(
+        "User {} submitting meter reading: {} kWh",
+        user.sub, request.kwh_amount
+    );
 
     // Verify user is a prosumer
     if user.role != "prosumer" && user.role != "admin" {
@@ -206,25 +212,23 @@ pub async fn submit_reading(
     }
 
     // Validate wallet address - get from user object in database
-    let user_record = sqlx::query!(
-        "SELECT wallet_address FROM users WHERE id = $1",
-        user.sub
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| {
-        error!("Failed to fetch user: {}", e);
-        ApiError::Internal("Failed to fetch user data".to_string())
-    })?;
+    let user_record = sqlx::query!("SELECT wallet_address FROM users WHERE id = $1", user.sub)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch user: {}", e);
+            ApiError::Internal("Failed to fetch user data".to_string())
+        })?;
 
-    let wallet_address = user_record.wallet_address.ok_or_else(|| {
-        ApiError::BadRequest("Wallet address not set for user".to_string())
-    })?;
+    let wallet_address = user_record
+        .wallet_address
+        .ok_or_else(|| ApiError::BadRequest("Wallet address not set for user".to_string()))?;
 
     // NEW: Verify meter ownership if meter_id is provided
     let verification_status = if let Some(meter_id) = request.meter_id {
         // Verify meter ownership
-        let is_owner = state.meter_verification_service
+        let is_owner = state
+            .meter_verification_service
             .verify_meter_ownership(&user.sub.to_string(), &meter_id)
             .await
             .map_err(|e| {
@@ -261,23 +265,56 @@ pub async fn submit_reading(
         .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     // Submit reading to database with verification status
-    let reading = state.meter_service
-        .submit_reading_with_verification(user.sub, meter_request, request.meter_id, verification_status)
+    let reading = state
+        .meter_service
+        .submit_reading_with_verification(
+            user.sub,
+            meter_request,
+            request.meter_id,
+            verification_status,
+        )
         .await
         .map_err(|e| {
             error!("Failed to submit meter reading: {}", e);
             ApiError::Internal(format!("Failed to submit reading: {}", e))
         })?;
 
+    // Broadcast meter reading received event via WebSocket
+    if let Err(_) = state
+        .websocket_service
+        .broadcast_meter_reading_received(
+            &user.sub,
+            &wallet_address,
+            &reading
+                .meter_serial
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            request.kwh_amount.to_string().parse().unwrap_or(0.0),
+        )
+        .await
+    {
+        warn!("Failed to broadcast meter reading event");
+    }
+
     info!("Meter reading submitted successfully: {}", reading.id);
 
     Ok(Json(MeterReadingResponse {
         id: reading.id,
-        user_id: reading.user_id.ok_or_else(|| ApiError::Internal("Missing user_id".to_string()))?,
+        user_id: reading
+            .user_id
+            .ok_or_else(|| ApiError::Internal("Missing user_id".to_string()))?,
         wallet_address: reading.wallet_address,
-        kwh_amount: reading.kwh_amount.ok_or_else(|| ApiError::Internal("Missing kwh_amount".to_string()))?,
-        reading_timestamp: reading.reading_timestamp.ok_or_else(|| ApiError::Internal("Missing reading_timestamp".to_string()))?,
-        submitted_at: reading.submitted_at.ok_or_else(|| ApiError::Internal("Missing submitted_at".to_string()))?,
+        kwh_amount: reading
+            .kwh_amount
+            .ok_or_else(|| ApiError::Internal("Missing kwh_amount".to_string()))?,
+        reading_timestamp: reading
+            .reading_timestamp
+            .ok_or_else(|| ApiError::Internal("Missing reading_timestamp".to_string()))?,
+        submitted_at: reading
+            .submitted_at
+            .ok_or_else(|| ApiError::Internal("Missing submitted_at".to_string()))?,
         minted: reading.minted.unwrap_or(false),
         mint_tx_signature: reading.mint_tx_signature,
     }))
@@ -313,7 +350,8 @@ pub async fn get_my_readings(
     let sort_order = query.sort_direction();
 
     // Get total count
-    let total = state.meter_service
+    let total = state
+        .meter_service
         .count_user_readings(user.sub, query.minted)
         .await
         .map_err(|e| {
@@ -322,7 +360,8 @@ pub async fn get_my_readings(
         })?;
 
     // Get readings with pagination
-    let readings = state.meter_service
+    let readings = state
+        .meter_service
         .get_user_readings(user.sub, limit, offset, sort_by, sort_order, query.minted)
         .await
         .map_err(|e| {
@@ -395,7 +434,8 @@ pub async fn get_readings_by_wallet(
     let sort_order = query.sort_direction();
 
     // Get total count
-    let total = state.meter_service
+    let total = state
+        .meter_service
         .count_wallet_readings(&wallet_address, query.minted)
         .await
         .map_err(|e| {
@@ -404,8 +444,16 @@ pub async fn get_readings_by_wallet(
         })?;
 
     // Get readings with pagination
-    let readings = state.meter_service
-        .get_readings_by_wallet(&wallet_address, limit, offset, sort_by, sort_order, query.minted)
+    let readings = state
+        .meter_service
+        .get_readings_by_wallet(
+            &wallet_address,
+            limit,
+            offset,
+            sort_by,
+            sort_order,
+            query.minted,
+        )
         .await
         .map_err(|e| {
             error!("Failed to fetch wallet readings: {}", e);
@@ -471,7 +519,8 @@ pub async fn get_unminted_readings(
     // Validate query parameters
     query.validate()?;
 
-    let readings = state.meter_service
+    let readings = state
+        .meter_service
         .get_unminted_readings(query.limit())
         .await
         .map_err(|e| {
@@ -501,7 +550,7 @@ pub async fn get_unminted_readings(
 
 /// Mint tokens from a meter reading (admin only)
 /// POST /api/admin/meters/mint-from-reading
-/// 
+///
 /// This endpoint mints energy tokens based on a submitted meter reading
 #[utoipa::path(
     post,
@@ -526,10 +575,14 @@ pub async fn mint_from_reading(
     // Check admin permission
     require_role(&user, "admin")?;
 
-    info!("Admin {} minting tokens for reading {}", user.sub, request.reading_id);
+    info!(
+        "Admin {} minting tokens for reading {}",
+        user.sub, request.reading_id
+    );
 
     // Get the reading
-    let reading = state.meter_service
+    let reading = state
+        .meter_service
         .get_reading_by_id(request.reading_id)
         .await
         .map_err(|e| {
@@ -549,7 +602,8 @@ pub async fn mint_from_reading(
         .map_err(|e| ApiError::BadRequest(format!("Invalid wallet address: {}", e)))?;
 
     // Get authority keypair
-    let authority_keypair = state.wallet_service
+    let authority_keypair = state
+        .wallet_service
         .get_authority_keypair()
         .await
         .map_err(|e| {
@@ -560,23 +614,28 @@ pub async fn mint_from_reading(
     // Get token mint address from config
     let token_mint = BlockchainService::parse_pubkey(&state.config.energy_token_mint)
         .map_err(|e| ApiError::Internal(format!("Invalid token mint config: {}", e)))?;
-    
+
     // Ensure user has token account (create if needed)
-    let user_token_account = state.blockchain_service
+    let user_token_account = state
+        .blockchain_service
         .ensure_token_account_exists(&authority_keypair, &wallet_pubkey, &token_mint)
         .await
         .map_err(|e| ApiError::Internal(format!("Failed to create token account: {}", e)))?;
-    
+
     info!("User token account: {}", user_token_account);
-    
+
     // Mint tokens on blockchain
-    let kwh_amount = reading.kwh_amount
+    let kwh_amount = reading
+        .kwh_amount
         .ok_or_else(|| ApiError::Internal("Missing kWh amount".to_string()))?;
-    
-    let amount_kwh = kwh_amount.to_string().parse::<f64>()
+
+    let amount_kwh = kwh_amount
+        .to_string()
+        .parse::<f64>()
         .map_err(|e| ApiError::Internal(format!("Invalid kWh amount: {}", e)))?;
-    
-    let tx_signature = state.blockchain_service
+
+    let tx_signature = state
+        .blockchain_service
         .mint_energy_tokens(
             &authority_keypair,
             &user_token_account,
@@ -588,12 +647,13 @@ pub async fn mint_from_reading(
             error!("Failed to mint tokens on blockchain: {}", e);
             ApiError::Internal(format!("Blockchain minting failed: {}", e))
         })?;
-    
+
     let tx_signature_string = tx_signature.to_string();
     info!("Tokens minted successfully. TX: {}", tx_signature_string);
 
     // Mark reading as minted
-    let updated_reading = state.meter_service
+    let updated_reading = state
+        .meter_service
         .mark_as_minted(reading.id, &tx_signature_string)
         .await
         .map_err(|e| {
@@ -609,7 +669,8 @@ pub async fn mint_from_reading(
     Ok(Json(MintResponse {
         message: "Tokens minted successfully".to_string(),
         transaction_signature: tx_signature.to_string(),
-        kwh_amount: updated_reading.kwh_amount
+        kwh_amount: updated_reading
+            .kwh_amount
             .ok_or_else(|| ApiError::Internal("Missing kWh amount".to_string()))?,
         wallet_address: reading.wallet_address,
     }))
@@ -635,7 +696,8 @@ pub async fn get_user_stats(
     info!("User {} fetching meter statistics", user.sub);
 
     // Get unminted and minted totals
-    let unminted_total = state.meter_service
+    let unminted_total = state
+        .meter_service
         .get_unminted_total(user.sub)
         .await
         .map_err(|e| {
@@ -643,7 +705,8 @@ pub async fn get_user_stats(
             ApiError::Internal("Failed to fetch statistics".to_string())
         })?;
 
-    let minted_total = state.meter_service
+    let minted_total = state
+        .meter_service
         .get_minted_total(user.sub)
         .await
         .map_err(|e| {
@@ -654,7 +717,8 @@ pub async fn get_user_stats(
     let total_kwh = &unminted_total + &minted_total;
 
     // Count total readings
-    let total_readings = state.meter_service
+    let total_readings = state
+        .meter_service
         .count_user_readings(user.sub, None)
         .await
         .map_err(|e| {

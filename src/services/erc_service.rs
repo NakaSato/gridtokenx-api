@@ -127,20 +127,16 @@ impl ErcService {
             Pubkey::find_program_address(&[b"poa_config"], governance_program_id);
 
         // 3. Derive Meter Account PDA
-        let registry_program_id = crate::services::blockchain_service::BlockchainService::registry_program_id()?;
-        let (meter_account_pda, _) = Pubkey::find_program_address(
-            &[b"meter", meter_id.as_bytes()],
-            &registry_program_id,
-        );
+        let registry_program_id =
+            crate::services::blockchain_service::BlockchainService::registry_program_id()?;
+        let (meter_account_pda, _) =
+            Pubkey::find_program_address(&[b"meter", meter_id.as_bytes()], &registry_program_id);
 
         // 4. Build Anchor instruction data
         let mut instruction_data = Vec::new();
 
-        // Discriminator for "issue_erc" instruction (first 8 bytes of SHA256 hash)
-        let mut hasher = Sha256::new();
-        hasher.update(b"global:issue_erc");
-        let hash = hasher.finalize();
-        instruction_data.extend_from_slice(&hash[0..8]);
+        // Use discriminator from IDL: [174, 248, 149, 107, 155, 4, 196, 8]
+        instruction_data.extend_from_slice(&[174, 248, 149, 107, 155, 4, 196, 8]);
 
         // Serialize arguments using simple approach for now
         // In production, use proper Borsh serialization
@@ -159,7 +155,7 @@ impl ErcService {
             AccountMeta::new(meter_account_pda, false), // Added meter_account
             AccountMeta::new_readonly(authority.pubkey(), true),
             AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ),
         ];
@@ -272,18 +268,18 @@ impl ErcService {
             UPDATE erc_certificates
             SET blockchain_tx_signature = $2
             WHERE certificate_id = $1
-            RETURNING 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            RETURNING
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             "#,
             certificate_id,
@@ -348,13 +344,9 @@ impl ErcService {
         );
 
         // 2. Build Anchor instruction data for transfer
+        // Use discriminator from IDL: [87, 100, 0, 28, 116, 52, 46, 40]
         let mut instruction_data = Vec::new();
-
-        // Discriminator for "transfer_erc" instruction
-        let mut hasher = Sha256::new();
-        hasher.update(b"global:transfer_erc");
-        let hash = hasher.finalize();
-        instruction_data.extend_from_slice(&hash[0..8]);
+        instruction_data.extend_from_slice(&[87, 100, 0, 28, 116, 52, 46, 40]);
 
         // Serialize arguments
         instruction_data.extend_from_slice(&(certificate_id.len() as u32).to_le_bytes());
@@ -367,7 +359,7 @@ impl ErcService {
             AccountMeta::new(*to_wallet, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
             AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ),
         ];
@@ -406,13 +398,9 @@ impl ErcService {
         );
 
         // 2. Build Anchor instruction data for retirement
+        // Use discriminator from IDL: [199, 12, 195, 232, 185, 99, 112, 145]
         let mut instruction_data = Vec::new();
-
-        // Discriminator for "retire_erc" instruction
-        let mut hasher = Sha256::new();
-        hasher.update(b"global:retire_erc");
-        let hash = hasher.finalize();
-        instruction_data.extend_from_slice(&hash[0..8]);
+        instruction_data.extend_from_slice(&[199, 12, 195, 232, 185, 99, 112, 145]);
 
         // Serialize arguments
         instruction_data.extend_from_slice(&(certificate_id.len() as u32).to_le_bytes());
@@ -423,7 +411,7 @@ impl ErcService {
             AccountMeta::new(_certificate_pda, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
             AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                solana_sdk::pubkey!("11111111111111111111111111111111"),
                 false,
             ),
         ];
@@ -474,23 +462,23 @@ impl ErcService {
             ErcCertificate,
             r#"
             INSERT INTO erc_certificates (
-                id, certificate_id, user_id, wallet_address, 
-                kwh_amount, issue_date, expiry_date, 
+                id, certificate_id, user_id, wallet_address,
+                kwh_amount, issue_date, expiry_date,
                 issuer_wallet, status, metadata
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            RETURNING
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             "#,
             Uuid::new_v4(),
@@ -542,18 +530,18 @@ impl ErcService {
         let certificate = sqlx::query_as!(
             ErcCertificate,
             r#"
-            SELECT 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            SELECT
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             FROM erc_certificates
             WHERE certificate_id = $1
@@ -578,18 +566,18 @@ impl ErcService {
         let certificates = sqlx::query_as!(
             ErcCertificate,
             r#"
-            SELECT 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            SELECT
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             FROM erc_certificates
             WHERE wallet_address = $1
@@ -626,10 +614,10 @@ impl ErcService {
         let query = if let Some(_status) = status_filter {
             format!(
                 r#"
-                SELECT 
-                    id, certificate_id, user_id, wallet_address, 
-                    kwh_amount, issue_date, expiry_date, 
-                    issuer_wallet, status, 
+                SELECT
+                    id, certificate_id, user_id, wallet_address,
+                    kwh_amount, issue_date, expiry_date,
+                    issuer_wallet, status,
                     blockchain_tx_signature, metadata,
                     created_at, updated_at
                 FROM erc_certificates
@@ -642,10 +630,10 @@ impl ErcService {
         } else {
             format!(
                 r#"
-                SELECT 
-                    id, certificate_id, user_id, wallet_address, 
-                    kwh_amount, issue_date, expiry_date, 
-                    issuer_wallet, status, 
+                SELECT
+                    id, certificate_id, user_id, wallet_address,
+                    kwh_amount, issue_date, expiry_date,
+                    issuer_wallet, status,
                     blockchain_tx_signature, metadata,
                     created_at, updated_at
                 FROM erc_certificates
@@ -723,18 +711,18 @@ impl ErcService {
             UPDATE erc_certificates
             SET blockchain_tx_signature = $2
             WHERE id = $1
-            RETURNING 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            RETURNING
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             "#,
             certificate_uuid,
@@ -774,18 +762,18 @@ impl ErcService {
             UPDATE erc_certificates
             SET wallet_address = $2, status = 'Transferred'
             WHERE id = $1
-            RETURNING 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            RETURNING
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             "#,
             certificate_uuid,
@@ -800,12 +788,12 @@ impl ErcService {
             CertificateTransfer,
             r#"
             INSERT INTO erc_certificate_transfers (
-                id, certificate_id, from_wallet, to_wallet, 
+                id, certificate_id, from_wallet, to_wallet,
                 transfer_date, blockchain_tx_signature
             )
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING 
-                id, certificate_id, from_wallet, to_wallet, 
+            RETURNING
+                id, certificate_id, from_wallet, to_wallet,
                 transfer_date, blockchain_tx_signature, created_at
             "#,
             Uuid::new_v4(),
@@ -840,18 +828,18 @@ impl ErcService {
             UPDATE erc_certificates
             SET status = 'Retired'
             WHERE id = $1 AND status = 'Active'
-            RETURNING 
-                id, certificate_id, 
-                user_id as "user_id?", 
-                wallet_address, 
-                kwh_amount as "kwh_amount?", 
-                issue_date as "issue_date?", 
-                expiry_date, 
-                issuer_wallet as "issuer_wallet?", 
-                status, 
-                blockchain_tx_signature, 
+            RETURNING
+                id, certificate_id,
+                user_id as "user_id?",
+                wallet_address,
+                kwh_amount as "kwh_amount?",
+                issue_date as "issue_date?",
+                expiry_date,
+                issuer_wallet as "issuer_wallet?",
+                status,
+                blockchain_tx_signature,
                 metadata,
-                created_at, 
+                created_at,
                 updated_at
             "#,
             certificate_uuid,
@@ -871,7 +859,7 @@ impl ErcService {
         let stats = sqlx::query_as!(
             CertificateStatsRow,
             r#"
-            SELECT 
+            SELECT
                 COUNT(*) as "total_count!",
                 COALESCE(SUM(CASE WHEN status = 'Active' THEN kwh_amount ELSE 0 END), 0) as "active_kwh!",
                 COALESCE(SUM(CASE WHEN status = 'Retired' THEN kwh_amount ELSE 0 END), 0) as "retired_kwh!",
