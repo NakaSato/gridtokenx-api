@@ -8,9 +8,9 @@ use std::str::FromStr;
 use tracing::{error, info};
 use utoipa::ToSchema;
 
+use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// Token balance response
 #[derive(Debug, Serialize, ToSchema)]
@@ -70,6 +70,7 @@ pub async fn get_token_balance(
     let sol_balance = state
         .blockchain_service
         .get_balance_sol(&wallet_pubkey)
+        .await
         .map_err(|e| {
             error!("Failed to fetch SOL balance: {}", e);
             ApiError::Internal(format!("Failed to fetch balance: {}", e))
@@ -97,10 +98,9 @@ pub async fn get_token_balance(
             spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(
                 wallet_bytes,
             );
-        let mint_spl =
-            spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(
-                mint_bytes,
-            );
+        let mint_spl = spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(
+            mint_bytes,
+        );
 
         let ata_spl =
             spl_associated_token_account::get_associated_token_address(&wallet_spl, &mint_spl);
@@ -118,12 +118,14 @@ pub async fn get_token_balance(
     let (token_balance_raw, decimals) = match state
         .blockchain_service
         .account_exists(&token_account)
+        .await
     {
         Ok(true) => {
             // Account exists, fetch the token balance
             let account_data = state
                 .blockchain_service
                 .get_account_data(&token_account)
+                .await
                 .map_err(|e| {
                     error!("Failed to fetch token account data: {}", e);
                     ApiError::Internal("Failed to fetch token account".to_string())
@@ -223,6 +225,7 @@ pub async fn get_token_info(
     let account_exists = state
         .blockchain_service
         .account_exists(&token_info_pda)
+        .await
         .map_err(|e| {
             error!("Failed to check if token info account exists: {}", e);
             ApiError::Internal(format!("Blockchain error: {}", e))
@@ -238,6 +241,7 @@ pub async fn get_token_info(
     let account_data = state
         .blockchain_service
         .get_account_data(&token_info_pda)
+        .await
         .map_err(|e| {
             error!("Failed to fetch token info account data: {}", e);
             ApiError::Internal(format!("Failed to fetch account: {}", e))
@@ -404,7 +408,7 @@ pub async fn mint_tokens(
 
 /// Mint tokens from a meter reading
 /// POST /api/tokens/mint-from-reading
-/// 
+///
 /// Allows users to mint energy tokens based on their submitted meter readings
 #[utoipa::path(
     post,
@@ -495,11 +499,10 @@ pub async fn mint_from_reading(
         })?;
 
     // Get token mint address from environment
-    let token_mint_str =
-        std::env::var("GRID_TOKEN_MINT").map_err(|_| {
-            error!("GRID_TOKEN_MINT environment variable not set");
-            ApiError::Internal("Token mint address not configured".to_string())
-        })?;
+    let token_mint_str = std::env::var("GRID_TOKEN_MINT").map_err(|_| {
+        error!("GRID_TOKEN_MINT environment variable not set");
+        ApiError::Internal("Token mint address not configured".to_string())
+    })?;
 
     let token_mint = Pubkey::from_str(&token_mint_str).map_err(|e| {
         error!("Invalid GRID_TOKEN_MINT address: {}", e);
@@ -513,20 +516,31 @@ pub async fn mint_from_reading(
         let mint_bytes = token_mint.to_bytes();
 
         // Convert to spl_associated_token_account pubkey types
-        let wallet_spl = spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(wallet_bytes);
-        let mint_spl = spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(mint_bytes);
+        let wallet_spl =
+            spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(
+                wallet_bytes,
+            );
+        let mint_spl = spl_associated_token_account::solana_program::pubkey::Pubkey::new_from_array(
+            mint_bytes,
+        );
 
-        let ata_spl = spl_associated_token_account::get_associated_token_address(&wallet_spl, &mint_spl);
+        let ata_spl =
+            spl_associated_token_account::get_associated_token_address(&wallet_spl, &mint_spl);
 
         // Convert back to solana_sdk pubkey
         SdkPubkey::new_from_array(ata_spl.to_bytes())
     };
 
     // Convert kWh amount to f64 for minting (1 kWh = 1 token)
-    let kwh_amount = reading.kwh_amount.unwrap_or_default().to_string().parse::<f64>().map_err(|e| {
-        error!("Failed to parse kWh amount: {}", e);
-        ApiError::Internal("Invalid kWh amount".to_string())
-    })?;
+    let kwh_amount = reading
+        .kwh_amount
+        .unwrap_or_default()
+        .to_string()
+        .parse::<f64>()
+        .map_err(|e| {
+            error!("Failed to parse kWh amount: {}", e);
+            ApiError::Internal("Invalid kWh amount".to_string())
+        })?;
 
     info!(
         "Minting {} kWh as tokens for wallet {} (token account: {})",
@@ -536,7 +550,12 @@ pub async fn mint_from_reading(
     // Call blockchain service to mint tokens
     let tx_signature = state
         .blockchain_service
-        .mint_energy_tokens(&authority_keypair, &user_token_account, &token_mint, kwh_amount)
+        .mint_energy_tokens(
+            &authority_keypair,
+            &user_token_account,
+            &token_mint,
+            kwh_amount,
+        )
         .await
         .map_err(|e| {
             error!("Blockchain minting failed: {}", e);

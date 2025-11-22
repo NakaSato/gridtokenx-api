@@ -1,15 +1,12 @@
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
 use utoipa::ToSchema;
 
+use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// Governance status response
 #[derive(Debug, Serialize, ToSchema)]
@@ -80,6 +77,7 @@ pub async fn get_governance_status(
     let account_exists = state
         .blockchain_service
         .account_exists(&poa_config_pda)
+        .await
         .map_err(|e| {
             error!("Failed to check if governance account exists: {}", e);
             ApiError::Internal(format!("Blockchain error: {}", e))
@@ -95,6 +93,7 @@ pub async fn get_governance_status(
     let account_data = state
         .blockchain_service
         .get_account_data(&poa_config_pda)
+        .await
         .map_err(|e| {
             error!("Failed to fetch governance account data: {}", e);
             ApiError::Internal(format!("Failed to fetch account: {}", e))
@@ -240,9 +239,7 @@ fn parse_governance_status(data: &[u8]) -> Result<GovernanceStatusResponse> {
     // ... and more fields
 
     if data.len() < 32 {
-        return Err(ApiError::Internal(
-            "Governance data too short".to_string(),
-        ));
+        return Err(ApiError::Internal("Governance data too short".to_string()));
     }
 
     // Parse authority (first 32 bytes)
@@ -260,9 +257,8 @@ fn parse_governance_status(data: &[u8]) -> Result<GovernanceStatusResponse> {
         ));
     }
 
-    let authority_name =
-        String::from_utf8(data[authority_name_start..authority_name_end].to_vec())
-            .map_err(|e| ApiError::Internal(format!("Invalid UTF-8 in authority_name: {}", e)))?;
+    let authority_name = String::from_utf8(data[authority_name_start..authority_name_end].to_vec())
+        .map_err(|e| ApiError::Internal(format!("Invalid UTF-8 in authority_name: {}", e)))?;
 
     // Calculate offset after authority_name (with padding to 8-byte boundary)
     let after_name = authority_name_end;
@@ -282,27 +278,27 @@ fn parse_governance_status(data: &[u8]) -> Result<GovernanceStatusResponse> {
         data[contact_info_offset + 2],
         data[contact_info_offset + 3],
     ]) as usize;
-    
+
     let contact_info_start = contact_info_offset + 4;
     let _contact_info_end = contact_info_start + contact_info_len;
 
     // Skip contact_info parsing for now and use approximations for boolean fields
     // In a production system, you'd want to parse the entire struct carefully
-    
+
     // For now, return a simplified response with safe defaults
     // TODO: Implement full struct parsing with proper byte alignment
     let emergency_paused = false; // Would be parsed from data
     let maintenance_mode = false; // Would be parsed from data
     let erc_validation_enabled = true; // Would be parsed from data
-    
+
     Ok(GovernanceStatusResponse {
         authority: authority.to_string(),
         authority_name,
         emergency_paused,
         maintenance_mode,
         erc_validation_enabled,
-        total_ercs_issued: 0, // Would be parsed from data
-        total_ercs_validated: 0, // Would be parsed from data
+        total_ercs_issued: 0,      // Would be parsed from data
+        total_ercs_validated: 0,   // Would be parsed from data
         total_energy_certified: 0, // Would be parsed from data
         is_operational: !emergency_paused && !maintenance_mode,
         created_at: chrono::Utc::now().timestamp(), // Would be parsed from data

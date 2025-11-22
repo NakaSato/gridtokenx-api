@@ -33,6 +33,7 @@ pub use market_clearing_service::MarketClearingService;
 pub use meter_service::MeterService;
 pub use meter_verification_service::MeterVerificationService;
 pub use order_matching_engine::OrderMatchingEngine;
+pub use settlement_service::SettlementService;
 pub use token_service::TokenService;
 pub use wallet_service::WalletService;
 pub use websocket_service::WebSocketService;

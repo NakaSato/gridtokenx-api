@@ -1,43 +1,45 @@
 use axum::{
-    extract::{Query, State}, // Path not used
+    extract::{Query, State},
     response::Json,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use utoipa::{ToSchema, IntoParams};
+use tracing::{error, info};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
-use tracing::{error, info};
 
+use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::database::schema::types::{OrderSide, OrderStatus, OrderType};
 use crate::error::{ApiError, Result};
-use crate::models::trading::{CreateOrderRequest, MarketData, OrderBook, TradingOrder, TradingOrderDb};
+use crate::models::trading::{
+    CreateOrderRequest, MarketData, OrderBook, TradingOrder, TradingOrderDb,
+};
 use crate::services::AuditEvent;
 use crate::utils::PaginationParams;
-use crate::AppState;
 
 /// Query parameters for trading orders
 #[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
 pub struct OrderQuery {
     /// Filter by order status
     pub status: Option<OrderStatus>,
-    
+
     /// Filter by order side (buy/sell)
     pub side: Option<OrderSide>,
-    
+
     /// Page number (1-indexed)
     #[serde(default = "default_page")]
     pub page: u32,
-    
+
     /// Number of items per page (max 100)
     #[serde(default = "default_page_size")]
     pub page_size: u32,
-    
+
     /// Sort field: "created_at", "price_per_kwh", "energy_amount"
     pub sort_by: Option<String>,
-    
+
     /// Sort direction: "asc" or "desc"
     #[serde(default = "default_sort_order")]
     pub sort_order: crate::utils::SortOrder,
@@ -60,42 +62,44 @@ impl OrderQuery {
         if self.page < 1 {
             self.page = 1;
         }
-        
+
         if self.page_size < 1 {
             self.page_size = 20;
         } else if self.page_size > 100 {
             self.page_size = 100;
         }
-        
+
         // Validate sort field
         if let Some(sort_by) = &self.sort_by {
             match sort_by.as_str() {
                 "created_at" | "price_per_kwh" | "energy_amount" | "filled_at" => {}
-                _ => return Err(ApiError::validation_error(
-                    "Invalid sort_by field. Allowed values: created_at, price_per_kwh, energy_amount, filled_at",
-                    Some("sort_by"),
-                )),
+                _ => {
+                    return Err(ApiError::validation_error(
+                        "Invalid sort_by field. Allowed values: created_at, price_per_kwh, energy_amount, filled_at",
+                        Some("sort_by"),
+                    ));
+                }
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn limit(&self) -> i64 {
         self.page_size as i64
     }
-    
+
     pub fn offset(&self) -> i64 {
         ((self.page - 1) * self.page_size) as i64
     }
-    
+
     pub fn sort_direction(&self) -> &str {
         match self.sort_order {
             crate::utils::SortOrder::Asc => "ASC",
             crate::utils::SortOrder::Desc => "DESC",
         }
     }
-    
+
     pub fn get_sort_field(&self) -> &str {
         self.sort_by.as_deref().unwrap_or("created_at")
     }
@@ -141,17 +145,23 @@ pub async fn create_order(
 
     // Validate order parameters (allow negative for sell orders)
     if payload.energy_amount == rust_decimal::Decimal::ZERO {
-        return Err(ApiError::BadRequest("Energy amount cannot be zero".to_string()));
+        return Err(ApiError::BadRequest(
+            "Energy amount cannot be zero".to_string(),
+        ));
     }
 
     if payload.price_per_kwh <= rust_decimal::Decimal::ZERO {
-        return Err(ApiError::BadRequest("Price per kWh must be positive".to_string()));
+        return Err(ApiError::BadRequest(
+            "Price per kWh must be positive".to_string(),
+        ));
     }
 
     // Create trading order
     let order_id = Uuid::new_v4();
     let now = Utc::now();
-    let expires_at = payload.expiry_time.unwrap_or_else(|| now + chrono::Duration::days(1));
+    let expires_at = payload
+        .expiry_time
+        .unwrap_or_else(|| now + chrono::Duration::days(1));
 
     // Determine order side based on user role/permissions (simplified logic)
     let order_side = if payload.energy_amount > rust_decimal::Decimal::ZERO {
@@ -161,7 +171,8 @@ pub async fn create_order(
     };
 
     // Get or create current epoch for Market Clearing Engine
-    let epoch = _state.market_clearing_service
+    let epoch = _state
+        .market_clearing_service
         .get_or_create_epoch(now)
         .await
         .map_err(|e| {
@@ -179,15 +190,26 @@ pub async fn create_order(
     // Convert Decimal to BigDecimal for database storage
     let energy_amount_bd = {
         use std::str::FromStr;
-        sqlx::types::BigDecimal::from_str(&payload.energy_amount.to_string()).unwrap_or_default()
+        sqlx::types::BigDecimal::from_str(&payload.energy_amount.to_string()).map_err(|e| {
+            ApiError::Internal(format!(
+                "Failed to convert energy_amount to BigDecimal: {}",
+                e
+            ))
+        })?
     };
     let price_per_kwh_bd = {
         use std::str::FromStr;
-        sqlx::types::BigDecimal::from_str(&payload.price_per_kwh.to_string()).unwrap_or_default()
+        sqlx::types::BigDecimal::from_str(&payload.price_per_kwh.to_string()).map_err(|e| {
+            ApiError::Internal(format!(
+                "Failed to convert price_per_kwh to BigDecimal: {}",
+                e
+            ))
+        })?
     };
     let filled_amount_bd = {
         use std::str::FromStr;
-        sqlx::types::BigDecimal::from_str("0").unwrap_or_default()
+        sqlx::types::BigDecimal::from_str("0")
+            .map_err(|e| ApiError::Internal(format!("Failed to create zero BigDecimal: {}", e)))?
     };
 
     sqlx::query!(
@@ -259,7 +281,7 @@ pub async fn get_user_orders(
 
     // Validate parameters
     params.validate_params()?;
-    
+
     let limit = params.limit();
     let offset = params.offset();
     let sort_field = params.get_sort_field();
@@ -291,14 +313,11 @@ pub async fn get_user_orders(
     if let Some(side) = &params.side {
         count_sqlx = count_sqlx.bind(side);
     }
-    
-    let total = count_sqlx
-        .fetch_one(&_state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to count trading orders: {}", e);
-            ApiError::Database(e)
-        })?;
+
+    let total = count_sqlx.fetch_one(&_state.db).await.map_err(|e| {
+        tracing::error!("Failed to count trading orders: {}", e);
+        ApiError::Database(e)
+    })?;
 
     // Build data query with sorting
     let query = format!(
@@ -320,7 +339,7 @@ pub async fn get_user_orders(
     if let Some(side) = &params.side {
         sqlx_query = sqlx_query.bind(side);
     }
-    
+
     sqlx_query = sqlx_query.bind(limit);
     sqlx_query = sqlx_query.bind(offset);
 
@@ -374,7 +393,8 @@ pub async fn get_market_data(
     // Get current epoch information (for now, use simple hour-based epochs)
     let now = Utc::now();
     let current_epoch = (now.timestamp() / 3600) as u64; // 1-hour epochs
-    let epoch_start = DateTime::from_timestamp(current_epoch as i64 * 3600, 0).unwrap();
+    let epoch_start = DateTime::from_timestamp(current_epoch as i64 * 3600, 0)
+        .ok_or_else(|| ApiError::Internal("Failed to create epoch start timestamp".to_string()))?;
     let epoch_end = epoch_start + chrono::Duration::hours(1);
 
     // For now, return basic market data structure
@@ -468,8 +488,8 @@ pub async fn get_blockchain_market_data(
     info!("Fetching blockchain trading market data");
 
     // Get the Trading program ID
-    let trading_program_id = crate::services::BlockchainService::trading_program_id()
-        .map_err(|e| {
+    let trading_program_id =
+        crate::services::BlockchainService::trading_program_id().map_err(|e| {
             error!("Failed to parse trading program ID: {}", e);
             ApiError::Internal(format!("Invalid program ID: {}", e))
         })?;
@@ -484,6 +504,7 @@ pub async fn get_blockchain_market_data(
     let account_exists = _state
         .blockchain_service
         .account_exists(&market_pda)
+        .await
         .map_err(|e| {
             error!("Failed to check if market account exists: {}", e);
             ApiError::Internal(format!("Blockchain error: {}", e))
@@ -499,6 +520,7 @@ pub async fn get_blockchain_market_data(
     let account_data = _state
         .blockchain_service
         .get_account_data(&market_pda)
+        .await
         .map_err(|e| {
             error!("Failed to fetch market account data: {}", e);
             ApiError::Internal(format!("Failed to fetch account: {}", e))
@@ -643,6 +665,48 @@ pub async fn create_blockchain_order(
         payload.order_type, payload.energy_amount, payload.price_per_kwh
     );
 
+    // Create order in DB
+    let order_id = Uuid::new_v4();
+    let now = Utc::now();
+    let epoch = _state
+        .market_clearing_service
+        .get_or_create_epoch(now)
+        .await
+        .map_err(|e| ApiError::Internal(format!("Failed to get epoch: {}", e)))?;
+
+    let side = match payload.order_type.as_str() {
+        "buy" => OrderSide::Buy,
+        "sell" => OrderSide::Sell,
+        _ => return Err(ApiError::BadRequest("Invalid order type".into())),
+    };
+
+    // Convert u64 to BigDecimal
+    let energy_amount = sqlx::types::BigDecimal::from(payload.energy_amount);
+    let price = sqlx::types::BigDecimal::from(payload.price_per_kwh);
+
+    sqlx::query!(
+        r#"
+        INSERT INTO trading_orders (
+            id, user_id, order_type, side, energy_amount, price_per_kwh,
+            filled_amount, status, expires_at, created_at, epoch_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        "#,
+        order_id,
+        user.0.sub,
+        OrderType::Limit as OrderType,
+        side as OrderSide,
+        energy_amount,
+        price,
+        sqlx::types::BigDecimal::from(0),
+        OrderStatus::Pending as OrderStatus,
+        now + chrono::Duration::days(1),
+        now,
+        epoch.id
+    )
+    .execute(&_state.db)
+    .await
+    .map_err(|e| ApiError::Database(e))?;
+
     Ok(Json(CreateBlockchainOrderResponse {
         success: true,
         message: format!(
@@ -707,11 +771,21 @@ pub async fn match_blockchain_orders(
 
     info!("Order matching initiated by admin {}", user.0.sub);
 
+    // Trigger matching cycle
+    let matched_count = _state
+        .market_clearing_engine
+        .execute_matching_cycle()
+        .await
+        .map_err(|e| {
+            error!("Failed to execute matching cycle: {}", e);
+            ApiError::Internal(format!("Matching failed: {}", e))
+        })?;
+
     Ok(Json(MatchOrdersResponse {
         success: true,
         message: "Order matching initiated successfully".to_string(),
-        matched_orders: 0,
-        total_volume: 0,
+        matched_orders: matched_count as u32,
+        total_volume: 0, // TODO: Calculate volume
     }))
 }
 

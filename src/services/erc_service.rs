@@ -1,16 +1,16 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use solana_sdk::{
+    instruction::{AccountMeta, Instruction},
+    pubkey::Pubkey,
+    signature::{Keypair, Signer},
+};
 use sqlx::PgPool;
 use tracing::{debug, info};
 use uuid::Uuid;
-use bigdecimal::BigDecimal;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-    instruction::{Instruction, AccountMeta},
-};
-use sha2::{Sha256, Digest};
 
 /// Energy Renewable Certificate
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -34,6 +34,7 @@ pub struct ErcCertificate {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IssueErcRequest {
     pub wallet_address: String,
+    pub meter_id: Option<String>,
     pub kwh_amount: BigDecimal,
     pub expiry_date: Option<DateTime<Utc>>,
     pub metadata: Option<serde_json::Value>,
@@ -55,6 +56,7 @@ pub struct CertificateTransfer {
 #[derive(Clone)]
 pub struct ErcService {
     db_pool: PgPool,
+    blockchain_service: crate::services::BlockchainService,
 }
 
 /// ERC Certificate metadata for on-chain storage
@@ -90,8 +92,11 @@ pub struct ErcFile {
 
 impl ErcService {
     /// Create a new ERC service
-    pub fn new(db_pool: PgPool) -> Self {
-        Self { db_pool }
+    pub fn new(db_pool: PgPool, blockchain_service: crate::services::BlockchainService) -> Self {
+        Self {
+            db_pool,
+            blockchain_service,
+        }
     }
 
     /// Issue ERC certificate on-chain (calls governance program)
@@ -99,6 +104,7 @@ impl ErcService {
         &self,
         certificate_id: &str,
         user_wallet: &Pubkey,
+        meter_id: &str, // Added meter_id
         energy_amount: f64,
         renewable_source: &str,
         validation_data: &str,
@@ -117,20 +123,25 @@ impl ErcService {
         );
 
         // 2. Get PoA config PDA
-        let (_poa_config_pda, _) = Pubkey::find_program_address(
-            &[b"poa_config"],
-            governance_program_id,
+        let (_poa_config_pda, _) =
+            Pubkey::find_program_address(&[b"poa_config"], governance_program_id);
+
+        // 3. Derive Meter Account PDA
+        let registry_program_id = crate::services::blockchain_service::BlockchainService::registry_program_id()?;
+        let (meter_account_pda, _) = Pubkey::find_program_address(
+            &[b"meter", meter_id.as_bytes()],
+            &registry_program_id,
         );
 
-        // 3. Build Anchor instruction data
+        // 4. Build Anchor instruction data
         let mut instruction_data = Vec::new();
-        
+
         // Discriminator for "issue_erc" instruction (first 8 bytes of SHA256 hash)
         let mut hasher = Sha256::new();
         hasher.update(b"global:issue_erc");
         let hash = hasher.finalize();
         instruction_data.extend_from_slice(&hash[0..8]);
-        
+
         // Serialize arguments using simple approach for now
         // In production, use proper Borsh serialization
         instruction_data.extend_from_slice(&(certificate_id.len() as u32).to_le_bytes());
@@ -140,33 +151,35 @@ impl ErcService {
         instruction_data.extend_from_slice(renewable_source.as_bytes());
         instruction_data.extend_from_slice(&(validation_data.len() as u32).to_le_bytes());
         instruction_data.extend_from_slice(validation_data.as_bytes());
-        
-        // 4. Build accounts for instruction
+
+        // 5. Build accounts for instruction
         let accounts = vec![
             AccountMeta::new(_poa_config_pda, false),
             AccountMeta::new(_certificate_pda, false),
-            AccountMeta::new_readonly(*user_wallet, false),
+            AccountMeta::new(meter_account_pda, false), // Added meter_account
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
+            AccountMeta::new_readonly(
+                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                false,
+            ),
         ];
-        
-        let _issue_erc_ix = Instruction::new_with_bytes(
-            *governance_program_id,
-            &instruction_data,
-            accounts,
+
+        let issue_erc_ix =
+            Instruction::new_with_bytes(*governance_program_id, &instruction_data, accounts);
+
+        // 6. Send transaction to blockchain
+        let signature = self
+            .blockchain_service
+            .build_and_send_transaction(vec![issue_erc_ix], &[authority])
+            .await
+            .map_err(|e| anyhow!("Failed to issue ERC certificate on-chain: {}", e))?;
+
+        info!(
+            "✅ ERC certificate {} issued on-chain: {}",
+            certificate_id, signature
         );
 
-        // 5. For now, return a mock signature since we need the blockchain service
-        // In the actual implementation, this would call:
-        // blockchain_service.build_and_send_transaction(vec![issue_erc_ix], &[authority]).await
-        let mock_signature = solana_sdk::signature::Signature::default();
-        
-        info!(
-            "ERC certificate {} minted on-chain (mock): {}",
-            certificate_id, mock_signature
-        );
-        
-        Ok(mock_signature)
+        Ok(signature)
     }
 
     /// Create ERC metadata for on-chain storage
@@ -190,7 +203,9 @@ impl ErcService {
             attributes: vec![
                 ErcAttribute {
                     trait_type: "Energy Amount".to_string(),
-                    value: serde_json::Value::Number(serde_json::Number::from_f64(energy_amount).unwrap()),
+                    value: serde_json::Value::Number(
+                        serde_json::Number::from_f64(energy_amount).unwrap(),
+                    ),
                     unit: Some("kWh".to_string()),
                 },
                 ErcAttribute {
@@ -211,7 +226,9 @@ impl ErcService {
                 ErcAttribute {
                     trait_type: "Expiry Date".to_string(),
                     value: serde_json::Value::String(
-                        expiry_date.map(|d| d.to_rfc3339()).unwrap_or_else(|| "Never".to_string())
+                        expiry_date
+                            .map(|d| d.to_rfc3339())
+                            .unwrap_or_else(|| "Never".to_string()),
                     ),
                     unit: None,
                 },
@@ -232,12 +249,10 @@ impl ErcService {
                 },
             ],
             properties: ErcProperties {
-                files: vec![
-                    ErcFile {
-                        uri: "https://arweave.net/certificate-pdf".to_string(), // Placeholder
-                        file_type: "application/pdf".to_string(),
-                    }
-                ],
+                files: vec![ErcFile {
+                    uri: "https://arweave.net/certificate-pdf".to_string(), // Placeholder
+                    file_type: "application/pdf".to_string(),
+                }],
                 category: "certificate".to_string(),
             },
         };
@@ -334,41 +349,45 @@ impl ErcService {
 
         // 2. Build Anchor instruction data for transfer
         let mut instruction_data = Vec::new();
-        
+
         // Discriminator for "transfer_erc" instruction
         let mut hasher = Sha256::new();
         hasher.update(b"global:transfer_erc");
         let hash = hasher.finalize();
         instruction_data.extend_from_slice(&hash[0..8]);
-        
+
         // Serialize arguments
         instruction_data.extend_from_slice(&(certificate_id.len() as u32).to_le_bytes());
         instruction_data.extend_from_slice(certificate_id.as_bytes());
-        
+
         // 3. Build accounts for instruction
         let accounts = vec![
             AccountMeta::new(_certificate_pda, false),
             AccountMeta::new_readonly(*from_wallet, false),
             AccountMeta::new(*to_wallet, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
+            AccountMeta::new_readonly(
+                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                false,
+            ),
         ];
-        
-        let _transfer_erc_ix = Instruction::new_with_bytes(
-            *governance_program_id,
-            &instruction_data,
-            accounts,
+
+        let transfer_erc_ix =
+            Instruction::new_with_bytes(*governance_program_id, &instruction_data, accounts);
+
+        // 4. Send transaction to blockchain
+        let signature = self
+            .blockchain_service
+            .build_and_send_transaction(vec![transfer_erc_ix], &[authority])
+            .await
+            .map_err(|e| anyhow!("Failed to transfer ERC certificate on-chain: {}", e))?;
+
+        info!(
+            "✅ Certificate {} transferred on-chain: {}",
+            certificate_id, signature
         );
 
-        // 4. For now, return a mock signature
-        let mock_signature = solana_sdk::signature::Signature::default();
-        
-        info!(
-            "Certificate {} transferred on-chain (mock): {}",
-            certificate_id, mock_signature
-        );
-        
-        Ok(mock_signature)
+        Ok(signature)
     }
 
     /// Retire certificate on-chain
@@ -388,39 +407,43 @@ impl ErcService {
 
         // 2. Build Anchor instruction data for retirement
         let mut instruction_data = Vec::new();
-        
+
         // Discriminator for "retire_erc" instruction
         let mut hasher = Sha256::new();
         hasher.update(b"global:retire_erc");
         let hash = hasher.finalize();
         instruction_data.extend_from_slice(&hash[0..8]);
-        
+
         // Serialize arguments
         instruction_data.extend_from_slice(&(certificate_id.len() as u32).to_le_bytes());
         instruction_data.extend_from_slice(certificate_id.as_bytes());
-        
+
         // 3. Build accounts for instruction
         let accounts = vec![
             AccountMeta::new(_certificate_pda, false),
             AccountMeta::new_readonly(authority.pubkey(), true),
-            AccountMeta::new_readonly(solana_sdk::pubkey!("11111111111111111111111111111112"), false),
+            AccountMeta::new_readonly(
+                solana_sdk::pubkey!("11111111111111111111111111111112"),
+                false,
+            ),
         ];
-        
-        let _retire_erc_ix = Instruction::new_with_bytes(
-            *governance_program_id,
-            &instruction_data,
-            accounts,
+
+        let retire_erc_ix =
+            Instruction::new_with_bytes(*governance_program_id, &instruction_data, accounts);
+
+        // 4. Send transaction to blockchain
+        let signature = self
+            .blockchain_service
+            .build_and_send_transaction(vec![retire_erc_ix], &[authority])
+            .await
+            .map_err(|e| anyhow!("Failed to retire ERC certificate on-chain: {}", e))?;
+
+        info!(
+            "✅ Certificate {} retired on-chain: {}",
+            certificate_id, signature
         );
 
-        // 4. For now, return a mock signature
-        let mock_signature = solana_sdk::signature::Signature::default();
-        
-        info!(
-            "Certificate {} retired on-chain (mock): {}",
-            certificate_id, mock_signature
-        );
-        
-        Ok(mock_signature)
+        Ok(signature)
     }
 
     /// Issue a new ERC certificate
@@ -496,7 +519,7 @@ impl ErcService {
     /// Generate a unique certificate ID
     async fn generate_certificate_id(&self) -> Result<String> {
         let year = Utc::now().format("%Y");
-        
+
         // Get count of certificates issued this year
         let count = sqlx::query!(
             r#"
@@ -581,7 +604,11 @@ impl ErcService {
         .await
         .map_err(|e| anyhow!("Failed to fetch certificates: {}", e))?;
 
-        debug!("Retrieved {} certificates for wallet {}", certificates.len(), wallet_address);
+        debug!(
+            "Retrieved {} certificates for wallet {}",
+            certificates.len(),
+            wallet_address
+        );
 
         Ok(certificates)
     }
@@ -649,7 +676,11 @@ impl ErcService {
                 .map_err(|e| anyhow!("Failed to fetch user certificates: {}", e))?
         };
 
-        debug!("Retrieved {} certificates for user {}", certificates.len(), user_id);
+        debug!(
+            "Retrieved {} certificates for user {}",
+            certificates.len(),
+            user_id
+        );
 
         Ok(certificates)
     }
@@ -662,7 +693,7 @@ impl ErcService {
     ) -> Result<i64> {
         let count = if let Some(status) = status_filter {
             sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM erc_certificates WHERE user_id = $1 AND status = $2"
+                "SELECT COUNT(*) FROM erc_certificates WHERE user_id = $1 AND status = $2",
             )
             .bind(user_id)
             .bind(status)
@@ -670,13 +701,11 @@ impl ErcService {
             .await
             .map_err(|e| anyhow!("Failed to count user certificates: {}", e))?
         } else {
-            sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM erc_certificates WHERE user_id = $1"
-            )
-            .bind(user_id)
-            .fetch_one(&self.db_pool)
-            .await
-            .map_err(|e| anyhow!("Failed to count user certificates: {}", e))?
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM erc_certificates WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&self.db_pool)
+                .await
+                .map_err(|e| anyhow!("Failed to count user certificates: {}", e))?
         };
 
         Ok(count)
@@ -732,7 +761,10 @@ impl ErcService {
         tx_signature: &str,
     ) -> Result<(ErcCertificate, CertificateTransfer)> {
         // Start transaction
-        let mut tx = self.db_pool.begin().await
+        let mut tx = self
+            .db_pool
+            .begin()
+            .await
             .map_err(|e| anyhow!("Failed to start transaction: {}", e))?;
 
         // Update certificate wallet and status
@@ -788,7 +820,8 @@ impl ErcService {
         .map_err(|e| anyhow!("Failed to record transfer: {}", e))?;
 
         // Commit transaction
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| anyhow!("Failed to commit transfer: {}", e))?;
 
         info!(

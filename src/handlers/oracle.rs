@@ -1,15 +1,12 @@
-use axum::{
-    extract::State,
-    response::Json,
-};
+use axum::{extract::State, response::Json};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{error, info};
 use utoipa::ToSchema;
 
+use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// Request to submit a price update (for future price oracle functionality)
 #[derive(Debug, Deserialize, ToSchema)]
@@ -79,9 +76,7 @@ pub async fn submit_price(
 
     // Validate price is positive
     if payload.price_per_kwh <= 0.0 {
-        return Err(ApiError::BadRequest(
-            "Price must be positive".to_string(),
-        ));
+        return Err(ApiError::BadRequest("Price must be positive".to_string()));
     }
 
     // Validate energy type
@@ -112,8 +107,10 @@ pub async fn submit_price(
         ));
     }
 
-    let timestamp = payload.timestamp.unwrap_or_else(|| chrono::Utc::now().timestamp());
-    
+    let timestamp = payload
+        .timestamp
+        .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
     info!(
         "Price submitted: {} = ${} per kWh at timestamp {}",
         payload.energy_type, payload.price_per_kwh, timestamp
@@ -198,8 +195,8 @@ pub async fn get_oracle_data(
     info!("Fetching oracle data from blockchain");
 
     // Get the Oracle program ID
-    let oracle_program_id = crate::services::BlockchainService::oracle_program_id()
-        .map_err(|e| {
+    let oracle_program_id =
+        crate::services::BlockchainService::oracle_program_id().map_err(|e| {
             error!("Failed to parse oracle program ID: {}", e);
             ApiError::Internal(format!("Invalid program ID: {}", e))
         })?;
@@ -214,6 +211,7 @@ pub async fn get_oracle_data(
     let account_exists = state
         .blockchain_service
         .account_exists(&oracle_pda)
+        .await
         .map_err(|e| {
             error!("Failed to check if oracle account exists: {}", e);
             ApiError::Internal(format!("Blockchain error: {}", e))
@@ -229,6 +227,7 @@ pub async fn get_oracle_data(
     let account_data = state
         .blockchain_service
         .get_account_data(&oracle_pda)
+        .await
         .map_err(|e| {
             error!("Failed to fetch oracle account data: {}", e);
             ApiError::Internal(format!("Failed to fetch account: {}", e))
@@ -260,9 +259,7 @@ fn parse_oracle_data(data: &[u8]) -> Result<OracleDataResponse> {
     // - created_at: i64 (8 bytes)
 
     if data.len() < 97 {
-        return Err(ApiError::Internal(
-            "Oracle data too short".to_string(),
-        ));
+        return Err(ApiError::Internal("Oracle data too short".to_string()));
     }
 
     // Parse authority (first 32 bytes)

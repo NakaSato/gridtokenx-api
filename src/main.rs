@@ -49,6 +49,7 @@ pub struct AppState {
     pub order_matching_engine: services::OrderMatchingEngine,
     pub market_clearing_engine: services::MarketClearingEngine,
     pub market_clearing_service: services::MarketClearingService,
+    pub settlement_service: services::SettlementService,
     pub websocket_service: services::WebSocketService,
     pub health_checker: services::HealthChecker,
     pub audit_logger: services::AuditLogger,
@@ -73,10 +74,12 @@ async fn main() -> Result<()> {
 
     // Initialize Prometheus metrics exporter
     let prometheus_builder = metrics_exporter_prometheus::PrometheusBuilder::new();
-    prometheus_builder
-        .install()
-        .expect("Failed to install Prometheus exporter");
-    info!("Prometheus metrics exporter initialized");
+    if let Err(e) = prometheus_builder.install() {
+        error!("Failed to install Prometheus exporter: {}", e);
+        warn!("Continuing without metrics export");
+    } else {
+        info!("Prometheus metrics exporter initialized");
+    }
 
     // Load configuration
     let config = Config::from_env()?;
@@ -200,8 +203,12 @@ async fn main() -> Result<()> {
     info!("Meter verification service initialized");
 
     // Initialize ERC service (Phase 4)
-    let erc_service = services::ErcService::new(db_pool.clone());
+    let erc_service = services::ErcService::new(db_pool.clone(), blockchain_service.clone());
     info!("ERC service initialized");
+
+    // Initialize settlement service
+    let settlement_service = services::SettlementService::new(db_pool.clone(), blockchain_service.clone());
+    info!("✅ Settlement service initialized");
 
     // Initialize market clearing service (Phase 5) for epoch-based order management
     let market_clearing_service = services::MarketClearingService::new(db_pool.clone());
@@ -219,7 +226,8 @@ async fn main() -> Result<()> {
     // Initialize market clearing engine for P2P energy trading
     let market_clearing_engine =
         services::MarketClearingEngine::new(db_pool.clone(), redis_client.clone())
-            .with_websocket(websocket_service.clone());
+            .with_websocket(websocket_service.clone())
+            .with_settlement_service(settlement_service.clone());
     info!("✅ Market clearing engine initialized with WebSocket support");
 
     // Load active orders into order book
@@ -231,6 +239,22 @@ async fn main() -> Result<()> {
     // Start the background matching service
     order_matching_engine.start().await;
     info!("✅ Automated order matching engine started");
+
+    // Start settlement processing loop
+    let settlement_service_clone = settlement_service.clone();
+    tokio::spawn(async move {
+        info!("🚀 Settlement processing loop started");
+        loop {
+            if let Err(e) = settlement_service_clone.process_pending_settlements().await {
+                error!("Error in settlement loop: {}", e);
+            }
+            // Retry failed settlements
+            if let Err(e) = settlement_service_clone.retry_failed_settlements(3).await {
+                error!("Error retrying settlements: {}", e);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
 
     // Initialize epoch scheduler with 15-minute intervals
     let epoch_scheduler = std::sync::Arc::new(services::EpochScheduler::new(
@@ -278,6 +302,7 @@ async fn main() -> Result<()> {
         order_matching_engine,
         market_clearing_engine,
         market_clearing_service,
+        settlement_service,
         websocket_service: websocket_service.clone(),
         health_checker,
         audit_logger,
@@ -587,17 +612,21 @@ async fn shutdown_signal() {
     use tokio::signal;
 
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
+        if let Err(e) = signal::ctrl_c().await {
+            error!("Failed to install Ctrl+C handler: {}", e);
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
+        match signal::unix::signal(signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(e) => {
+                error!("Failed to install signal handler: {}", e);
+            }
+        }
     };
 
     #[cfg(not(unix))]

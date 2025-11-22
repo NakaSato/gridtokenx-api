@@ -90,6 +90,18 @@ proptest = "1.4"
 tempfile = "3.8"
 once_cell = "1.19"
 
+[[test]]
+name = "erc_lifecycle_test"
+path = "tests/integration/erc_lifecycle_test.rs"
+
+[[test]]
+name = "token_minting_test"
+path = "tests/integration/token_minting_test.rs"
+
+[[test]]
+name = "settlement_test"
+path = "tests/integration/settlement_test.rs"
+
 [features]
 default = []
 test-utils = []

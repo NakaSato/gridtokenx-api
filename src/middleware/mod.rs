@@ -1,9 +1,8 @@
-// Middleware module - authentication, rate limiting, CORS, logging, security, etc.
+// Middleware module - authentication, CORS, logging, security, etc.
 
 pub mod request_logger;
 pub mod metrics;
 pub mod security_headers;
-pub mod rate_limiter;
 pub mod json_validation;
 
 pub use request_logger::{

@@ -2,7 +2,9 @@
 // Handles energy token transfers on Solana blockchain
 
 use anyhow::Result;
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
+use futures::TryFutureExt;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -14,27 +16,25 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
+use crate::services::market_clearing::TradeMatch;
 
 /// Settlement status
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SettlementStatus {
     Pending,
     Processing,
-    Confirmed,
+    Completed,
     Failed,
-    Cancelled,
 }
 
 impl std::fmt::Display for SettlementStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Pending => write!(f, "Pending"),
-            Self::Processing => write!(f, "Processing"),
-            Self::Confirmed => write!(f, "Confirmed"),
-            Self::Failed => write!(f, "Failed"),
-            Self::Cancelled => write!(f, "Cancelled"),
+            Self::Pending => write!(f, "pending"),
+            Self::Processing => write!(f, "processing"),
+            Self::Completed => write!(f, "completed"),
+            Self::Failed => write!(f, "failed"),
         }
     }
 }
@@ -69,17 +69,17 @@ pub struct SettlementTransaction {
 /// Settlement service configuration
 #[derive(Debug, Clone)]
 pub struct SettlementConfig {
-    pub fee_rate: Decimal,                  // Platform fee (e.g., 0.01 = 1%)
-    pub min_confirmation_blocks: u64,       // Minimum blocks for confirmation
-    pub retry_attempts: u32,                // Number of retry attempts for failed transactions
-    pub retry_delay_secs: u64,              // Delay between retries
+    pub fee_rate: Decimal,            // Platform fee (e.g., 0.01 = 1%)
+    pub min_confirmation_blocks: u64, // Minimum blocks for confirmation
+    pub retry_attempts: u32,          // Number of retry attempts for failed transactions
+    pub retry_delay_secs: u64,        // Delay between retries
 }
 
 impl Default for SettlementConfig {
     fn default() -> Self {
         Self {
             fee_rate: Decimal::from_str("0.01").unwrap(), // 1% platform fee
-            min_confirmation_blocks: 32,                   // ~13 seconds on Solana
+            min_confirmation_blocks: 32,                  // ~13 seconds on Solana
             retry_attempts: 3,
             retry_delay_secs: 5,
         }
@@ -129,7 +129,7 @@ impl SettlementService {
     }
 
     /// Create a single settlement from a trade match
-    async fn create_settlement(&self, trade: &TradeMatch) -> Result<Settlement, ApiError> {
+    pub async fn create_settlement(&self, trade: &TradeMatch) -> Result<Settlement, ApiError> {
         // Calculate settlement amounts
         let total_value = trade.quantity * trade.price;
         let fee_amount = total_value * self.config.fee_rate;
@@ -157,28 +157,32 @@ impl SettlementService {
             INSERT INTO settlements (
                 id, buyer_id, seller_id, energy_amount,
                 price_per_kwh, total_amount, fee_amount, net_amount,
-                status, created_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                status, created_at, epoch_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
         )
         .bind(settlement.id)
         .bind(settlement.buyer_id)
         .bind(settlement.seller_id)
-        .bind(settlement.energy_amount.to_string())
-        .bind(settlement.price.to_string())
-        .bind(settlement.total_value.to_string())
-        .bind(settlement.fee_amount.to_string())
-        .bind(settlement.net_amount.to_string())
+        .bind(BigDecimal::from_str(&settlement.energy_amount.to_string()).unwrap_or_default())
+        .bind(BigDecimal::from_str(&settlement.price.to_string()).unwrap_or_default())
+        .bind(BigDecimal::from_str(&settlement.total_value.to_string()).unwrap_or_default())
+        .bind(BigDecimal::from_str(&settlement.fee_amount.to_string()).unwrap_or_default())
+        .bind(BigDecimal::from_str(&settlement.net_amount.to_string()).unwrap_or_default())
         .bind(settlement.status.to_string())
         .bind(settlement.created_at)
+        .bind(trade.epoch_id)
         .execute(&self.db)
         .await
         .map_err(ApiError::Database)?;
 
         info!(
             "📝 Created settlement {}: {} kWh at ${} (buyer: {}, seller: {})",
-            settlement.id, settlement.energy_amount, settlement.price,
-            settlement.buyer_id, settlement.seller_id
+            settlement.id,
+            settlement.energy_amount,
+            settlement.price,
+            settlement.buyer_id,
+            settlement.seller_id
         );
 
         Ok(settlement)
@@ -203,12 +207,12 @@ impl SettlementService {
                 self.update_settlement_confirmed(
                     settlement_id,
                     &tx_result.signature,
-                    SettlementStatus::Confirmed,
+                    SettlementStatus::Completed,
                 )
                 .await?;
 
                 info!(
-                    "✅ Settlement {} confirmed: tx {}",
+                    "✅ Settlement {} completed: tx {}",
                     settlement_id, tx_result.signature
                 );
 
@@ -242,62 +246,80 @@ impl SettlementService {
         // 1. Get buyer and seller wallets from database
         let buyer_wallet = self.get_user_wallet(&settlement.buyer_id).await?;
         let seller_wallet = self.get_user_wallet(&settlement.seller_id).await?;
-        
+
         // 2. Parse wallet addresses
         let buyer_pubkey = BlockchainService::parse_pubkey(&buyer_wallet)
             .map_err(|e| ApiError::Internal(format!("Invalid buyer wallet: {}", e)))?;
         let seller_pubkey = BlockchainService::parse_pubkey(&seller_wallet)
             .map_err(|e| ApiError::Internal(format!("Invalid seller wallet: {}", e)))?;
-        
+
         // 3. Get mint address from config or environment
         let mint = BlockchainService::parse_pubkey("94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur")
             .map_err(|e| ApiError::Internal(format!("Invalid mint config: {}", e)))?;
-        
+
         // 4. Get authority keypair from wallet service
-        let authority = self.blockchain.get_authority_keypair().await
-            .map_err(|e| ApiError::Internal(format!("Failed to get authority keypair: {}", e)))?;
-        
+        let authority =
+            self.blockchain.get_authority_keypair().await.map_err(|e| {
+                ApiError::Internal(format!("Failed to get authority keypair: {}", e))
+            })?;
+
         // 5. Ensure buyer and seller have token accounts
-        let buyer_token_account = self.blockchain
+        let buyer_token_account = self
+            .blockchain
             .ensure_token_account_exists(&authority, &buyer_pubkey, &mint)
             .await
-            .map_err(|e| ApiError::Internal(format!("Failed to create buyer token account: {}", e)))?;
-        
-        let seller_token_account = self.blockchain
+            .map_err(|e| {
+                ApiError::Internal(format!("Failed to create buyer token account: {}", e))
+            })?;
+
+        let seller_token_account = self
+            .blockchain
             .ensure_token_account_exists(&authority, &seller_pubkey, &mint)
             .await
-            .map_err(|e| ApiError::Internal(format!("Failed to create seller token account: {}", e)))?;
-        
+            .map_err(|e| {
+                ApiError::Internal(format!("Failed to create seller token account: {}", e))
+            })?;
+
         // 6. Calculate amounts (in lamports, 9 decimals)
-        let total_amount_lamports = (settlement.total_value * Decimal::from(1_000_000_000i64)).to_string().parse::<u64>().unwrap_or(0);
-        let fee_amount_lamports = (settlement.fee_amount * Decimal::from(1_000_000_000i64)).to_string().parse::<u64>().unwrap_or(0);
+        let total_amount_lamports = (settlement.total_value * Decimal::from(1_000_000_000i64))
+            .to_string()
+            .parse::<u64>()
+            .unwrap_or(0);
+        let fee_amount_lamports = (settlement.fee_amount * Decimal::from(1_000_000_000i64))
+            .to_string()
+            .parse::<u64>()
+            .unwrap_or(0);
         let seller_amount_lamports = total_amount_lamports - fee_amount_lamports;
-        
+
         info!(
             "Settlement transfer: {} tokens from buyer {} to seller {}",
             settlement.energy_amount, buyer_pubkey, seller_pubkey
         );
-        
+
         // 7. Transfer tokens: buyer → seller (net amount after platform fee)
         // Note: This assumes buyer has sufficient tokens. In production, use escrow.
-        let signature = self.blockchain
+        let signature = self
+            .blockchain
             .transfer_tokens(
                 &authority,
-                &buyer_token_account,   // From buyer
-                &seller_token_account,  // To seller
+                &buyer_token_account,  // From buyer
+                &seller_token_account, // To seller
                 &mint,
                 seller_amount_lamports,
-                9,  // Decimals
+                9, // Decimals
             )
             .await
             .map_err(|e| ApiError::Internal(format!("Blockchain transfer failed: {}", e)))?;
-        
+
         info!("Settlement completed. Signature: {}", signature);
-        
+
         // 8. Get current slot for confirmation
-        let slot = self.blockchain.get_slot()
+        let slot = self
+            .blockchain
+            .get_slot()
+            .await
             .map_err(|e| ApiError::Internal(format!("Failed to get slot: {}", e)))?;
-        
+
         // 9. Create settlement transaction record
         Ok(SettlementTransaction {
             settlement_id: settlement.id,
@@ -309,15 +331,13 @@ impl SettlementService {
 
     /// Helper: Get user wallet address from database
     async fn get_user_wallet(&self, user_id: &Uuid) -> Result<String, ApiError> {
-        let result = sqlx::query!(
-            "SELECT wallet_address FROM users WHERE id = $1",
-            user_id
-        )
-        .fetch_one(&self.db)
-        .await
-        .map_err(ApiError::Database)?;
-        
-        result.wallet_address
+        let result = sqlx::query!("SELECT wallet_address FROM users WHERE id = $1", user_id)
+            .fetch_one(&self.db)
+            .await
+            .map_err(ApiError::Database)?;
+
+        result
+            .wallet_address
             .ok_or_else(|| ApiError::Internal(format!("User {} has no wallet connected", user_id)))
     }
 
@@ -340,10 +360,7 @@ impl SettlementService {
                     processed += 1;
                 }
                 Err(e) => {
-                    warn!(
-                        "Failed to process settlement {}: {}",
-                        settlement_id, e
-                    );
+                    warn!("Failed to process settlement {}: {}", settlement_id, e);
                 }
             }
 
@@ -356,15 +373,15 @@ impl SettlementService {
     }
 
     /// Get settlement by ID
-    async fn get_settlement(&self, id: Uuid) -> Result<Settlement, ApiError> {
+    pub async fn get_settlement(&self, id: Uuid) -> Result<Settlement, ApiError> {
         use sqlx::Row;
-        
+
         let row = sqlx::query(
             r#"
             SELECT 
                 id, buyer_id, seller_id, energy_amount,
                 price_per_kwh, total_amount, fee_amount, net_amount,
-                status, blockchain_tx, created_at, confirmed_at
+                status, transaction_hash, created_at, processed_at
             FROM settlements
             WHERE id = $1
             "#,
@@ -376,12 +393,11 @@ impl SettlementService {
         .ok_or(ApiError::NotFound("Settlement not found".into()))?;
 
         let status_str: String = row.get("status");
-        let status = match status_str.as_str() {
-            "Pending" => SettlementStatus::Pending,
-            "Processing" => SettlementStatus::Processing,
-            "Confirmed" => SettlementStatus::Confirmed,
-            "Failed" => SettlementStatus::Failed,
-            "Cancelled" => SettlementStatus::Cancelled,
+        let status = match status_str.to_lowercase().as_str() {
+            "pending" => SettlementStatus::Pending,
+            "processing" => SettlementStatus::Processing,
+            "completed" | "confirmed" => SettlementStatus::Completed,
+            "failed" => SettlementStatus::Failed,
             _ => SettlementStatus::Pending,
         };
 
@@ -390,32 +406,27 @@ impl SettlementService {
             trade_id: Uuid::new_v4(), // Not stored in this simplified version
             buyer_id: row.get("buyer_id"),
             seller_id: row.get("seller_id"),
-            energy_amount: Decimal::from_str(&row.get::<String, _>("energy_amount"))
-                .unwrap_or(Decimal::ZERO),
-            price: Decimal::from_str(&row.get::<String, _>("price_per_kwh"))
-                .unwrap_or(Decimal::ZERO),
-            total_value: Decimal::from_str(&row.get::<String, _>("total_amount"))
-                .unwrap_or(Decimal::ZERO),
-            fee_amount: Decimal::from_str(&row.get::<String, _>("fee_amount"))
-                .unwrap_or(Decimal::ZERO),
-            net_amount: Decimal::from_str(&row.get::<String, _>("net_amount"))
-                .unwrap_or(Decimal::ZERO),
+            energy_amount: row.get::<BigDecimal, _>("energy_amount").to_string().parse().unwrap_or(Decimal::ZERO),
+            price: row.get::<BigDecimal, _>("price_per_kwh").to_string().parse().unwrap_or(Decimal::ZERO),
+            total_value: row.get::<BigDecimal, _>("total_amount").to_string().parse().unwrap_or(Decimal::ZERO),
+            fee_amount: row.get::<BigDecimal, _>("fee_amount").to_string().parse().unwrap_or(Decimal::ZERO),
+            net_amount: row.get::<BigDecimal, _>("net_amount").to_string().parse().unwrap_or(Decimal::ZERO),
             status,
-            blockchain_tx: row.get("blockchain_tx"),
+            blockchain_tx: row.get("transaction_hash"),
             created_at: row.get("created_at"),
-            confirmed_at: row.get("confirmed_at"),
+            confirmed_at: row.get("processed_at"),
         })
     }
 
     /// Get all pending settlements
-    async fn get_pending_settlements(&self) -> Result<Vec<Uuid>, ApiError> {
+    pub async fn get_pending_settlements(&self) -> Result<Vec<Uuid>, ApiError> {
         use sqlx::Row;
-        
+
         let rows = sqlx::query(
             r#"
             SELECT id
             FROM settlements
-            WHERE status = 'Pending'
+            WHERE status = 'pending'
             ORDER BY created_at ASC
             LIMIT 100
             "#,
@@ -428,7 +439,7 @@ impl SettlementService {
     }
 
     /// Update settlement status
-    async fn update_settlement_status(
+    pub async fn update_settlement_status(
         &self,
         id: Uuid,
         status: SettlementStatus,
@@ -450,7 +461,7 @@ impl SettlementService {
     }
 
     /// Update settlement with confirmation
-    async fn update_settlement_confirmed(
+    pub async fn update_settlement_confirmed(
         &self,
         id: Uuid,
         tx_signature: &str,
@@ -460,8 +471,8 @@ impl SettlementService {
             r#"
             UPDATE settlements
             SET status = $1,
-                blockchain_tx = $2,
-                confirmed_at = NOW(),
+                transaction_hash = $2,
+                processed_at = NOW(),
                 updated_at = NOW()
             WHERE id = $3
             "#,
@@ -482,7 +493,7 @@ impl SettlementService {
         let failed = sqlx::query!(
             r#"
             SELECT id FROM settlements
-            WHERE status = 'Failed'
+            WHERE status = 'failed'
             AND retry_count < $1
             "#,
             max_retries as i32
@@ -490,7 +501,7 @@ impl SettlementService {
         .fetch_all(&self.db)
         .await
         .map_err(ApiError::Database)?;
-        
+
         let mut retried = 0;
         for settlement in failed {
             match self.execute_settlement(settlement.id).await {
@@ -505,12 +516,12 @@ impl SettlementService {
                 }
             }
         }
-        
+
         Ok(retried)
     }
 
     /// Increment retry count for a settlement
-    async fn increment_retry_count(&self, settlement_id: &Uuid) -> Result<(), ApiError> {
+    pub async fn increment_retry_count(&self, settlement_id: &Uuid) -> Result<(), ApiError> {
         sqlx::query(
             r#"
             UPDATE settlements
@@ -529,15 +540,15 @@ impl SettlementService {
     /// Get settlement statistics
     pub async fn get_settlement_stats(&self) -> Result<SettlementStats, ApiError> {
         use sqlx::Row;
-        
+
         let row = sqlx::query(
             r#"
             SELECT 
-                COUNT(*) FILTER (WHERE status = 'Pending') as pending_count,
-                COUNT(*) FILTER (WHERE status = 'Processing') as processing_count,
-                COUNT(*) FILTER (WHERE status = 'Confirmed') as confirmed_count,
-                COUNT(*) FILTER (WHERE status = 'Failed') as failed_count,
-                COALESCE(SUM(CASE WHEN status = 'Confirmed' THEN total_amount::numeric ELSE 0 END), 0) as total_settled_value
+                COUNT(*) FILTER (WHERE status = 'pending') as pending_count,
+                COUNT(*) FILTER (WHERE status = 'processing') as processing_count,
+                COUNT(*) FILTER (WHERE status = 'completed') as confirmed_count,
+                COUNT(*) FILTER (WHERE status = 'failed') as failed_count,
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN total_amount::numeric ELSE 0 END), 0) as total_settled_value
             FROM settlements
             WHERE created_at > NOW() - INTERVAL '24 hours'
             "#,
@@ -551,8 +562,7 @@ impl SettlementService {
             processing_count: row.get::<i64, _>("processing_count"),
             confirmed_count: row.get::<i64, _>("confirmed_count"),
             failed_count: row.get::<i64, _>("failed_count"),
-            total_settled_value: Decimal::from_str(&row.get::<String, _>("total_settled_value"))
-                .unwrap_or(Decimal::ZERO),
+            total_settled_value: row.get::<BigDecimal, _>("total_settled_value").to_string().parse().unwrap_or(Decimal::ZERO),
         })
     }
 }
@@ -580,8 +590,8 @@ mod tests {
 
     #[test]
     fn test_settlement_status_display() {
-        assert_eq!(SettlementStatus::Pending.to_string(), "Pending");
-        assert_eq!(SettlementStatus::Confirmed.to_string(), "Confirmed");
+        assert_eq!(SettlementStatus::Pending.to_string(), "pending");
+        assert_eq!(SettlementStatus::Completed.to_string(), "completed");
     }
 
     #[test]
@@ -618,7 +628,7 @@ mod tests {
 
         let trade_amount = Decimal::from(100);
         let expected_fee = Decimal::from_str("1.00").unwrap();
-        
+
         assert_eq!(config.fee_rate * trade_amount, expected_fee);
     }
 
@@ -641,10 +651,10 @@ mod tests {
         let status1 = SettlementStatus::Processing;
         assert_eq!(status1, SettlementStatus::Processing);
 
-        // Valid transition: Processing -> Confirmed
-        let status2 = SettlementStatus::Confirmed;
-        assert_eq!(status2, SettlementStatus::Confirmed);
-        
+        // Valid transition: Processing -> Completed
+        let status2 = SettlementStatus::Completed;
+        assert_eq!(status2, SettlementStatus::Completed);
+
         // Failed state
         let status3 = SettlementStatus::Failed;
         assert_eq!(status3, SettlementStatus::Failed);
@@ -653,7 +663,7 @@ mod tests {
     #[test]
     fn test_settlement_status_failed() {
         let status = SettlementStatus::Failed;
-        assert_eq!(status.to_string(), "Failed");
+        assert_eq!(status.to_string(), "failed");
     }
 
     #[test]

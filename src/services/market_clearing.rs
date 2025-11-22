@@ -1,18 +1,18 @@
 // Market Clearing Engine for P2P Energy Trading
 // Implements double auction mechanism with price discovery
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
-use std::str::FromStr;
-use tokio::sync::RwLock;
 use chrono::{DateTime, Utc};
+use redis::AsyncCommands;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use uuid::Uuid;
 use utoipa::ToSchema;
-use redis::AsyncCommands;
+use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::services::WebSocketService;
@@ -32,9 +32,9 @@ pub struct BookOrder {
     pub id: Uuid,
     pub user_id: Uuid,
     pub side: OrderSide,
-    pub energy_amount: Decimal,  // kWh
-    pub price: Decimal,           // USD per kWh
-    pub filled_amount: Decimal,   // kWh already filled
+    pub energy_amount: Decimal, // kWh
+    pub price: Decimal,         // USD per kWh
+    pub filled_amount: Decimal, // kWh already filled
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
@@ -93,7 +93,7 @@ impl PriceLevel {
 #[derive(Debug, Clone)]
 pub struct OrderBook {
     // Buy orders sorted by price (descending) - highest bids first
-    buy_levels: BTreeMap<String, PriceLevel>,  // String key for decimal sorting
+    buy_levels: BTreeMap<String, PriceLevel>, // String key for decimal sorting
     // Sell orders sorted by price (ascending) - lowest asks first
     sell_levels: BTreeMap<String, PriceLevel>,
     // Quick lookup by order ID
@@ -112,29 +112,33 @@ impl OrderBook {
     /// Add order to the book
     pub fn add_order(&mut self, order: BookOrder) {
         let price_key = Self::price_key(order.price);
-        
+
         match order.side {
             OrderSide::Buy => {
-                let level = self.buy_levels.entry(price_key)
+                let level = self
+                    .buy_levels
+                    .entry(price_key)
                     .or_insert_with(|| PriceLevel::new(order.price));
                 level.add_order(order.clone());
             }
             OrderSide::Sell => {
-                let level = self.sell_levels.entry(price_key)
+                let level = self
+                    .sell_levels
+                    .entry(price_key)
                     .or_insert_with(|| PriceLevel::new(order.price));
                 level.add_order(order.clone());
             }
         }
-        
+
         self.order_index.insert(order.id, order.side);
     }
 
     /// Remove order from the book
     pub fn remove_order(&mut self, order_id: &Uuid) -> Option<BookOrder> {
         let side = self.order_index.remove(order_id)?;
-        
+
         let mut order_removed = None;
-        
+
         match side {
             OrderSide::Buy => {
                 // Search through buy levels
@@ -169,13 +173,16 @@ impl OrderBook {
                 }
             }
         }
-        
+
         order_removed
     }
 
     /// Get best bid (highest buy price)
     pub fn best_bid(&self) -> Option<Decimal> {
-        self.buy_levels.iter().next_back().map(|(_, level)| level.price)
+        self.buy_levels
+            .iter()
+            .next_back()
+            .map(|(_, level)| level.price)
     }
 
     /// Get best ask (lowest sell price)
@@ -201,15 +208,17 @@ impl OrderBook {
 
     /// Get total volume at each price level for buy side
     pub fn buy_depth(&self) -> Vec<(Decimal, Decimal)> {
-        self.buy_levels.iter()
-            .rev()  // Highest prices first
+        self.buy_levels
+            .iter()
+            .rev() // Highest prices first
             .map(|(_, level)| (level.price, level.total_volume))
             .collect()
     }
 
     /// Get total volume at each price level for sell side
     pub fn sell_depth(&self) -> Vec<(Decimal, Decimal)> {
-        self.sell_levels.iter()
+        self.sell_levels
+            .iter()
             .map(|(_, level)| (level.price, level.total_volume))
             .collect()
     }
@@ -223,7 +232,7 @@ impl OrderBook {
     /// Clear expired orders
     pub fn remove_expired_orders(&mut self) -> Vec<Uuid> {
         let mut expired_ids = Vec::new();
-        
+
         // Find expired buy orders
         for level in self.buy_levels.values_mut() {
             let before_count = level.orders.len();
@@ -236,12 +245,10 @@ impl OrderBook {
                 }
             });
             if level.orders.len() < before_count {
-                level.total_volume = level.orders.iter()
-                    .map(|o| o.remaining_amount())
-                    .sum();
+                level.total_volume = level.orders.iter().map(|o| o.remaining_amount()).sum();
             }
         }
-        
+
         // Find expired sell orders
         for level in self.sell_levels.values_mut() {
             let before_count = level.orders.len();
@@ -254,21 +261,19 @@ impl OrderBook {
                 }
             });
             if level.orders.len() < before_count {
-                level.total_volume = level.orders.iter()
-                    .map(|o| o.remaining_amount())
-                    .sum();
+                level.total_volume = level.orders.iter().map(|o| o.remaining_amount()).sum();
             }
         }
-        
+
         // Clean up empty levels
         self.buy_levels.retain(|_, level| !level.orders.is_empty());
         self.sell_levels.retain(|_, level| !level.orders.is_empty());
-        
+
         // Update index
         for id in &expired_ids {
             self.order_index.remove(id);
         }
-        
+
         expired_ids
     }
 }
@@ -284,6 +289,7 @@ pub struct TradeMatch {
     pub quantity: Decimal,
     pub total_value: Decimal,
     pub matched_at: DateTime<Utc>,
+    pub epoch_id: Uuid,
 }
 
 /// Market clearing price calculation result
@@ -333,7 +339,9 @@ impl MarketClearingEngine {
     /// Save order book snapshot to Redis
     async fn save_order_book_snapshot(&self) -> Result<(), ApiError> {
         let book = self.order_book.read().await;
-        let mut conn = self.redis.get_multiplexed_async_connection()
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| ApiError::Internal(format!("Redis connection failed: {}", e)))?;
 
@@ -342,29 +350,28 @@ impl MarketClearingEngine {
             for order in &level.orders {
                 let order_json = serde_json::to_string(order)
                     .map_err(|e| ApiError::Internal(format!("Serialization failed: {}", e)))?;
-                
+
                 // Store in sorted set with price as score
-                let _: () = conn.zadd(
-                    "order_book:buy",
-                    order_json.clone(),
-                    order.price.to_string().parse::<f64>().unwrap_or(0.0)
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis ZADD failed: {}", e)))?;
+                let _: () = conn
+                    .zadd(
+                        "order_book:buy",
+                        order_json.clone(),
+                        order.price.to_string().parse::<f64>().unwrap_or(0.0),
+                    )
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis ZADD failed: {}", e)))?;
 
                 // Store order details in hash
-                let _: () = conn.hset(
-                    format!("order:{}", order.id),
-                    "data",
-                    order_json
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis HSET failed: {}", e)))?;
+                let _: () = conn
+                    .hset(format!("order:{}", order.id), "data", order_json)
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis HSET failed: {}", e)))?;
 
                 // Set expiration (24 hours)
-                let _: () = conn.expire(
-                    format!("order:{}", order.id),
-                    86400
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis EXPIRE failed: {}", e)))?;
+                let _: () = conn
+                    .expire(format!("order:{}", order.id), 86400)
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis EXPIRE failed: {}", e)))?;
             }
         }
 
@@ -373,26 +380,25 @@ impl MarketClearingEngine {
             for order in &level.orders {
                 let order_json = serde_json::to_string(order)
                     .map_err(|e| ApiError::Internal(format!("Serialization failed: {}", e)))?;
-                
-                let _: () = conn.zadd(
-                    "order_book:sell",
-                    order_json.clone(),
-                    order.price.to_string().parse::<f64>().unwrap_or(0.0)
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis ZADD failed: {}", e)))?;
 
-                let _: () = conn.hset(
-                    format!("order:{}", order.id),
-                    "data",
-                    order_json
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis HSET failed: {}", e)))?;
+                let _: () = conn
+                    .zadd(
+                        "order_book:sell",
+                        order_json.clone(),
+                        order.price.to_string().parse::<f64>().unwrap_or(0.0),
+                    )
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis ZADD failed: {}", e)))?;
 
-                let _: () = conn.expire(
-                    format!("order:{}", order.id),
-                    86400
-                ).await
-                .map_err(|e| ApiError::Internal(format!("Redis EXPIRE failed: {}", e)))?;
+                let _: () = conn
+                    .hset(format!("order:{}", order.id), "data", order_json)
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis HSET failed: {}", e)))?;
+
+                let _: () = conn
+                    .expire(format!("order:{}", order.id), 86400)
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Redis EXPIRE failed: {}", e)))?;
             }
         }
 
@@ -404,14 +410,15 @@ impl MarketClearingEngine {
             "spread": book.spread(),
             "updated_at": Utc::now(),
         });
-        
-        let _: () = conn.set(
-            "order_book:metadata",
-            metadata.to_string()
-        ).await
-        .map_err(|e| ApiError::Internal(format!("Redis SET failed: {}", e)))?;
 
-        let _: () = conn.expire("order_book:metadata", 86400).await
+        let _: () = conn
+            .set("order_book:metadata", metadata.to_string())
+            .await
+            .map_err(|e| ApiError::Internal(format!("Redis SET failed: {}", e)))?;
+
+        let _: () = conn
+            .expire("order_book:metadata", 86400)
+            .await
             .map_err(|e| ApiError::Internal(format!("Redis EXPIRE failed: {}", e)))?;
 
         debug!("📸 Order book snapshot saved to Redis");
@@ -420,7 +427,9 @@ impl MarketClearingEngine {
 
     /// Restore order book from Redis
     async fn restore_order_book_from_redis(&self) -> Result<usize, ApiError> {
-        let mut conn = self.redis.get_multiplexed_async_connection()
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| ApiError::Internal(format!("Redis connection failed: {}", e)))?;
 
@@ -428,12 +437,10 @@ impl MarketClearingEngine {
         let mut restored_count = 0;
 
         // Restore buy orders
-        let buy_orders: Vec<(String, f64)> = conn.zrange_withscores(
-            "order_book:buy",
-            0,
-            -1
-        ).await
-        .map_err(|e| ApiError::Internal(format!("Redis ZRANGE failed: {}", e)))?;
+        let buy_orders: Vec<(String, f64)> = conn
+            .zrange_withscores("order_book:buy", 0, -1)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Redis ZRANGE failed: {}", e)))?;
 
         for (order_json, _score) in buy_orders {
             match serde_json::from_str::<BookOrder>(&order_json) {
@@ -450,12 +457,10 @@ impl MarketClearingEngine {
         }
 
         // Restore sell orders
-        let sell_orders: Vec<(String, f64)> = conn.zrange_withscores(
-            "order_book:sell",
-            0,
-            -1
-        ).await
-        .map_err(|e| ApiError::Internal(format!("Redis ZRANGE failed: {}", e)))?;
+        let sell_orders: Vec<(String, f64)> = conn
+            .zrange_withscores("order_book:sell", 0, -1)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Redis ZRANGE failed: {}", e)))?;
 
         for (order_json, _score) in sell_orders {
             match serde_json::from_str::<BookOrder>(&order_json) {
@@ -477,15 +482,23 @@ impl MarketClearingEngine {
 
     /// Clear Redis order book cache
     async fn clear_redis_cache(&self) -> Result<(), ApiError> {
-        let mut conn = self.redis.get_multiplexed_async_connection()
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| ApiError::Internal(format!("Redis connection failed: {}", e)))?;
 
-        let _: () = conn.del("order_book:buy").await
+        let _: () = conn
+            .del("order_book:buy")
+            .await
             .map_err(|e| ApiError::Internal(format!("Redis DEL failed: {}", e)))?;
-        let _: () = conn.del("order_book:sell").await
+        let _: () = conn
+            .del("order_book:sell")
+            .await
             .map_err(|e| ApiError::Internal(format!("Redis DEL failed: {}", e)))?;
-        let _: () = conn.del("order_book:metadata").await
+        let _: () = conn
+            .del("order_book:metadata")
+            .await
             .map_err(|e| ApiError::Internal(format!("Redis DEL failed: {}", e)))?;
 
         debug!("🗑️  Cleared Redis order book cache");
@@ -505,12 +518,27 @@ impl MarketClearingEngine {
                 info!("📭 Redis cache empty, loading from database");
             }
             Err(e) => {
-                warn!("⚠️  Failed to restore from Redis: {}, falling back to database", e);
+                warn!(
+                    "⚠️  Failed to restore from Redis: {}, falling back to database",
+                    e
+                );
             }
         }
 
         // Load from database
-        let orders = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, DateTime<Utc>, DateTime<Utc>)>(
+        let orders = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Uuid,
+                String,
+                String,
+                String,
+                String,
+                DateTime<Utc>,
+                DateTime<Utc>,
+            ),
+        >(
             r#"
             SELECT 
                 id, user_id, side::text, energy_amount::text, 
@@ -520,7 +548,7 @@ impl MarketClearingEngine {
             WHERE status = 'pending'
                 AND expires_at > NOW()
             ORDER BY created_at ASC
-            "#
+            "#,
         )
         .fetch_all(&self.db)
         .await
@@ -529,7 +557,9 @@ impl MarketClearingEngine {
         let mut book = self.order_book.write().await;
         let mut loaded_count = 0;
 
-        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at) in orders {
+        for (id, user_id, side_str, energy_str, price_str, filled_str, created_at, expires_at) in
+            orders
+        {
             let side = match side_str.as_str() {
                 "Buy" => OrderSide::Buy,
                 "Sell" => OrderSide::Sell,
@@ -561,7 +591,7 @@ impl MarketClearingEngine {
         drop(book); // Release lock before saving to Redis
 
         info!("📚 Loaded {} active orders from database", loaded_count);
-        
+
         // Save to Redis for future quick restores
         if loaded_count > 0 {
             if let Err(e) = self.save_order_book_snapshot().await {
@@ -575,10 +605,10 @@ impl MarketClearingEngine {
     /// Calculate market clearing price using supply-demand curves
     pub async fn calculate_clearing_price(&self) -> Option<ClearingPrice> {
         let book = self.order_book.read().await;
-        
+
         let buy_depth = book.buy_depth();
         let sell_depth = book.sell_depth();
-        
+
         if buy_depth.is_empty() || sell_depth.is_empty() {
             return None;
         }
@@ -608,12 +638,12 @@ impl MarketClearingEngine {
                 // Can only clear if buyers willing to pay >= sellers asking
                 if demand_price >= supply_price {
                     let clearable_volume = (*demand_vol).min(*supply_vol);
-                    
+
                     if clearable_volume > max_volume {
                         max_volume = clearable_volume;
                         // Clearing price is midpoint of bid-ask spread
                         let clearing_price = (*demand_price + *supply_price) / Decimal::TWO;
-                        
+
                         best_clearing = Some(ClearingPrice {
                             price: clearing_price,
                             volume: clearable_volume,
@@ -639,12 +669,10 @@ impl MarketClearingEngine {
             info!("🗑️  Removed {} expired orders", expired.len());
             // Update database to mark as expired
             for order_id in expired {
-                let _ = sqlx::query(
-                    "UPDATE trading_orders SET status = 'expired' WHERE id = $1"
-                )
-                .bind(order_id)
-                .execute(&self.db)
-                .await;
+                let _ = sqlx::query("UPDATE trading_orders SET status = 'expired' WHERE id = $1")
+                    .bind(order_id)
+                    .execute(&self.db)
+                    .await;
             }
         }
 
@@ -657,16 +685,19 @@ impl MarketClearingEngine {
                 (Some(bid), Some(ask)) if bid >= ask => {
                     // There's overlap - we can match orders
                     debug!("🔄 Market crossover: Bid ${} >= Ask ${}", bid, ask);
-                    
+
                     // Get the best sell order (lowest ask)
                     let sell_order = {
-                        let (_, sell_level) = book.sell_levels.iter_mut().next()
+                        let (_, sell_level) = book
+                            .sell_levels
+                            .iter_mut()
+                            .next()
                             .ok_or(ApiError::Internal("No sell orders available".into()))?;
-                        
+
                         if sell_level.orders.is_empty() {
                             break; // No more sell orders
                         }
-                        
+
                         sell_level.orders[0].clone()
                     };
 
@@ -678,13 +709,17 @@ impl MarketClearingEngine {
 
                     // Get the best buy order (highest bid)
                     let buy_order = {
-                        let (_, buy_level) = book.buy_levels.iter_mut().rev().next()
+                        let (_, buy_level) = book
+                            .buy_levels
+                            .iter_mut()
+                            .rev()
+                            .next()
                             .ok_or(ApiError::Internal("No buy orders available".into()))?;
-                        
+
                         if buy_level.orders.is_empty() {
                             break; // No more buy orders
                         }
-                        
+
                         buy_level.orders[0].clone()
                     };
 
@@ -722,17 +757,25 @@ impl MarketClearingEngine {
                         quantity: match_quantity,
                         total_value,
                         matched_at: Utc::now(),
+                        epoch_id: Uuid::new_v4(), // Placeholder, should be passed from matching cycle
                     };
 
                     info!(
                         "✅ Matched: {} kWh at ${}/kWh (buyer: {}, seller: {})",
-                        match_quantity, execution_price,
-                        buy_order.user_id, sell_order.user_id
+                        match_quantity, execution_price, buy_order.user_id, sell_order.user_id
                     );
 
                     // Update order filled amounts in-memory (atomic update)
-                    self.update_order_filled_amount_in_book(&mut book, &buy_order.id, match_quantity)?;
-                    self.update_order_filled_amount_in_book(&mut book, &sell_order.id, match_quantity)?;
+                    self.update_order_filled_amount_in_book(
+                        &mut book,
+                        &buy_order.id,
+                        match_quantity,
+                    )?;
+                    self.update_order_filled_amount_in_book(
+                        &mut book,
+                        &sell_order.id,
+                        match_quantity,
+                    )?;
 
                     // Remove fully filled orders from book
                     if buy_order.remaining_amount() + match_quantity >= buy_order.energy_amount {
@@ -776,7 +819,9 @@ impl MarketClearingEngine {
         amount: Decimal,
     ) -> Result<(), ApiError> {
         // Find the order in the book and update its filled amount
-        let side = book.order_index.get(order_id)
+        let side = book
+            .order_index
+            .get(order_id)
             .ok_or(ApiError::NotFound("Order not found in book".into()))?;
 
         let levels = match side {
@@ -811,27 +856,45 @@ impl MarketClearingEngine {
 
             // Create trade record
             let trade_id = Uuid::new_v4();
-            sqlx::query(
-                r#"
-                INSERT INTO trades (
-                    id, buy_order_id, sell_order_id, buyer_id, seller_id,
-                    quantity, price, total_value, executed_at, status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                "#
+
+            // Get epoch_id from buy order
+            let epoch_id = sqlx::query_scalar!(
+                "SELECT epoch_id FROM trading_orders WHERE id = $1",
+                trade.buy_order_id
             )
-            .bind(trade_id)
-            .bind(trade.buy_order_id)
-            .bind(trade.sell_order_id)
-            .bind(trade.buyer_id)
-            .bind(trade.seller_id)
-            .bind(trade.quantity.to_string())
-            .bind(trade.price.to_string())
-            .bind(trade.total_value.to_string())
-            .bind(trade.matched_at)
-            .bind("Pending")  // Will be updated to Settled after blockchain confirmation
-            .execute(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
-            .map_err(ApiError::Database)?;
+            .map_err(ApiError::Database)?
+            .flatten();
+
+            if let Some(epoch_id) = epoch_id {
+                sqlx::query(
+                    r#"
+                    INSERT INTO order_matches (
+                        id, epoch_id, buy_order_id, sell_order_id,
+                        matched_amount, match_price, match_time, status
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    "#,
+                )
+                .bind(trade_id)
+                .bind(epoch_id)
+                .bind(trade.buy_order_id)
+                .bind(trade.sell_order_id)
+                .bind(trade.quantity.to_string())
+                .bind(trade.price.to_string())
+                .bind(trade.matched_at)
+                .bind("pending")
+                .execute(&mut *tx)
+                .await
+                .map_err(ApiError::Database)?;
+            } else {
+                warn!(
+                    "⚠️  Order {} has no epoch_id, skipping trade persistence",
+                    trade.buy_order_id
+                );
+                tx.rollback().await.map_err(ApiError::Database)?;
+                continue;
+            }
 
             // Update buy order with proper partial fill handling
             let buy_result = sqlx::query(
@@ -850,7 +913,7 @@ impl MarketClearingEngine {
                 WHERE id = $2
                   AND status IN ('Pending'::order_status, 'PartiallyFilled'::order_status)
                 RETURNING id, energy_amount, filled_amount + $1 as new_filled_amount
-                "#
+                "#,
             )
             .bind(trade.quantity.to_string())
             .bind(trade.buy_order_id)
@@ -860,8 +923,10 @@ impl MarketClearingEngine {
 
             if buy_result.is_none() {
                 tx.rollback().await.map_err(ApiError::Database)?;
-                warn!("⚠️  Buy order {} not found or already filled, rolling back trade {}", 
-                    trade.buy_order_id, trade_id);
+                warn!(
+                    "⚠️  Buy order {} not found or already filled, rolling back trade {}",
+                    trade.buy_order_id, trade_id
+                );
                 continue;
             }
 
@@ -882,7 +947,7 @@ impl MarketClearingEngine {
                 WHERE id = $2
                   AND status IN ('Pending'::order_status, 'PartiallyFilled'::order_status)
                 RETURNING id, energy_amount, filled_amount + $1 as new_filled_amount
-                "#
+                "#,
             )
             .bind(trade.quantity.to_string())
             .bind(trade.sell_order_id)
@@ -892,8 +957,10 @@ impl MarketClearingEngine {
 
             if sell_result.is_none() {
                 tx.rollback().await.map_err(ApiError::Database)?;
-                warn!("⚠️  Sell order {} not found or already filled, rolling back trade {}", 
-                    trade.sell_order_id, trade_id);
+                warn!(
+                    "⚠️  Sell order {} not found or already filled, rolling back trade {}",
+                    trade.sell_order_id, trade_id
+                );
                 continue;
             }
 
@@ -903,15 +970,17 @@ impl MarketClearingEngine {
 
             info!(
                 "💾 Persisted trade {}: {} kWh at ${} (buy: {}, sell: {})",
-                trade_id, trade.quantity, trade.price,
-                trade.buy_order_id, trade.sell_order_id
+                trade_id, trade.quantity, trade.price, trade.buy_order_id, trade.sell_order_id
             );
         }
 
         // Update Redis cache after all database updates
         if persisted > 0 {
             if let Err(e) = self.save_order_book_snapshot().await {
-                warn!("⚠️  Failed to update Redis cache after persisting matches: {}", e);
+                warn!(
+                    "⚠️  Failed to update Redis cache after persisting matches: {}",
+                    e
+                );
             }
         }
 
@@ -921,22 +990,22 @@ impl MarketClearingEngine {
     /// Execute a complete matching cycle: match orders and persist results
     pub async fn execute_matching_cycle(&self) -> Result<usize, ApiError> {
         info!("🔄 Starting matching cycle");
-        
+
         // Broadcast order book snapshot before matching
         if let Some(ws) = &self.websocket {
             self.broadcast_order_book_snapshot(ws).await;
         }
-        
+
         // Match orders in-memory
         let matches = self.match_orders().await?;
-        
+
         if matches.is_empty() {
             debug!("No matches found in this cycle");
             return Ok(0);
         }
 
         info!("Found {} matches, persisting to database", matches.len());
-        
+
         // Broadcast trade executions
         if let Some(ws) = &self.websocket {
             for trade in &matches {
@@ -953,105 +1022,35 @@ impl MarketClearingEngine {
                 .await;
             }
         }
-        
+
         // Persist to database with atomic updates
-        let persisted = self.persist_matches(matches).await?;
-        
+        let persisted = self.persist_matches(matches.clone()).await?;
+
         // Execute settlements for matched trades if settlement service is available
         if let Some(settlement_service) = &self.settlement_service {
-            info!("🔄 Executing settlements for {} trades", persisted);
-            if let Err(e) = settlement_service.process_pending_settlements().await {
-                error!("❌ Settlement execution failed: {}", e);
+            info!("🔄 Creating settlements for {} trades", matches.len());
+            if let Err(e) = settlement_service
+                .create_settlements_from_trades(matches)
+                .await
+            {
+                error!("❌ Failed to create settlements: {}", e);
             }
         }
-        
+
         // Broadcast updated order book after matching
         if let Some(ws) = &self.websocket {
             self.broadcast_order_book_snapshot(ws).await;
             self.broadcast_market_depth(ws).await;
         }
-        
+
         info!("✅ Matching cycle complete: {} trades persisted", persisted);
         Ok(persisted)
-    }
-
-    /// Execute settlements for matched trades
-    async fn execute_settlements_for_matches(&self, settlement_service: &SettlementService) -> Result<(), ApiError> {
-        // Get recent trades that need settlement (status = 'Pending')
-        let trades = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, String, String, DateTime<Utc>)>(
-            r#"
-            SELECT 
-                id, buyer_id, seller_id,
-                quantity::text, price::text, total_value::text,
-                executed_at
-            FROM trades 
-            WHERE status = 'Pending'
-            ORDER BY executed_at ASC
-            LIMIT 50
-            "#
-        )
-        .fetch_all(&self.db)
-        .await
-        .map_err(ApiError::Database)?;
-
-        if trades.is_empty() {
-            debug!("No pending trades to settle");
-            return Ok(());
-        }
-
-        info!("🔄 Processing settlements for {} pending trades", trades.len());
-        let mut processed = 0;
-        let mut failed = 0;
-
-        for (trade_id, buyer_id, seller_id, quantity_str, price_str, total_value_str, executed_at) in trades {
-            // Convert TradeMatch to settlement format
-            let quantity = Decimal::from_str(&quantity_str)
-                .map_err(|_| ApiError::Internal("Invalid quantity".into()))?;
-            let price = Decimal::from_str_exact(&price_str)
-                .map_err(|_| ApiError::Internal("Invalid price".into()))?;
-            let total_value = Decimal::from_str_exact(&total_value_str)
-                .map_err(|_| ApiError::Internal("Invalid total value".into()))?;
-
-            let settlement = crate::services::settlement_service::Settlement {
-                id: Uuid::new_v4(),
-                trade_id,
-                buyer_id,
-                seller_id,
-                energy_amount: quantity,
-                price,
-                total_value,
-                fee_amount: total_value * Decimal::from_str_exact("0.01").unwrap(), // 1% fee
-                net_amount: total_value * Decimal::from_str_exact("0.99").unwrap(), // 99% after fee
-                status: crate::services::settlement_service::SettlementStatus::Pending,
-                blockchain_tx: None,
-                created_at: executed_at,
-                confirmed_at: None,
-            };
-
-            match settlement_service.execute_settlement(settlement.id).await {
-                Ok(_) => {
-                    processed += 1;
-                    info!("✅ Settlement {} executed successfully", settlement.id);
-                }
-                Err(e) => {
-                    failed += 1;
-                    error!("❌ Settlement {} failed: {}", settlement.id, e);
-                }
-            }
-        }
-
-        info!(
-            "🏁 Settlement processing complete: {} processed, {} failed",
-            processed, failed
-        );
-
-        Ok(())
     }
 
     /// Broadcast order book snapshot to WebSocket clients
     async fn broadcast_order_book_snapshot(&self, ws: &WebSocketService) {
         let snapshot = self.get_order_book_snapshot().await;
-        
+
         let bids: Vec<(String, String)> = snapshot
             .buy_depth
             .iter()
@@ -1078,26 +1077,20 @@ impl MarketClearingEngine {
     /// Broadcast market depth update to WebSocket clients
     async fn broadcast_market_depth(&self, ws: &WebSocketService) {
         let snapshot = self.get_order_book_snapshot().await;
-        
-        let total_buy_volume: rust_decimal::Decimal = snapshot
-            .buy_depth
-            .iter()
-            .map(|(_, vol)| vol)
-            .sum();
 
-        let total_sell_volume: rust_decimal::Decimal = snapshot
-            .sell_depth
-            .iter()
-            .map(|(_, vol)| vol)
-            .sum();
+        let total_buy_volume: rust_decimal::Decimal =
+            snapshot.buy_depth.iter().map(|(_, vol)| vol).sum();
+
+        let total_sell_volume: rust_decimal::Decimal =
+            snapshot.sell_depth.iter().map(|(_, vol)| vol).sum();
 
         let spread_percentage = match (&snapshot.best_bid, &snapshot.best_ask) {
-            (Some(bid), Some(ask)) if *bid > Decimal::ZERO => {
-                Some(((*ask - *bid) / *bid * Decimal::from(100))
+            (Some(bid), Some(ask)) if *bid > Decimal::ZERO => Some(
+                ((*ask - *bid) / *bid * Decimal::from(100))
                     .to_string()
                     .parse::<f64>()
-                    .unwrap_or(0.0))
-            }
+                    .unwrap_or(0.0),
+            ),
             _ => None,
         };
 
@@ -1114,7 +1107,7 @@ impl MarketClearingEngine {
     /// Get current order book snapshot
     pub async fn get_order_book_snapshot(&self) -> OrderBookSnapshot {
         let book = self.order_book.read().await;
-        
+
         OrderBookSnapshot {
             best_bid: book.best_bid(),
             best_ask: book.best_ask(),
@@ -1134,7 +1127,7 @@ pub struct OrderBookSnapshot {
     pub best_ask: Option<Decimal>,
     pub mid_price: Option<Decimal>,
     pub spread: Option<Decimal>,
-    pub buy_depth: Vec<(Decimal, Decimal)>,  // (price, volume)
+    pub buy_depth: Vec<(Decimal, Decimal)>, // (price, volume)
     pub sell_depth: Vec<(Decimal, Decimal)>,
     pub timestamp: DateTime<Utc>,
 }
@@ -1165,13 +1158,16 @@ mod tests {
         };
 
         book.add_order(order);
-        assert_eq!(book.best_bid(), Some(Decimal::from_str_exact("0.15").unwrap()));
+        assert_eq!(
+            book.best_bid(),
+            Some(Decimal::from_str_exact("0.15").unwrap())
+        );
     }
 
     #[test]
     fn test_price_priority() {
         let mut book = OrderBook::new();
-        
+
         // Add buy orders at different prices
         let order1 = BookOrder {
             id: Uuid::new_v4(),
@@ -1189,7 +1185,7 @@ mod tests {
             user_id: Uuid::new_v4(),
             side: OrderSide::Buy,
             energy_amount: Decimal::from(100),
-            price: Decimal::from_str_exact("0.20").unwrap(),  // Higher price
+            price: Decimal::from_str_exact("0.20").unwrap(), // Higher price
             filled_amount: Decimal::ZERO,
             created_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::hours(24),
@@ -1199,7 +1195,10 @@ mod tests {
         book.add_order(order2);
 
         // Best bid should be the highest price
-        assert_eq!(book.best_bid(), Some(Decimal::from_str_exact("0.20").unwrap()));
+        assert_eq!(
+            book.best_bid(),
+            Some(Decimal::from_str_exact("0.20").unwrap())
+        );
     }
 
     #[test]
@@ -1217,13 +1216,16 @@ mod tests {
         };
 
         book.add_order(order);
-        assert_eq!(book.best_ask(), Some(Decimal::from_str_exact("0.15").unwrap()));
+        assert_eq!(
+            book.best_ask(),
+            Some(Decimal::from_str_exact("0.15").unwrap())
+        );
     }
 
     #[test]
     fn test_sell_price_priority() {
         let mut book = OrderBook::new();
-        
+
         // Add sell orders at different prices
         let order1 = BookOrder {
             id: Uuid::new_v4(),
@@ -1241,7 +1243,7 @@ mod tests {
             user_id: Uuid::new_v4(),
             side: OrderSide::Sell,
             energy_amount: Decimal::from(100),
-            price: Decimal::from_str_exact("0.15").unwrap(),  // Lower price
+            price: Decimal::from_str_exact("0.15").unwrap(), // Lower price
             filled_amount: Decimal::ZERO,
             created_at: Utc::now(),
             expires_at: Utc::now() + chrono::Duration::hours(24),
@@ -1251,7 +1253,10 @@ mod tests {
         book.add_order(order2);
 
         // Best ask should be the lowest price
-        assert_eq!(book.best_ask(), Some(Decimal::from_str_exact("0.15").unwrap()));
+        assert_eq!(
+            book.best_ask(),
+            Some(Decimal::from_str_exact("0.15").unwrap())
+        );
     }
 
     #[test]
@@ -1279,7 +1284,7 @@ mod tests {
     #[test]
     fn test_mid_price_calculation() {
         let mut book = OrderBook::new();
-        
+
         let buy_order = BookOrder {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
@@ -1306,13 +1311,16 @@ mod tests {
         book.add_order(sell_order);
 
         // Mid price should be (0.10 + 0.20) / 2 = 0.15
-        assert_eq!(book.mid_price(), Some(Decimal::from_str_exact("0.15").unwrap()));
+        assert_eq!(
+            book.mid_price(),
+            Some(Decimal::from_str_exact("0.15").unwrap())
+        );
     }
 
     #[test]
     fn test_spread_calculation() {
         let mut book = OrderBook::new();
-        
+
         let buy_order = BookOrder {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
@@ -1339,13 +1347,16 @@ mod tests {
         book.add_order(sell_order);
 
         // Spread should be 0.15 - 0.10 = 0.05
-        assert_eq!(book.spread(), Some(Decimal::from_str_exact("0.05").unwrap()));
+        assert_eq!(
+            book.spread(),
+            Some(Decimal::from_str_exact("0.05").unwrap())
+        );
     }
 
     #[test]
     fn test_order_book_depth() {
         let mut book = OrderBook::new();
-        
+
         // Add multiple buy orders at different prices
         for i in 1..=5 {
             let order = BookOrder {
@@ -1363,7 +1374,7 @@ mod tests {
 
         let depth = book.buy_depth();
         assert_eq!(depth.len(), 5);
-        
+
         // Verify total volume
         let total_volume: Decimal = depth.iter().map(|(_, v)| v).sum();
         assert_eq!(total_volume, Decimal::from(500));
@@ -1437,7 +1448,7 @@ mod tests {
     fn test_multiple_orders_same_price() {
         let mut book = OrderBook::new();
         let price = Decimal::from_str_exact("0.15").unwrap();
-        
+
         // Add three buy orders at the same price
         for _ in 0..3 {
             let order = BookOrder {
@@ -1454,7 +1465,7 @@ mod tests {
         }
 
         let depth = book.buy_depth();
-        assert_eq!(depth.len(), 1);  // One price level
-        assert_eq!(depth[0].1, Decimal::from(300));  // Total volume of 300
+        assert_eq!(depth.len(), 1); // One price level
+        assert_eq!(depth[0].1, Decimal::from(300)); // Total volume of 300
     }
 }

@@ -8,9 +8,9 @@ use std::str::FromStr;
 use tracing::{debug, error, info};
 use utoipa::ToSchema;
 
+use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// User type enum matching the Registry program
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema)]
@@ -116,16 +116,14 @@ pub async fn get_blockchain_user(
 
     // Derive the user account PDA (Program Derived Address)
     // User account PDA seeds: ["user", user_authority.key()]
-    let registry_program_id = crate::services::BlockchainService::registry_program_id()
-        .map_err(|e| {
+    let registry_program_id =
+        crate::services::BlockchainService::registry_program_id().map_err(|e| {
             error!("Failed to parse registry program ID: {}", e);
             ApiError::Internal(format!("Invalid program ID: {}", e))
         })?;
 
-    let (user_pda, _bump) = Pubkey::find_program_address(
-        &[b"user", pubkey.as_ref()],
-        &registry_program_id,
-    );
+    let (user_pda, _bump) =
+        Pubkey::find_program_address(&[b"user", pubkey.as_ref()], &registry_program_id);
 
     debug!("User PDA: {}", user_pda);
 
@@ -133,6 +131,7 @@ pub async fn get_blockchain_user(
     let account_exists = state
         .blockchain_service
         .account_exists(&user_pda)
+        .await
         .map_err(|e| {
             error!("Failed to check if account exists: {}", e);
             ApiError::Internal(format!("Blockchain error: {}", e))
@@ -149,6 +148,7 @@ pub async fn get_blockchain_user(
     let account_data = state
         .blockchain_service
         .get_account_data(&user_pda)
+        .await
         .map_err(|e| {
             error!("Failed to fetch account data: {}", e);
             ApiError::Internal(format!("Failed to fetch account: {}", e))
@@ -157,9 +157,7 @@ pub async fn get_blockchain_user(
     // Deserialize the account data
     // Anchor accounts have an 8-byte discriminator at the start
     if account_data.len() < 8 {
-        return Err(ApiError::Internal(
-            "Invalid account data".to_string(),
-        ));
+        return Err(ApiError::Internal("Invalid account data".to_string()));
     }
 
     // Parse the account data (skip 8-byte discriminator)
@@ -269,9 +267,7 @@ fn parse_user_account(data: &[u8]) -> Result<BlockchainUserAccount> {
     // - created_at: i64 (8 bytes)
 
     if data.len() < 32 {
-        return Err(ApiError::Internal(
-            "Account data too short".to_string(),
-        ));
+        return Err(ApiError::Internal("Account data too short".to_string()));
     }
 
     // Parse authority (first 32 bytes)
@@ -282,11 +278,7 @@ fn parse_user_account(data: &[u8]) -> Result<BlockchainUserAccount> {
     let user_type = match data.get(32) {
         Some(0) => UserType::Prosumer,
         Some(1) => UserType::Consumer,
-        _ => {
-            return Err(ApiError::Internal(
-                "Invalid user type".to_string(),
-            ))
-        }
+        _ => return Err(ApiError::Internal("Invalid user type".to_string())),
     };
 
     // Parse location string (starts at byte 36 for alignment)
@@ -296,9 +288,7 @@ fn parse_user_account(data: &[u8]) -> Result<BlockchainUserAccount> {
     let location_end = location_start + location_len;
 
     if data.len() < location_end {
-        return Err(ApiError::Internal(
-            "Invalid location data".to_string(),
-        ));
+        return Err(ApiError::Internal("Invalid location data".to_string()));
     }
 
     let location = String::from_utf8(data[location_start..location_end].to_vec())
@@ -314,19 +304,13 @@ fn parse_user_account(data: &[u8]) -> Result<BlockchainUserAccount> {
         Some(0) => UserStatus::Active,
         Some(1) => UserStatus::Suspended,
         Some(2) => UserStatus::Inactive,
-        _ => {
-            return Err(ApiError::Internal(
-                "Invalid user status".to_string(),
-            ))
-        }
+        _ => return Err(ApiError::Internal("Invalid user status".to_string())),
     };
 
     // Parse registered_at (8 bytes after status + alignment)
     let registered_at_offset = status_offset + 8; // 1 byte + 7 padding
     if data.len() < registered_at_offset + 8 {
-        return Err(ApiError::Internal(
-            "Invalid registered_at data".to_string(),
-        ));
+        return Err(ApiError::Internal("Invalid registered_at data".to_string()));
     }
     let registered_at = i64::from_le_bytes([
         data[registered_at_offset],
@@ -342,9 +326,7 @@ fn parse_user_account(data: &[u8]) -> Result<BlockchainUserAccount> {
     // Parse meter_count (4 bytes)
     let meter_count_offset = registered_at_offset + 8;
     if data.len() < meter_count_offset + 4 {
-        return Err(ApiError::Internal(
-            "Invalid meter_count data".to_string(),
-        ));
+        return Err(ApiError::Internal("Invalid meter_count data".to_string()));
     }
     let meter_count = u32::from_le_bytes([
         data[meter_count_offset],

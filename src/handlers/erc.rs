@@ -23,6 +23,7 @@ use crate::{
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct IssueErcRequest {
     pub wallet_address: String,
+    pub meter_id: Option<String>,
     #[schema(value_type = String)]
     pub kwh_amount: BigDecimal,
     pub expiry_date: Option<chrono::DateTime<chrono::Utc>>,
@@ -201,10 +202,11 @@ pub async fn issue_certificate(
 
     // Issue certificate in database first
     let cert_request = crate::services::erc_service::IssueErcRequest {
-        wallet_address: request.wallet_address,
-        kwh_amount: request.kwh_amount,
+        wallet_address: request.wallet_address.clone(),
+        meter_id: request.meter_id.clone(),
+        kwh_amount: request.kwh_amount.clone(),
         expiry_date: request.expiry_date,
-        metadata: request.metadata,
+        metadata: request.metadata.clone(),
     };
 
     let certificate = state.erc_service
@@ -272,11 +274,16 @@ pub async fn issue_certificate(
         })
         .unwrap_or(0.0);
 
+    // Get meter_id
+    let meter_id = request.meter_id.clone()
+        .ok_or_else(|| ApiError::BadRequest("meter_id is required for on-chain issuance".to_string()))?;
+
     // Mint certificate on-chain
     let blockchain_signature = state.erc_service
         .issue_certificate_on_chain(
             &certificate.certificate_id,
             &user_wallet,
+            &meter_id,
             kwh_amount_f64,
             &renewable_source,
             &validation_data,
