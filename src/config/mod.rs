@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::env;
 
 pub mod tokenization;
-pub use tokenization::TokenizationConfig;
-// Removed unused imports: ConfigError, ValidationError
+pub use tokenization::{TokenizationConfig, ValidationError};
+// Removed unused imports: ConfigError
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use anyhow::Result;
 use axum::{
@@ -10,6 +11,9 @@ use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
+
+// Import metrics for initialization
+// use crate::services::transaction_metrics::init_metrics; // Uncomment when metrics are used
 
 mod auth;
 mod config;
@@ -28,7 +32,7 @@ use auth::{jwt::ApiKeyService, jwt::JwtService};
 use config::Config;
 use handlers::{
     admin, audit, auth as auth_handlers, blockchain, blockchain_test, epochs, erc, governance,
-    health, meters, oracle, registry, token, trading, user_management, wallet_auth,
+    health, meters, oracle, registry, token, trading, transactions, user_management, wallet_auth,
 };
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -53,6 +57,7 @@ pub struct AppState {
     pub market_clearing_service: services::MarketClearingService,
     pub settlement_service: services::SettlementService,
     pub websocket_service: services::WebSocketService,
+    pub transaction_coordinator: services::TransactionCoordinator,
     // TODO: Fix meter_polling_service compilation errors
     // pub meter_polling_service: services::MeterPollingService,
     pub health_checker: services::HealthChecker,
@@ -102,10 +107,10 @@ async fn main() -> Result<()> {
     }
 
     // Run database migrations (PostgreSQL only - TimescaleDB has its own schema)
-    // TODO: Fix migration issue temporarily commented out for testing
+    // Temporarily disable migrations to run application
     // database::run_migrations(&db_pool).await?;
-    // info!("Database migrations completed successfully");
-    info!("⚠️  Database migrations skipped temporarily");
+    // info!("✅ Database migrations completed successfully");
+    info!("⚠️ Database migrations disabled");
 
     // Setup Redis connection with authentication support
     let redis_client = redis::Client::open(config.redis_url.as_str())?;
@@ -215,6 +220,18 @@ async fn main() -> Result<()> {
         services::SettlementService::new(db_pool.clone(), blockchain_service.clone());
     info!("✅ Settlement service initialized");
 
+    // Initialize transaction coordinator for unified tracking
+    let transaction_coordinator = services::TransactionCoordinator::new(
+        db_pool.clone(),
+        Arc::new(blockchain_service.clone()),
+        Arc::new(settlement_service.clone()),
+    );
+
+    // Initialize metrics
+    services::transaction_metrics::init_metrics();
+    info!("Prometheus metrics initialized");
+    info!("✅ Transaction coordinator initialized for unified tracking");
+
     // Initialize market clearing service (Phase 5) for epoch-based order management
     let market_clearing_service = services::MarketClearingService::new(db_pool.clone());
     info!("✅ Market clearing service initialized for epoch management");
@@ -258,6 +275,44 @@ async fn main() -> Result<()> {
                 error!("Error retrying settlements: {}", e);
             }
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
+
+    // Start transaction monitoring (every 5 seconds)
+    let tx_coordinator_clone = transaction_coordinator.clone();
+    tokio::spawn(async move {
+        info!("🔍 Transaction monitoring loop started");
+        loop {
+            match tx_coordinator_clone.monitor_pending_transactions().await {
+                Ok(count) => {
+                    if count > 0 {
+                        info!("Updated {} transaction statuses", count);
+                    }
+                }
+                Err(e) => {
+                    error!("Transaction monitoring failed: {}", e);
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
+
+    // Start failed transaction retry (every 30 seconds)
+    let tx_coordinator_clone2 = transaction_coordinator.clone();
+    tokio::spawn(async move {
+        info!("🔄 Failed transaction retry loop started");
+        loop {
+            match tx_coordinator_clone2.retry_failed_transactions(3).await {
+                Ok(count) => {
+                    if count > 0 {
+                        info!("Retried {} failed transactions", count);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed transaction retry failed: {}", e);
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         }
     });
 
@@ -313,6 +368,7 @@ async fn main() -> Result<()> {
         market_clearing_service,
         settlement_service,
         websocket_service: websocket_service.clone(),
+        transaction_coordinator,
         // TODO: Fix and re-enable meter_polling_service
         // meter_polling_service: services::MeterPollingService::new(
         //     db_pool.clone(),
@@ -332,7 +388,11 @@ async fn main() -> Result<()> {
     let public_routes = Router::new()
         // Health check routes
         .route("/health", get(health::health_check))
-        .route("/metrics", get(|| async { "# Metrics endpoint\n" }))
+        .route("/metrics", get(handlers::metrics::get_prometheus_metrics))
+        .route(
+            "/health/metrics",
+            get(handlers::metrics::get_health_with_metrics),
+        )
         // Public API routes
         .route("/api/auth/login", post(auth_handlers::login))
         .route("/api/auth/register", post(user_management::register))
@@ -459,7 +519,17 @@ async fn main() -> Result<()> {
                 )
                 .route("/governance/unpause", post(governance::emergency_unpause))
                 // Token admin routes
-                .route("/tokens/mint", post(token::mint_tokens))
+                .route("/admin/tokens/mint", post(token::mint_tokens))
+                // Transaction routes
+                .nest(
+                    "/api/tx",
+                    Router::new()
+                        .route("/{id}/status", get(transactions::get_transaction_status))
+                        .route("/user", get(transactions::get_user_transactions))
+                        .route("/history", get(transactions::get_transaction_history))
+                        .route("/stats", get(transactions::get_transaction_stats))
+                        .route("/{id}/retry", post(transactions::retry_transaction)),
+                )
                 // Trading admin routes
                 .route(
                     "/trading/match-orders",

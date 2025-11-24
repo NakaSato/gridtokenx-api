@@ -1,11 +1,14 @@
+use crate::models::transaction::{OrderType, TransactionType as TxType};
 use crate::services::priority_fee_service::{PriorityFeeService, TransactionType};
 use anyhow::{Result, anyhow};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSimulateTransactionConfig;
 use solana_sdk::{
-    instruction::Instruction,
+    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::{Keypair, Signature, Signer},
+    system_program,
+    sysvar::{clock, rent},
     transaction::Transaction,
 };
 use std::str::FromStr;
@@ -48,6 +51,440 @@ impl BlockchainService {
     /// Get the cluster name
     pub fn cluster(&self) -> &str {
         &self.cluster
+    }
+
+    /// Get the payer pubkey
+    pub fn payer_pubkey(&self) -> Pubkey {
+        // In a real implementation, this would load from secure storage
+        // For now, return a placeholder
+        "11111111111111111111111111111111112".parse().unwrap()
+    }
+
+    /// Build instruction for creating energy trade order
+    pub fn build_create_order_instruction(
+        &self,
+        market_pubkey: &str,
+        energy_amount: u64,
+        price_per_kwh: u64,
+        order_type: &str,
+        erc_certificate_id: Option<&str>,
+    ) -> Result<Instruction> {
+        // Parse program and market pubkeys
+        let program_id = Pubkey::from_str(TRADING_PROGRAM_ID)?;
+        let market = Pubkey::from_str(market_pubkey)?;
+
+        // Generate new order account
+        let order_keypair = Keypair::new();
+        let order_pubkey = order_keypair.pubkey();
+
+        // Get payer account
+        let payer = self.payer_pubkey();
+
+        // Find ERC certificate account if provided
+        let erc_certificate = if let Some(cert_id) = erc_certificate_id {
+            Some(self.get_erc_certificate_pubkey(cert_id)?)
+        } else {
+            None
+        };
+
+        // Build accounts array
+        let mut accounts = vec![
+            AccountMeta::new(market, false),
+            AccountMeta::new(order_pubkey, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ];
+
+        // Add ERC certificate if provided
+        if let Some(erc) = erc_certificate {
+            accounts.push(AccountMeta::new_readonly(erc, false));
+        }
+
+        // Build instruction data
+        let mut data = Vec::new();
+
+        // Add instruction discriminator based on order type
+        if order_type == "sell" {
+            data.extend_from_slice(&[1, 0, 0, 0]); // CreateSellOrder discriminator
+        } else {
+            data.extend_from_slice(&[2, 0, 0, 0]); // CreateBuyOrder discriminator
+        }
+
+        // Add parameters
+        data.extend_from_slice(&energy_amount.to_le_bytes());
+        data.extend_from_slice(&price_per_kwh.to_le_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for matching orders
+    pub fn build_match_orders_instruction(
+        &self,
+        market_pubkey: &str,
+        buy_order_pubkey: &str,
+        sell_order_pubkey: &str,
+        match_amount: u64,
+    ) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(TRADING_PROGRAM_ID)?;
+        let market = Pubkey::from_str(market_pubkey)?;
+        let buy_order = Pubkey::from_str(buy_order_pubkey)?;
+        let sell_order = Pubkey::from_str(sell_order_pubkey)?;
+
+        // Generate new trade record account
+        let trade_record_keypair = Keypair::new();
+        let trade_record_pubkey = trade_record_keypair.pubkey();
+
+        // Get payer account
+        let payer = self.payer_pubkey();
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(market, false),
+            AccountMeta::new(buy_order, false),
+            AccountMeta::new(sell_order, false),
+            AccountMeta::new(trade_record_pubkey, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[3, 0, 0, 0]); // MatchOrders discriminator
+        data.extend_from_slice(&match_amount.to_le_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for minting tokens
+    pub fn build_mint_instruction(&self, recipient: &str, amount: u64) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(ENERGY_TOKEN_PROGRAM_ID)?;
+        let recipient_pubkey = Pubkey::from_str(recipient)?;
+        let mint_pubkey = self.get_token_mint_pubkey()?;
+        let payer = self.payer_pubkey();
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(recipient_pubkey, false),
+            AccountMeta::new(mint_pubkey, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[1, 0, 0, 0]); // Mint discriminator
+        data.extend_from_slice(&amount.to_le_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for transferring tokens
+    pub fn build_transfer_instruction(
+        &self,
+        from: &str,
+        to: &str,
+        amount: u64,
+        token_mint: &str,
+    ) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(ENERGY_TOKEN_PROGRAM_ID)?;
+        let from_pubkey = Pubkey::from_str(from)?;
+        let to_pubkey = Pubkey::from_str(to)?;
+        let mint_pubkey = Pubkey::from_str(token_mint)?;
+        let payer = self.payer_pubkey();
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(from_pubkey, false),
+            AccountMeta::new(to_pubkey, false),
+            AccountMeta::new(mint_pubkey, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[2, 0, 0, 0]); // Transfer discriminator
+        data.extend_from_slice(&amount.to_le_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for casting a governance vote
+    pub fn build_vote_instruction(&self, proposal_id: u64, vote: bool) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(GOVERNANCE_PROGRAM_ID)?;
+        let payer = self.payer_pubkey();
+        let proposal_account = self.get_proposal_account_pubkey(proposal_id)?;
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(proposal_account, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[1, 0, 0, 0]); // Vote discriminator
+        data.extend_from_slice(&proposal_id.to_le_bytes());
+        data.push(if vote { 1 } else { 0 });
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for updating oracle price
+    pub fn build_update_price_instruction(
+        &self,
+        price_feed_id: &str,
+        price: u64,
+        confidence: u64,
+    ) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(ORACLE_PROGRAM_ID)?;
+        let payer = self.payer_pubkey();
+        let price_feed_account = self.get_price_feed_account_pubkey(price_feed_id)?;
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(price_feed_account, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(clock::id(), false),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[1, 0, 0, 0]); // UpdatePrice discriminator
+        data.extend_from_slice(&price.to_le_bytes());
+        data.extend_from_slice(&confidence.to_le_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Build instruction for updating registry
+    pub fn build_update_registry_instruction(
+        &self,
+        participant_id: &str,
+        update_data: &serde_json::Value,
+    ) -> Result<Instruction> {
+        // Parse pubkeys
+        let program_id = Pubkey::from_str(REGISTRY_PROGRAM_ID)?;
+        let payer = self.payer_pubkey();
+        let participant_account = self.get_participant_account_pubkey(participant_id)?;
+
+        // Build accounts array
+        let accounts = vec![
+            AccountMeta::new(participant_account, false),
+            AccountMeta::new_readonly(payer, true),
+            AccountMeta::new_readonly(system_program::id(), false),
+        ];
+
+        // Build instruction data
+        let mut data = Vec::new();
+        data.extend_from_slice(&[1, 0, 0, 0]); // UpdateParticipant discriminator
+        data.extend_from_slice(update_data.to_string().as_bytes());
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
+
+    /// Submit transaction to blockchain
+    pub async fn submit_transaction(&self, mut transaction: Transaction) -> Result<Signature> {
+        // In a real implementation, this would:
+        // 1. Simulate the transaction
+        // 2. Calculate appropriate priority fees
+        // 3. Sign the transaction
+        // 4. Submit to the network
+
+        // For now, we'll simulate this process
+
+        // Simulate transaction
+        let config = RpcSimulateTransactionConfig {
+            sig_verify: false,
+            replace_recent_blockhash: true,
+            ..Default::default()
+        };
+
+        let simulation = self
+            .rpc_client
+            .simulate_transaction_with_config(&transaction, config)
+            .await
+            .map_err(|e| anyhow!("Failed to simulate transaction: {}", e))?;
+
+        if let Some(err) = simulation.value.err {
+            return Err(anyhow!("Transaction simulation failed: {}", err));
+        }
+
+        // Sign transaction (simplified)
+        // In a real implementation, this would use secure key management
+        let keypair = Keypair::from_bytes(&[0; 64]).unwrap(); // Placeholder
+        transaction.sign(&[&keypair]);
+
+        // Submit transaction
+        let signature = self
+            .rpc_client
+            .send_and_confirm_transaction(&transaction)
+            .await
+            .map_err(|e| anyhow!("Failed to submit transaction: {}", e))?;
+
+        info!("Transaction submitted with signature: {}", signature);
+        Ok(signature)
+    }
+
+    /// Add priority fee to transaction
+    pub fn add_priority_fee(
+        &self,
+        transaction: &mut Transaction,
+        tx_type: TransactionType,
+        fee: u64,
+    ) -> Result<()> {
+        // In a real implementation, this would:
+        // 1. Calculate compute units needed
+        // 2. Calculate priority fee based on network congestion
+        // 3. Add priority fee instruction
+
+        // For now, we'll simulate this
+        debug!(
+            "Adding priority fee: {} lamports for transaction type: {:?}",
+            fee, tx_type
+        );
+
+        // Create compute budget instruction
+        let compute_budget_instruction =
+            solana_compute_budget::instruction::ComputeBudgetInstruction::new(200_000u64, 0u64)?;
+
+        // Create priority fee instruction
+        let priority_fee_instruction =
+            solana_compute_budget::instruction::ComputeBudgetInstruction::set_compute_unit_price(
+                fee,
+            )?;
+
+        // Insert instructions at the beginning of the transaction
+        transaction
+            .message
+            .instructions
+            .insert(0, compute_budget_instruction);
+        transaction
+            .message
+            .instructions
+            .insert(1, priority_fee_instruction);
+
+        Ok(())
+    }
+
+    /// Confirm transaction status
+    pub async fn confirm_transaction(&self, signature: &str) -> Result<bool> {
+        // Get transaction status
+        let signature = Signature::from_str(signature)?;
+        let status = self
+            .rpc_client
+            .get_signature_status(&signature)
+            .await
+            .map_err(|e| anyhow!("Failed to get transaction status: {}", e))?;
+
+        Ok(status.value.sanity_status == Some(solana_sdk::transaction::SanityStatus::Ok))
+    }
+
+    /// Get trade record from blockchain
+    pub async fn get_trade_record(
+        &self,
+        signature: &str,
+    ) -> Result<crate::models::transaction::TradeRecord> {
+        // In a real implementation, this would fetch the trade record
+        // from the blockchain using the transaction signature
+
+        // For now, we'll return a placeholder
+        Ok(crate::models::transaction::TradeRecord {
+            sell_order: "sell_order_placeholder".to_string(),
+            buy_order: "buy_order_placeholder".to_string(),
+            seller: "seller_placeholder".to_string(),
+            buyer: "buyer_placeholder".to_string(),
+            amount: 100,
+            price_per_kwh: 1000,
+            total_value: 100000,
+            fee_amount: 250,
+            executed_at: chrono::Utc::now().timestamp(),
+        })
+    }
+
+    // Helper methods
+
+    /// Get ERC certificate pubkey from certificate ID
+    fn get_erc_certificate_pubkey(&self, certificate_id: &str) -> Result<Pubkey> {
+        let (certificate_pubkey, _) = Pubkey::find_program_address(
+            &[b"certificate", certificate_id.as_bytes()],
+            &Pubkey::from_str(REGISTRY_PROGRAM_ID)?,
+        );
+
+        Ok(certificate_pubkey)
+    }
+
+    /// Get token mint pubkey
+    fn get_token_mint_pubkey(&self) -> Result<Pubkey> {
+        // In a real implementation, this would be configured or derived
+        "GRXTokenMint11111111111111111111111111"
+            .parse()
+            .map_err(|e| anyhow!("Failed to parse token mint pubkey: {}", e))
+    }
+
+    /// Get proposal account pubkey from proposal ID
+    fn get_proposal_account_pubkey(&self, proposal_id: u64) -> Result<Pubkey> {
+        let (proposal_pubkey, _) = Pubkey::find_program_address(
+            &[b"proposal", &proposal_id.to_le_bytes()],
+            &Pubkey::from_str(GOVERNANCE_PROGRAM_ID)?,
+        );
+
+        Ok(proposal_pubkey)
+    }
+
+    /// Get price feed account pubkey from price feed ID
+    fn get_price_feed_account_pubkey(&self, price_feed_id: &str) -> Result<Pubkey> {
+        let (price_feed_pubkey, _) = Pubkey::find_program_address(
+            &[b"price_feed", price_feed_id.as_bytes()],
+            &Pubkey::from_str(ORACLE_PROGRAM_ID)?,
+        );
+
+        Ok(price_feed_pubkey)
+    }
+
+    /// Get participant account pubkey from participant ID
+    fn get_participant_account_pubkey(&self, participant_id: &str) -> Result<Pubkey> {
+        let (participant_pubkey, _) = Pubkey::find_program_address(
+            &[b"participant", participant_id.as_bytes()],
+            &Pubkey::from_str(REGISTRY_PROGRAM_ID)?,
+        );
+
+        Ok(participant_pubkey)
     }
 
     /// Check if the service is healthy by querying the network
@@ -821,6 +1258,34 @@ impl BlockchainService {
         self.build_and_send_transaction(vec![instruction], &[authority])
             .await
     }
+
+    /// Mint tokens directly to a user's wallet
+    /// This is a convenience method that handles getting the authority,
+    /// ensuring the token account exists, and minting tokens
+    pub async fn mint_tokens_direct(&self, user_wallet: &Pubkey, amount: u64) -> Result<Signature> {
+        // Get authority keypair
+        let authority = self.get_authority_keypair().await?;
+
+        // Get energy token mint
+        let mint = Pubkey::from_str(
+            &std::env::var("ENERGY_TOKEN_MINT")
+                .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?,
+        )?;
+
+        // Ensure user has an associated token account
+        let user_token_account = self
+            .ensure_token_account_exists(&authority, user_wallet, &mint)
+            .await?;
+
+        // Call the original mint method
+        self.mint_energy_tokens(
+            &authority,
+            &user_token_account,
+            &mint,
+            amount as f64 / 1_000_000_000.0,
+        )
+        .await
+    }
 }
 
 /// Helper functions for transaction building
@@ -919,32 +1384,6 @@ pub mod transaction_utils {
             tokens_to_mint,
         })
     }
-
-    // TODO: Fix this function - it's outside of impl block
-    // pub async fn mint_tokens_direct(&self, user_wallet: &Pubkey, amount: u64) -> Result<Signature> {
-    //     // Get authority keypair
-    //     let authority = self.get_authority_keypair().await?;
-    //
-    //     // Get energy token mint
-    //     let mint = Pubkey::from_str(
-    //         &std::env::var("ENERGY_TOKEN_MINT")
-    //             .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?,
-    //     )?;
-    //
-    //     // Ensure user has an associated token account
-    //     let user_token_account = self
-    //         .ensure_token_account_exists(&authority, user_wallet, &mint)
-    //         .await?;
-    //
-    //     // Call the original mint method
-    //     self.mint_energy_tokens(
-    //         &authority,
-    //         &user_token_account,
-    //         &mint,
-    //         amount as f64 / 1_000_000_000.0,
-    //     )
-    //     .await
-    // }
 }
 
 #[cfg(test)]

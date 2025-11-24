@@ -17,9 +17,11 @@ pub struct MeterReading {
     pub submitted_at: Option<DateTime<Utc>>,
     pub minted: Option<bool>,
     pub mint_tx_signature: Option<String>,
-    /// NEW: Reference to meter_registry entry (for verified meters)
+    /// NEW: Reference to meter registry entry (for verified meters)
     pub meter_id: Option<Uuid>,
-    /// NEW: Verification status of the meter for this reading
+    /// NEW: Meter serial number
+    pub meter_serial: Option<String>,
+    /// NEW: Verification status of the meter for this reading (as string from database)
     pub verification_status: Option<String>,
 }
 
@@ -118,6 +120,7 @@ impl MeterService {
             minted: row.get("minted"),
             mint_tx_signature: row.get("mint_tx_signature"),
             meter_id: row.get("meter_id"),
+            meter_serial: row.get("meter_serial"),
             verification_status: row.get("verification_status"),
         };
 
@@ -237,6 +240,7 @@ impl MeterService {
                     minted: row.get("minted"),
                     mint_tx_signature: row.get("mint_tx_signature"),
                     meter_id: row.get("meter_id"),
+                    meter_serial: row.get("meter_serial"),
                     verification_status: row.get("verification_status"),
                 })
             })
@@ -348,6 +352,7 @@ impl MeterService {
                     minted: row.get("minted"),
                     mint_tx_signature: row.get("mint_tx_signature"),
                     meter_id: row.get("meter_id"),
+                    meter_serial: row.get("meter_serial"),
                     verification_status: row.get("verification_status"),
                 })
             })
@@ -424,6 +429,7 @@ impl MeterService {
                     minted: row.get("minted"),
                     mint_tx_signature: row.get("mint_tx_signature"),
                     meter_id: row.get("meter_id"),
+                    meter_serial: row.get("meter_serial"),
                     verification_status: row.get("verification_status"),
                 })
             })
@@ -468,6 +474,7 @@ impl MeterService {
             minted: row.get("minted"),
             mint_tx_signature: row.get("mint_tx_signature"),
             meter_id: row.get("meter_id"),
+            meter_serial: row.get("meter_serial"),
             verification_status: row.get("verification_status"),
         };
 
@@ -507,6 +514,7 @@ impl MeterService {
                 minted: row.get("minted"),
                 mint_tx_signature: row.get("mint_tx_signature"),
                 meter_id: row.get("meter_id"),
+                meter_serial: row.get("meter_serial"),
                 verification_status: row.get("verification_status"),
             },
             None => return Err(anyhow!("Reading not found")),

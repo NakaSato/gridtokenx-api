@@ -95,6 +95,10 @@ impl PriorityFeeService {
             TransactionType::OrderCreation => PriorityLevel::Low,
             TransactionType::ERCIssuance => PriorityLevel::Medium,
             TransactionType::WalletConnection => PriorityLevel::Low,
+            TransactionType::UserRegistration => PriorityLevel::Medium,
+            TransactionType::MeterRegistration => PriorityLevel::Medium,
+            TransactionType::MeterReading => PriorityLevel::Low,
+            TransactionType::TokenTransfer => PriorityLevel::Medium,
         }
     }
 
@@ -106,6 +110,10 @@ impl PriorityFeeService {
             TransactionType::OrderCreation => 100_000,
             TransactionType::ERCIssuance => 250_000,
             TransactionType::WalletConnection => 50_000,
+            TransactionType::UserRegistration => 100_000,
+            TransactionType::MeterRegistration => 120_000,
+            TransactionType::MeterReading => 80_000,
+            TransactionType::TokenTransfer => 100_000,
         }
     }
 }
@@ -118,6 +126,10 @@ pub enum TransactionType {
     OrderCreation,
     ERCIssuance,
     WalletConnection,
+    UserRegistration,
+    MeterRegistration,
+    MeterReading,
+    TokenTransfer,
 }
 
 impl TransactionType {
@@ -129,6 +141,10 @@ impl TransactionType {
             TransactionType::OrderCreation => "Trading order creation",
             TransactionType::ERCIssuance => "ERC certificate issuance",
             TransactionType::WalletConnection => "Wallet connection",
+            TransactionType::UserRegistration => "User registration on blockchain",
+            TransactionType::MeterRegistration => "Smart meter registration",
+            TransactionType::MeterReading => "Meter reading submission",
+            TransactionType::TokenTransfer => "Token transfer between accounts",
         }
     }
 
@@ -136,6 +152,7 @@ impl TransactionType {
     pub fn should_use_priority_fees(&self) -> bool {
         match self {
             TransactionType::WalletConnection => false, // Low importance
+            TransactionType::MeterReading => false,     // High volume, lower priority
             _ => true, // Most transactions benefit from priority fees
         }
     }

@@ -1,12 +1,12 @@
+pub mod auth;
 pub mod config;
 pub mod database;
+pub mod error;
 pub mod handlers;
 pub mod middleware;
 pub mod models;
 pub mod services;
 pub mod utils;
-pub mod error;
-pub mod auth;
 
 pub use config::Config;
 pub use error::ApiError;
@@ -30,6 +30,7 @@ pub struct AppState {
     pub market_clearing_engine: services::MarketClearingEngine,
     pub market_clearing_service: services::MarketClearingService,
     pub websocket_service: services::WebSocketService,
+    pub transaction_coordinator: services::TransactionCoordinator,
     pub health_checker: services::HealthChecker,
     pub audit_logger: services::AuditLogger,
 }
