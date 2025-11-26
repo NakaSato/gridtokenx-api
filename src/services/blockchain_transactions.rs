@@ -37,7 +37,7 @@ impl TransactionHandler {
     /// Get or create a connection from the pool
     async fn get_connection(&self) -> Arc<RpcClient> {
         let mut pool = self.connection_pool.write().await;
-        
+
         // Return existing connection if available
         if let Some(conn) = pool.pop() {
             debug!("Reusing existing connection from pool");
@@ -46,18 +46,14 @@ impl TransactionHandler {
 
         // Create new connection if pool is empty
         if pool.is_empty() {
-            let new_conn = Arc::new(RpcClient::new(
-                self.rpc_client.url()
-            ));
+            let new_conn = Arc::new(RpcClient::new(self.rpc_client.url()));
             pool.push(new_conn.clone());
             info!("Created new RPC connection (pool size: {})", pool.len());
             return new_conn;
         }
 
         // Create new connection and add to pool
-        let new_conn = Arc::new(RpcClient::new(
-                self.rpc_client.url()
-            ));
+        let new_conn = Arc::new(RpcClient::new(self.rpc_client.url()));
         pool.push(new_conn.clone());
         info!("Created new RPC connection (pool size: {})", pool.len());
         new_conn
@@ -97,8 +93,7 @@ impl TransactionHandler {
         let duration = start_time.elapsed();
         info!(
             "Transaction submitted successfully in {:?} (type: {:?})",
-            duration,
-            tx_type
+            duration, tx_type
         );
 
         Ok(signature)
@@ -119,10 +114,13 @@ impl TransactionHandler {
 
     /// Simulate transaction with enhanced validation
     pub async fn simulate_transaction(&self, transaction: &Transaction) -> Result<()> {
-        debug!("Simulating transaction with {} instructions", transaction.message.instructions.len());
+        debug!(
+            "Simulating transaction with {} instructions",
+            transaction.message.instructions.len()
+        );
 
         let conn = self.get_connection().await;
-        
+
         // Use RpcSimulateTransactionConfig with better validation
         let config = solana_client::rpc_config::RpcSimulateTransactionConfig {
             sig_verify: true,
@@ -138,7 +136,10 @@ impl TransactionHandler {
 
         if let Some(err) = simulation.value.err {
             warn!("Transaction simulation errors: {:?}", err);
-            return Err(anyhow!("Transaction simulation validation failed: {:?}", err));
+            return Err(anyhow!(
+                "Transaction simulation validation failed: {:?}",
+                err
+            ));
         }
 
         if let Some(logs) = &simulation.value.logs {
@@ -154,7 +155,11 @@ impl TransactionHandler {
     }
 
     /// Add priority fees to transaction based on type
-    async fn add_priority_fees(&self, _transaction: &mut Transaction, tx_type: TransactionType) -> Result<()> {
+    async fn add_priority_fees(
+        &self,
+        _transaction: &mut Transaction,
+        tx_type: TransactionType,
+    ) -> Result<()> {
         let priority_level = PriorityFeeService::recommend_priority_level(tx_type);
         let compute_limit = PriorityFeeService::recommend_compute_limit(tx_type);
         let fee = PriorityFeeService::estimate_fee_cost(priority_level, Some(compute_limit));
@@ -172,7 +177,7 @@ impl TransactionHandler {
         // let priority_fee_instruction = ComputeBudgetInstruction::set_compute_unit_price(fee);
         // transaction.message.instructions.insert(0, compute_budget_instruction);
         // transaction.message.instructions.insert(0, priority_fee_instruction);
-        
+
         Ok(())
     }
 
@@ -238,7 +243,9 @@ impl TransactionHandler {
         ];
 
         for path in key_paths {
-            if let Ok(keypair) = crate::services::blockchain_utils::BlockchainUtils::load_keypair_from_file(path) {
+            if let Ok(keypair) =
+                crate::services::blockchain_utils::BlockchainUtils::load_keypair_from_file(path)
+            {
                 info!("Loaded payer keypair from: {}", path);
                 return Ok(keypair);
             }
@@ -257,7 +264,10 @@ impl TransactionHandler {
         // Check for duplicate instructions
         let instruction_count = transaction.message.instructions.len();
         if instruction_count > 10 {
-            warn!("Transaction has {} instructions - consider batch optimization", instruction_count);
+            warn!(
+                "Transaction has {} instructions - consider batch optimization",
+                instruction_count
+            );
         }
 
         // Validate each instruction
@@ -283,7 +293,7 @@ impl TransactionHandler {
 
         loop {
             attempts += 1;
-            
+
             if attempts > 1 {
                 warn!("Transaction retry attempt {}/{}", attempts, max_retries);
             }
@@ -298,19 +308,24 @@ impl TransactionHandler {
                 .map_err(|e| anyhow!("Failed to sign transaction: {}", e))?;
 
             let conn = self.get_connection().await;
-            
-            match conn
-                .send_and_confirm_transaction(&transaction)
-            {
+
+            match conn.send_and_confirm_transaction(&transaction) {
                 Ok(sig) => {
                     info!("Transaction submitted successfully on attempt {}", attempts);
                     return Ok(sig);
                 }
                 Err(e) => {
-                    error!("Transaction submission failed on attempt {}: {}", attempts, e);
-                    
+                    error!(
+                        "Transaction submission failed on attempt {}: {}",
+                        attempts, e
+                    );
+
                     if attempts >= max_retries {
-                        return Err(anyhow!("Transaction failed after {} retries: {}", max_retries, e));
+                        return Err(anyhow!(
+                            "Transaction failed after {} retries: {}",
+                            max_retries,
+                            e
+                        ));
                     }
                 }
             }
@@ -351,7 +366,7 @@ impl TransactionHandler {
     /// Enhanced account balance queries with caching
     pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
         let cache_key = format!("balance:{}", pubkey);
-        
+
         // Check cache first
         if let Some(cached_balance) = self.get_cached_balance(&cache_key).await {
             debug!("Using cached balance for {}: {}", pubkey, cached_balance);
@@ -367,7 +382,25 @@ impl TransactionHandler {
         // Update cache with short TTL
         self.update_balance_cache(&cache_key, balance, 60).await;
 
+        self.return_connection(conn).await;
         Ok(balance)
+    }
+
+    /// Get token account balance
+    pub async fn get_token_account_balance(&self, token_account: &Pubkey) -> Result<u64> {
+        let conn = self.get_connection().await;
+
+        let balance_result = conn
+            .get_token_account_balance(token_account)
+            .map_err(|e| anyhow!("Failed to get token account balance: {}", e))?;
+
+        self.return_connection(conn).await;
+
+        // Parse amount as u64 (lamports/raw units)
+        balance_result
+            .amount
+            .parse::<u64>()
+            .map_err(|e| anyhow!("Failed to parse token amount: {}", e))
     }
 
     /// Simple in-memory balance cache
@@ -399,13 +432,14 @@ impl TransactionHandler {
 
     /// Confirm transaction status
     pub async fn confirm_transaction(&self, signature: &str) -> Result<bool> {
-        let sig = Signature::from_str(signature)
-            .map_err(|e| anyhow!("Invalid signature: {}", e))?;
-        
-        let status = self.rpc_client
+        let sig =
+            Signature::from_str(signature).map_err(|e| anyhow!("Invalid signature: {}", e))?;
+
+        let status = self
+            .rpc_client
             .get_signature_status(&sig)
             .map_err(|e| anyhow!("Failed to get signature status: {}", e))?;
-        
+
         Ok(status.is_some())
     }
 
@@ -451,10 +485,11 @@ impl TransactionHandler {
 
     /// Get transaction status
     pub async fn get_signature_status(&self, signature: &Signature) -> Result<Option<bool>> {
-        let status = self.rpc_client
+        let status = self
+            .rpc_client
             .get_signature_status(signature)
             .map_err(|e| anyhow!("Failed to get signature status: {}", e))?;
-        
+
         Ok(status.map(|s| s.is_ok()))
     }
 
@@ -474,10 +509,11 @@ impl TransactionHandler {
 
     /// Get account data
     pub async fn get_account_data(&self, pubkey: &Pubkey) -> Result<Vec<u8>> {
-        let account = self.rpc_client
+        let account = self
+            .rpc_client
             .get_account(pubkey)
             .map_err(|e| anyhow!("Failed to get account: {}", e))?;
-        
+
         Ok(account.data)
     }
 
@@ -495,16 +531,15 @@ impl TransactionHandler {
         instructions: Vec<solana_sdk::instruction::Instruction>,
         signers: &[&Keypair],
     ) -> Result<Signature> {
-        let recent_blockhash = self.rpc_client
+        let recent_blockhash = self
+            .rpc_client
             .get_latest_blockhash()
             .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?;
-        
-        let mut transaction = Transaction::new_with_payer(
-            &instructions,
-            Some(&signers[0].pubkey()),
-        );
+
+        let mut transaction =
+            Transaction::new_with_payer(&instructions, Some(&signers[0].pubkey()));
         transaction.sign(signers, recent_blockhash);
-        
+
         self.rpc_client
             .send_and_confirm_transaction(&transaction)
             .map_err(|e| anyhow!("Failed to send transaction: {}", e))
@@ -528,12 +563,12 @@ impl TransactionHandler {
         timeout_secs: u64,
     ) -> Result<bool> {
         let start = std::time::Instant::now();
-        
+
         loop {
             if start.elapsed().as_secs() >= timeout_secs {
                 return Ok(false);
             }
-            
+
             match self.rpc_client.get_signature_status(signature) {
                 Ok(Some(_)) => return Ok(true),
                 Ok(None) => {
@@ -556,11 +591,14 @@ impl TransactionHandler {
         max_retries: u32,
     ) -> Result<Signature> {
         let mut attempts = 0;
-        
+
         loop {
             attempts += 1;
-            
-            match self.build_and_send_transaction(instructions.clone(), signers).await {
+
+            match self
+                .build_and_send_transaction(instructions.clone(), signers)
+                .await
+            {
                 Ok(sig) => return Ok(sig),
                 Err(e) if attempts >= max_retries => {
                     return Err(anyhow!("Failed after {} retries: {}", max_retries, e));
@@ -579,14 +617,12 @@ impl TransactionHandler {
         instructions: Vec<solana_sdk::instruction::Instruction>,
         payer: &Pubkey,
     ) -> Result<Transaction> {
-        let _recent_blockhash = self.rpc_client
+        let _recent_blockhash = self
+            .rpc_client
             .get_latest_blockhash()
             .map_err(|e| anyhow!("Failed to get blockhash: {}", e))?;
-        
-        Ok(Transaction::new_with_payer(
-            &instructions,
-            Some(payer),
-        ))
+
+        Ok(Transaction::new_with_payer(&instructions, Some(payer)))
     }
 }
 
@@ -611,14 +647,22 @@ pub mod utils {
             return Err(anyhow!("Transfer amount cannot be zero"));
         }
 
-        if !is_valid_pubkey(from_pubkey) || !is_valid_pubkey(to_pubkey) || !is_valid_pubkey(mint_pubkey) {
+        if !is_valid_pubkey(from_pubkey)
+            || !is_valid_pubkey(to_pubkey)
+            || !is_valid_pubkey(mint_pubkey)
+        {
             return Err(anyhow!("Invalid public key in transfer instruction"));
         }
 
-        debug!("Creating transfer instruction: {} tokens from {} to {}", amount, from_pubkey, to_pubkey);
+        debug!(
+            "Creating transfer instruction: {} tokens from {} to {}",
+            amount, from_pubkey, to_pubkey
+        );
 
         // Return a placeholder - actual implementation would use spl_token
-        Err(anyhow!("Transfer instruction creation not yet implemented - type conflicts with anchor_lang"))
+        Err(anyhow!(
+            "Transfer instruction creation not yet implemented - type conflicts with anchor_lang"
+        ))
     }
 
     /// Validate a Solana public key
@@ -634,6 +678,8 @@ pub mod utils {
         _mint: &Pubkey,
     ) -> Result<Pubkey> {
         // Disabled due to type conflicts between solana_sdk and anchor_lang Pubkey types
-        Err(anyhow!("ATA creation not yet implemented - type conflicts with anchor_lang"))
+        Err(anyhow!(
+            "ATA creation not yet implemented - type conflicts with anchor_lang"
+        ))
     }
 }

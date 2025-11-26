@@ -175,6 +175,58 @@ pub async fn create_order(
             ApiError::Internal(e.to_string())
         })?;
 
+    // If selling, verify token balance
+    if order_side == OrderSide::Sell {
+        // Get user's wallet address
+        let user_row = sqlx::query("SELECT wallet_address FROM users WHERE id = $1")
+            .bind(user.0.sub)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
+
+        let wallet_address = match user_row {
+            Some(row) => {
+                let addr: Option<String> = row.get("wallet_address");
+                addr.ok_or_else(|| {
+                    ApiError::BadRequest(
+                        "User must have a wallet address to sell energy".to_string(),
+                    )
+                })?
+            }
+            None => return Err(ApiError::NotFound("User not found".to_string())),
+        };
+
+        // Get token mint
+        let mint_str = std::env::var("ENERGY_TOKEN_MINT")
+            .map_err(|_| ApiError::Internal("ENERGY_TOKEN_MINT not set".to_string()))?;
+
+        let wallet = solana_sdk::pubkey::Pubkey::from_str(&wallet_address)
+            .map_err(|_| ApiError::BadRequest("Invalid wallet address".to_string()))?;
+        let mint = solana_sdk::pubkey::Pubkey::from_str(&mint_str)
+            .map_err(|_| ApiError::Internal("Invalid mint address".to_string()))?;
+
+        // Get balance
+        let balance = state
+            .blockchain_service
+            .get_token_balance(&wallet, &mint)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to check token balance: {}", e)))?;
+
+        // Calculate required tokens
+        let required_tokens = state
+            .config
+            .tokenization
+            .kwh_to_tokens(payload.energy_amount)
+            .map_err(|e| ApiError::BadRequest(format!("Invalid energy amount: {}", e)))?;
+
+        if balance < required_tokens {
+            return Err(ApiError::BadRequest(format!(
+                "Insufficient token balance. Required: {}, Available: {}",
+                required_tokens, balance
+            )));
+        }
+    }
+
     // Set expiration to 24 hours from now
     let expires_at = now + chrono::Duration::hours(24);
 

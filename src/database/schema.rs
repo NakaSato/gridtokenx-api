@@ -20,7 +20,7 @@ pub mod types {
         Limit,
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type, ToSchema)]
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, sqlx::Type, ToSchema)]
     #[sqlx(type_name = "order_side", rename_all = "lowercase")]
     pub enum OrderSide {
         Buy,

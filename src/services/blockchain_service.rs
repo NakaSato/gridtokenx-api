@@ -29,7 +29,7 @@ impl BlockchainService {
 
         let rpc_client = Arc::new(RpcClient::new(rpc_url));
         let transaction_handler = TransactionHandler::new(Arc::clone(&rpc_client));
-        
+
         // Load payer from secure storage or use placeholder for development
         let payer = std::env::var("PAYER_PRIVATE_KEY")
             .ok()
@@ -38,7 +38,7 @@ impl BlockchainService {
                 warn!("Using placeholder payer key - set PAYER_PRIVATE_KEY env var for production");
                 "11111111111111111111111111111112".parse().unwrap()
             });
-        
+
         let instruction_builder = InstructionBuilder::new(payer);
 
         Ok(Self {
@@ -67,7 +67,9 @@ impl BlockchainService {
 
     /// Submit transaction to blockchain
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<Signature> {
-        self.transaction_handler.submit_transaction(transaction).await
+        self.transaction_handler
+            .submit_transaction(transaction)
+            .await
     }
 
     /// Add priority fee to transaction
@@ -77,12 +79,15 @@ impl BlockchainService {
         tx_type: TransactionType,
         fee: u64,
     ) -> Result<()> {
-        self.transaction_handler.add_priority_fee(transaction, tx_type, fee)
+        self.transaction_handler
+            .add_priority_fee(transaction, tx_type, fee)
     }
 
     /// Confirm transaction status
     pub async fn confirm_transaction(&self, signature: &str) -> Result<bool> {
-        self.transaction_handler.confirm_transaction(signature).await
+        self.transaction_handler
+            .confirm_transaction(signature)
+            .await
     }
 
     /// Get trade record from blockchain
@@ -100,7 +105,9 @@ impl BlockchainService {
 
     /// Request airdrop (devnet/localnet only)
     pub async fn request_airdrop(&self, pubkey: &Pubkey, lamports: u64) -> Result<Signature> {
-        self.transaction_handler.request_airdrop(pubkey, lamports).await
+        self.transaction_handler
+            .request_airdrop(pubkey, lamports)
+            .await
     }
 
     /// Get account balance in lamports
@@ -113,17 +120,37 @@ impl BlockchainService {
         self.transaction_handler.get_balance_sol(pubkey).await
     }
 
+    /// Get SPL token balance for a user
+    pub async fn get_token_balance(&self, owner: &Pubkey, mint: &Pubkey) -> Result<u64> {
+        // Calculate ATA address
+        let ata_address = self.calculate_ata_address(owner, mint)?;
+
+        // Check if ATA exists
+        if !self.account_exists(&ata_address).await? {
+            return Ok(0);
+        }
+
+        // Get balance
+        self.transaction_handler
+            .get_token_account_balance(&ata_address)
+            .await
+    }
+
     /// Send and confirm a transaction
     pub async fn send_and_confirm_transaction(
         &self,
         transaction: &Transaction,
     ) -> Result<Signature> {
-        self.transaction_handler.send_and_confirm_transaction(transaction).await
+        self.transaction_handler
+            .send_and_confirm_transaction(transaction)
+            .await
     }
 
     /// Get transaction status
     pub async fn get_signature_status(&self, signature: &Signature) -> Result<Option<bool>> {
-        self.transaction_handler.get_signature_status(signature).await
+        self.transaction_handler
+            .get_signature_status(signature)
+            .await
     }
 
     /// Get recent blockhash
@@ -221,7 +248,8 @@ impl BlockchainService {
 
     /// Build instruction for minting tokens
     pub fn build_mint_instruction(&self, recipient: &str, amount: u64) -> Result<Instruction> {
-        self.instruction_builder.build_mint_instruction(recipient, amount)
+        self.instruction_builder
+            .build_mint_instruction(recipient, amount)
     }
 
     /// Build instruction for transferring tokens
@@ -238,7 +266,8 @@ impl BlockchainService {
 
     /// Build instruction for casting a governance vote
     pub fn build_vote_instruction(&self, proposal_id: u64, vote: bool) -> Result<Instruction> {
-        self.instruction_builder.build_vote_instruction(proposal_id, vote)
+        self.instruction_builder
+            .build_vote_instruction(proposal_id, vote)
     }
 
     /// Build instruction for updating oracle price
@@ -294,7 +323,9 @@ impl BlockchainService {
     /// Simulate a transaction before sending
     /// Returns whether the simulation succeeded
     pub async fn simulate_transaction(&self, transaction: &Transaction) -> Result<bool> {
-        self.transaction_handler.simulate_transaction(transaction).await?;
+        self.transaction_handler
+            .simulate_transaction(transaction)
+            .await?;
         Ok(true)
     }
 
@@ -330,7 +361,9 @@ impl BlockchainService {
         instructions: Vec<Instruction>,
         payer: &Pubkey,
     ) -> Result<Transaction> {
-        self.transaction_handler.build_transaction(instructions, payer).await
+        self.transaction_handler
+            .build_transaction(instructions, payer)
+            .await
     }
 
     // ====================================================================
@@ -474,11 +507,7 @@ impl BlockchainService {
         timestamp: i64,
     ) -> Result<Signature> {
         let submit_instruction = BlockchainUtils::create_submit_meter_reading_instruction(
-            authority,
-            meter_id,
-            produced,
-            consumed,
-            timestamp,
+            authority, meter_id, produced, consumed, timestamp,
         )?;
 
         self.build_and_send_transaction(vec![submit_instruction], &[authority])
@@ -513,13 +542,15 @@ impl BlockchainService {
 
     // Helper method to calculate ATA address
     fn calculate_ata_address(&self, user_wallet: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
-        let ata_program_id =
-            Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")?;
-        let token_program_id =
-            Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")?;
+        let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")?;
+        let token_program_id = Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")?;
 
         let (ata_address, _bump) = Pubkey::find_program_address(
-            &[user_wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+            &[
+                user_wallet.as_ref(),
+                token_program_id.as_ref(),
+                mint.as_ref(),
+            ],
             &ata_program_id,
         );
 
