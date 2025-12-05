@@ -6,21 +6,21 @@ pub struct TokenService;
 
 impl TokenService {
     /// Generate a cryptographically secure random verification token
-    /// 
+    ///
     /// Returns a 32-byte random token encoded as a base58 string (similar to Solana addresses)
     /// This provides ~256 bits of entropy, making tokens virtually impossible to guess
     pub fn generate_verification_token() -> String {
-        let mut rng = rand::rng();
+        let mut rng = rand::thread_rng();
         let mut bytes = [0u8; 32];
         rng.fill(&mut bytes);
         bs58::encode(bytes).into_string()
     }
 
     /// Hash a token using SHA-256 for secure database storage
-    /// 
+    ///
     /// # Arguments
     /// * `token` - The plain text token to hash
-    /// 
+    ///
     /// # Returns
     /// Lowercase hexadecimal string representation of the SHA-256 hash
     pub fn hash_token(token: &str) -> String {
@@ -30,11 +30,11 @@ impl TokenService {
     }
 
     /// Verify that a plain text token matches a stored hash
-    /// 
+    ///
     /// # Arguments
     /// * `token` - The plain text token to verify
     /// * `hash` - The stored hash to compare against
-    /// 
+    ///
     /// # Returns
     /// `true` if the token matches the hash, `false` otherwise
     pub fn verify_token(token: &str, hash: &str) -> bool {
@@ -42,12 +42,12 @@ impl TokenService {
     }
 
     /// Generate a short numeric verification code (6 digits)
-    /// 
+    ///
     /// Useful for SMS or backup verification codes
     /// Less secure than full tokens but more user-friendly
     pub fn generate_short_code() -> String {
-        let mut rng = rand::rng();
-        let code: u32 = rng.random_range(100000..999999);
+        let mut rng = rand::thread_rng();
+        let code: u32 = rng.gen_range(100000..999999);
         code.to_string()
     }
 }
@@ -69,7 +69,11 @@ mod tests {
         assert_ne!(token1, token2);
 
         // Tokens should be base58 encoded (valid characters only)
-        assert!(token1.chars().all(|c| "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(c)));
+        assert!(
+            token1
+                .chars()
+                .all(|c| "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(c))
+        );
     }
 
     #[test]
@@ -89,7 +93,10 @@ mod tests {
         assert_ne!(hash, different_hash);
 
         // Hash should be lowercase hex
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(
+            hash.chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase())
+        );
     }
 
     #[test]
@@ -142,9 +149,7 @@ mod tests {
     fn test_hash_consistency() {
         // Same token should always produce same hash
         let token = "consistency_test_token";
-        let hashes: Vec<String> = (0..10)
-            .map(|_| TokenService::hash_token(token))
-            .collect();
+        let hashes: Vec<String> = (0..10).map(|_| TokenService::hash_token(token)).collect();
 
         let first_hash = &hashes[0];
         assert!(hashes.iter().all(|h| h == first_hash));

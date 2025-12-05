@@ -76,12 +76,16 @@ async fn main() -> Result<()> {
     // Load .env file first
     dotenvy::dotenv().ok();
 
+    println!("STARTING API GATEWAY WITH DEBUG LOGS - BUILD VERIFICATION");
+    println!("Current Directory: {:?}", std::env::current_dir());
+    println!(
+        "ENERGY_TOKEN_MINT Env Var: {:?}",
+        std::env::var("ENERGY_TOKEN_MINT")
+    );
+
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "api_gateway=debug,tower_http=debug".into()),
-        )
+        .with_env_filter(EnvFilter::from_default_env())
         .init();
 
     // Validate secrets and security configuration before proceeding

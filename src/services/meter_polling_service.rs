@@ -80,21 +80,30 @@ impl MeterPollingService {
 
     /// Process all unminted readings
     async fn process_unminted_readings(&self) -> Result<(), ApiError> {
+        info!("🔍 Polling cycle started - checking for unminted readings");
         debug!("Processing unminted readings");
 
         // Fetch unminted readings
+        info!(
+            "📊 Fetching up to {} unminted readings from database",
+            self.config.batch_size
+        );
         let readings = self
             .meter_service
             .get_unminted_readings(self.config.batch_size as i64)
             .await
-            .map_err(|e| ApiError::Internal(format!("Failed to fetch unminted readings: {}", e)))?;
+            .map_err(|e| {
+                error!("❌ Failed to fetch unminted readings: {}", e);
+                ApiError::Internal(format!("Failed to fetch unminted readings: {}", e))
+            })?;
 
         if readings.is_empty() {
+            info!("✅ No unminted readings found - polling cycle complete");
             debug!("No unminted readings found");
             return Ok(());
         }
 
-        info!("Found {} unminted readings to process", readings.len());
+        info!("🎯 Found {} unminted readings to process", readings.len());
 
         // Process readings in batches
         for batch in readings.chunks(self.config.max_transactions_per_batch) {
@@ -213,6 +222,37 @@ impl MeterPollingService {
             }
         };
 
+        // Skip negative readings (consumption) - these are handled by burn logic or ignored
+        if kwh_amount < 0.0 {
+            info!(
+                "Skipping negative reading {} ({} kWh)",
+                reading.id, kwh_amount
+            );
+            // Mark as minted so it doesn't clog the queue
+            if let Err(e) = self
+                .meter_service
+                .mark_as_minted(reading.id, "SKIPPED_NEGATIVE")
+                .await
+            {
+                error!(
+                    "Failed to mark negative reading {} as skipped: {}",
+                    reading.id, e
+                );
+                return MintResult {
+                    reading_id: reading.id,
+                    success: false,
+                    error: Some(format!("Database update failed: {}", e)),
+                    tx_signature: None,
+                };
+            }
+            return MintResult {
+                reading_id: reading.id,
+                success: true,
+                error: None,
+                tx_signature: Some("SKIPPED_NEGATIVE".to_string()),
+            };
+        }
+
         // Calculate token amount
         let token_amount = self.config.kwh_to_tokens(kwh_amount);
 
@@ -282,6 +322,112 @@ impl MeterPollingService {
                         },
                         reading.id
                     );
+
+                    // AUTOMATIC P2P ROUTING (Corporate Buyer)
+                    // Find a Corporate user (PEA/MEA) to transfer surplus to
+                    use crate::database::schema::types::UserRole;
+
+                    let corporate_user_result = sqlx::query_as::<_, (uuid::Uuid, String)>(
+                        "SELECT id, wallet_address FROM users WHERE role = $1 AND wallet_address IS NOT NULL LIMIT 1"
+                    )
+                    .bind(UserRole::Corporate)
+                    .fetch_optional(self.db.as_ref())
+                    .await;
+
+                    match corporate_user_result {
+                        Ok(Some((_corp_id, corp_wallet_str))) => {
+                            info!(
+                                "Found Corporate User (PEA/MEA) with wallet: {}",
+                                corp_wallet_str
+                            );
+
+                            if let Ok(corp_wallet) = Pubkey::from_str(&corp_wallet_str) {
+                                // Get authority keypair and mint from blockchain service
+                                let authority_result =
+                                    self.blockchain_service.get_authority_keypair().await;
+                                let mint_result = Pubkey::from_str(
+                                    &std::env::var("ENERGY_TOKEN_MINT").unwrap_or_else(|_| {
+                                        "12EMWFUfreZR7QkgEs3N34EoJFvQyLfx7iBB5JdbKvib".to_string()
+                                    }),
+                                );
+
+                                if let (Ok(authority_keypair), Ok(token_mint)) =
+                                    (authority_result, mint_result)
+                                {
+                                    // Ensure Corporate token account exists
+                                    if let Ok(corp_token_account) = self
+                                        .blockchain_service
+                                        .ensure_token_account_exists(
+                                            &authority_keypair,
+                                            &corp_wallet,
+                                            &token_mint,
+                                        )
+                                        .await
+                                    {
+                                        // Get user token account
+                                        // Parse user wallet from reading
+                                        if let Ok(user_wallet) =
+                                            Pubkey::from_str(&reading.wallet_address)
+                                        {
+                                            if let Ok(user_token_account) = self
+                                                .blockchain_service
+                                                .ensure_token_account_exists(
+                                                    &authority_keypair,
+                                                    &user_wallet,
+                                                    &token_mint,
+                                                )
+                                                .await
+                                            {
+                                                let kwh_f64 = kwh_amount.to_f64().unwrap_or(0.0);
+                                                info!(
+                                                    "Auto-Transferring {} kWh from User to Corporate User (PEA)",
+                                                    kwh_f64
+                                                );
+
+                                                let transfer_result = self
+                                                    .blockchain_service
+                                                    .transfer_energy_tokens(
+                                                        &authority_keypair,
+                                                        &user_token_account,
+                                                        &corp_token_account,
+                                                        &token_mint,
+                                                        kwh_f64,
+                                                    )
+                                                    .await;
+
+                                                match transfer_result {
+                                                    Ok(tsig) => info!(
+                                                        "Transfer to Corporate User successful: {}",
+                                                        tsig
+                                                    ),
+                                                    Err(e) => warn!(
+                                                        "Transfer to Corporate User failed: {}",
+                                                        e
+                                                    ),
+                                                }
+                                            } else {
+                                                warn!("Failed to ensure user token account exists");
+                                            }
+                                        } else {
+                                            warn!("Failed to parse user wallet address");
+                                        }
+                                    } else {
+                                        warn!("Failed to ensure Corporate token account exists");
+                                    }
+                                } else {
+                                    warn!("Failed to get authority keypair or mint");
+                                }
+                            } else {
+                                warn!("Invalid Corporate wallet address in database");
+                            }
+                        }
+                        Ok(None) => {
+                            info!("No Corporate user found. User holds surplus tokens (P2P mode).");
+                        }
+                        Err(e) => {
+                            error!("Failed to query for Corporate user: {}", e);
+                        }
+                    }
 
                     // Send WebSocket notification
                     // WebSocket notification would be sent here

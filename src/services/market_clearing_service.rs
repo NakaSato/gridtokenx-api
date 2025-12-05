@@ -569,8 +569,8 @@ impl MarketClearingService {
         .map_err(|e| ApiError::Database(e))?;
 
         if let (Some(buyer_wallet_str), Some(seller_wallet_str)) = (
-            buyer_wallet_row.wallet_address,
-            seller_wallet_row.wallet_address,
+            buyer_wallet_row.wallet_address.as_ref(),
+            seller_wallet_row.wallet_address.as_ref(),
         ) {
             // We wrap blockchain operations in a block to catch errors without failing the DB transaction
             // In a real system, this should be a robust distributed transaction or queue-based

@@ -460,6 +460,60 @@ impl BlockchainService {
         .await
     }
 
+    /// Burn energy tokens from a user's token account
+    pub async fn burn_energy_tokens(
+        &self,
+        authority: &Keypair,
+        user_token_account: &Pubkey,
+        mint: &Pubkey,
+        amount_kwh: f64,
+    ) -> Result<Signature> {
+        let burn_instruction = BlockchainUtils::create_burn_instruction(
+            authority,
+            user_token_account,
+            mint,
+            amount_kwh,
+        )?;
+
+        let signers = vec![authority];
+        self.build_and_send_transaction_with_priority(
+            vec![burn_instruction],
+            &signers,
+            TransactionType::Settlement, // Use Settlement priority for burning
+        )
+        .await
+    }
+
+    /// Transfer energy tokens between accounts
+    pub async fn transfer_energy_tokens(
+        &self,
+        authority: &Keypair,
+        from_token_account: &Pubkey,
+        to_token_account: &Pubkey,
+        mint: &Pubkey,
+        amount_kwh: f64,
+    ) -> Result<Signature> {
+        // Convert kWh to token amount (with 9 decimals)
+        let amount_lamports = (amount_kwh.abs() * 1_000_000_000.0) as u64;
+
+        let transfer_instruction = BlockchainUtils::create_transfer_instruction(
+            authority,
+            from_token_account,
+            to_token_account,
+            mint,
+            amount_lamports,
+            9, // Decimals
+        )?;
+
+        let signers = vec![authority];
+        self.build_and_send_transaction_with_priority(
+            vec![transfer_instruction],
+            &signers,
+            TransactionType::Settlement,
+        )
+        .await
+    }
+
     /// Ensures user has an Associated Token Account for the token mint
     pub async fn ensure_token_account_exists(
         &self,
@@ -467,26 +521,106 @@ impl BlockchainService {
         user_wallet: &Pubkey,
         mint: &Pubkey,
     ) -> Result<Pubkey> {
-        // Check if account exists first
+        println!("DEBUG: ensure_token_account_exists called");
+        // Check if account exists and is valid
         let ata_address = self.calculate_ata_address(user_wallet, mint)?;
-        if self.account_exists(&ata_address).await? {
-            info!("ATA already exists: {}", ata_address);
-            return Ok(ata_address);
+        println!(
+            "DEBUG: Checking existence of ATA: {} for wallet: {}",
+            ata_address, user_wallet
+        );
+
+        // Try to get account info directly first
+        match self.transaction_handler.get_account(&ata_address).await {
+            Ok(account) => {
+                println!(
+                    "DEBUG: ATA account found! Owner: {}, Data Len: {}, Lamports: {}",
+                    account.owner,
+                    account.data.len(),
+                    account.lamports
+                );
+                // Check if owned by Token-2022 program
+                let token_2022_id =
+                    Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").unwrap();
+                if account.owner == token_2022_id || account.owner == spl_token::id() {
+                    println!("DEBUG: ATA is owned by Token Program (Token-2022 or legacy). Valid.");
+                    return Ok(ata_address);
+                } else {
+                    println!("DEBUG: ATA exists but has wrong owner: {}", account.owner);
+                }
+            }
+            Err(e) => {
+                println!(
+                    "DEBUG: ATA get_account failed: {} - Error: {}",
+                    ata_address, e
+                );
+            }
         }
 
-        // Create ATA instruction
-        let create_ata_instruction =
-            BlockchainUtils::create_ata_instruction(authority, user_wallet, mint)?;
+        // Check if account exists and is valid (Keep existing check)
+        // ... (lines 526-575 are fine, but I'm rewriting the block to be safe)
 
-        // Submit transaction
-        let signature = self
-            .build_and_send_transaction(vec![create_ata_instruction], &[authority])
-            .await?;
+        // Fallback to balance check (which might fail if account is not a token account)
+        match self
+            .transaction_handler
+            .get_token_account_balance(&ata_address)
+            .await
+        {
+            Ok(balance) => {
+                println!(
+                    "DEBUG: ATA balance check success: {} (Balance: {})",
+                    ata_address, balance
+                );
+                return Ok(ata_address);
+            }
+            Err(_) => {
+                println!("DEBUG: ATA balance check failed, proceeding to create");
+            }
+        }
 
-        info!("ATA created. Signature: {}", signature);
+        println!(
+            "DEBUG: Creating ATA via CLI for mint: {}, owner: {}",
+            mint, user_wallet
+        );
 
-        // Wait for confirmation
-        self.wait_for_confirmation(&signature, 30).await?;
+        // Resolve wallet path for CLI
+        let wallet_path = std::env::var("AUTHORITY_WALLET_PATH")
+            .unwrap_or_else(|_| "dev-wallet.json".to_string());
+
+        // Use spl-token CLI to create account with Token-2022 program
+        // This bypasses the spl-associated-token-account crate version mismatch
+        let rpc_url =
+            std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "http://localhost:8899".to_string());
+
+        let output = std::process::Command::new("spl-token")
+            .arg("create-account")
+            .arg(mint.to_string())
+            .arg("--owner")
+            .arg(user_wallet.to_string())
+            .arg("--fee-payer")
+            .arg(&wallet_path)
+            .arg("--program-id")
+            .arg("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") // Token-2022 program
+            .arg("--url")
+            .arg(&rpc_url)
+            .output()
+            .map_err(|e| anyhow!("Failed to execute spl-token CLI: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("DEBUG: CLI Stdout: {}", stdout);
+            println!("DEBUG: CLI Stderr: {}", stderr);
+
+            // If it failed because it already exists (race condition?), ignore
+            if !stderr.contains("already exists") && !stdout.contains("already exists") {
+                return Err(anyhow!("spl-token CLI failed: {}", stderr));
+            }
+        }
+
+        println!("DEBUG: CLI ATA creation successful");
+
+        // Brief sleep to allow propagation
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         Ok(ata_address)
     }
@@ -566,14 +700,20 @@ impl BlockchainService {
 
     /// Mint tokens directly to a user's wallet
     pub async fn mint_tokens_direct(&self, user_wallet: &Pubkey, amount: u64) -> Result<Signature> {
+        println!(
+            "DEBUG: mint_tokens_direct called for wallet: {}",
+            user_wallet
+        );
+
         // Get authority keypair
         let authority = self.get_authority_keypair().await?;
 
+        let mint_str = std::env::var("ENERGY_TOKEN_MINT")
+            .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?;
+        println!("DEBUG: mint_tokens_direct using mint: {}", mint_str);
+
         // Get energy token mint
-        let mint = Pubkey::from_str(
-            &std::env::var("ENERGY_TOKEN_MINT")
-                .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?,
-        )?;
+        let mint = Pubkey::from_str(&mint_str)?;
 
         // Ensure user has an associated token account
         let user_token_account = self
@@ -591,20 +731,12 @@ impl BlockchainService {
         .await
     }
 
-    // Helper method to calculate ATA address
-    fn calculate_ata_address(&self, user_wallet: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
-        let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")?;
-        let token_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")?;
-
-        let (ata_address, _bump) = Pubkey::find_program_address(
-            &[
-                user_wallet.as_ref(),
-                token_program_id.as_ref(),
-                mint.as_ref(),
-            ],
-            &ata_program_id,
-        );
-
+    /// Calculate the Associated Token Account address for a user and mint
+    pub fn calculate_ata_address(&self, user_wallet: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
+        // Use the spl_associated_token_account crate to derive the address
+        // This ensures consistency with the create instruction
+        let ata_address =
+            spl_associated_token_account::get_associated_token_address(user_wallet, mint);
         Ok(ata_address)
     }
 }

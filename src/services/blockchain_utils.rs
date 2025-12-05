@@ -7,6 +7,10 @@ use solana_sdk::{
 use std::str::FromStr;
 use tracing::info;
 
+// Token Program IDs
+const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
 /// Utility functions for Solana blockchain operations
 pub struct BlockchainUtils;
 
@@ -74,53 +78,19 @@ impl BlockchainUtils {
         info!("Mint: {}", mint);
         info!("Amount (lamports): {}", amount_lamports);
 
-        let energy_token_program_id = Self::energy_token_program_id()?;
+        // Use Token-2022 MintTo instruction
+        // Pass Token-2022 program ID to spl_token instruction builder
+        let token_program_id = Self::get_token_program_id()?;
+        let mint_instruction = spl_token::instruction::mint_to(
+            &token_program_id,
+            mint,
+            user_token_account,
+            &authority.pubkey(),
+            &[],
+            amount_lamports,
+        )?;
 
-        // Derive token_info PDA
-        let (token_info_pda, _) =
-            Pubkey::find_program_address(&[b"token_info"], &energy_token_program_id);
-
-        // Build instruction data
-        let mut instruction_data = Vec::new();
-
-        // Discriminator for "mint_to_wallet"
-        // global:mint_to_wallet = 59e5acb52a926574
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(b"global:mint_to_wallet");
-        let hash = hasher.finalize();
-        instruction_data.extend_from_slice(&hash[0..8]);
-
-        // Arguments
-        instruction_data.extend_from_slice(&amount_lamports.to_le_bytes());
-
-        // Accounts
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(*mint, false),
-            solana_sdk::instruction::AccountMeta::new(token_info_pda, false),
-            solana_sdk::instruction::AccountMeta::new(*user_token_account, false),
-            solana_sdk::instruction::AccountMeta::new_readonly(*user_wallet, false),
-            solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true), // authority
-            solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),          // payer
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"),
-                false,
-            ), // Token 2022 program
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
-                false,
-            ), // Associated Token program
-            solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111111"),
-                false,
-            ), // System program
-        ];
-
-        Ok(Instruction::new_with_bytes(
-            energy_token_program_id,
-            &instruction_data,
-            accounts,
-        ))
+        Ok(mint_instruction)
     }
 
     /// Ensures user has an Associated Token Account for the token mint
@@ -130,46 +100,43 @@ impl BlockchainUtils {
         user_wallet: &Pubkey,
         mint: &Pubkey,
     ) -> Result<Instruction> {
-        // Calculate ATA address manually to avoid type conversion issues
-        // ATA = PDA of [associated_token_account_program_id, wallet, token_program_id, mint]
-        let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
-            .map_err(|e| anyhow!("Invalid ATA program ID: {}", e))?;
-
-        let token_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-            .map_err(|e| anyhow!("Invalid token program ID: {}", e))?;
-
-        let (ata_address, _bump) = Pubkey::find_program_address(
-            &[
-                user_wallet.as_ref(),
-                token_program_id.as_ref(),
-                mint.as_ref(),
-            ],
-            &ata_program_id,
-        );
-
         info!("Creating ATA instruction for user: {}", user_wallet);
 
-        // ATA creation instruction data (empty for associated token account creation)
-        let instruction_data = vec![];
+        // Use create_associated_token_account_idempotent to be safer and potentially avoid
+        // issues with the standard creation instruction on some validator versions
+        // Manual instruction construction to force legacy Create (opcode 0/empty) behavior
+        // accounts: [payer, ata, owner, mint, system_program, token_program]
+        let derived_ata =
+            spl_associated_token_account::get_associated_token_address(user_wallet, mint);
 
-        // Accounts for the instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true), // Payer (signer)
-            solana_sdk::instruction::AccountMeta::new(ata_address, false), // ATA account (writable)
-            solana_sdk::instruction::AccountMeta::new_readonly(*user_wallet, false), // Wallet owner (readonly)
-            solana_sdk::instruction::AccountMeta::new_readonly(*mint, false), // Mint (readonly)
+        let account_metas = vec![
+            solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),
+            solana_sdk::instruction::AccountMeta::new(derived_ata, false),
+            solana_sdk::instruction::AccountMeta::new_readonly(*user_wallet, false),
+            solana_sdk::instruction::AccountMeta::new_readonly(*mint, false),
             solana_sdk::instruction::AccountMeta::new_readonly(
-                solana_sdk::pubkey!("11111111111111111111111111111111"),
+                Pubkey::from_str("11111111111111111111111111111111").unwrap(),
                 false,
-            ), // System program
-            solana_sdk::instruction::AccountMeta::new_readonly(token_program_id, false), // Token program
+            ),
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                Self::get_token_program_id()?,
+                false,
+            ),
         ];
 
-        Ok(Instruction {
-            program_id: ata_program_id,
-            accounts,
-            data: instruction_data,
-        })
+        let instruction = Instruction {
+            program_id: spl_associated_token_account::id(),
+            accounts: account_metas,
+            data: vec![0], // Opcode 0 = Create
+        };
+
+        println!(
+            "DEBUG: Created manual ATA instruction with Program ID: {}",
+            instruction.program_id
+        );
+        println!("DEBUG: Instruction Data: {:?}", instruction.data);
+
+        Ok(instruction)
     }
 
     /// Transfer SPL tokens from one account to another
@@ -188,16 +155,22 @@ impl BlockchainUtils {
         );
 
         // Create transfer instruction manually to avoid type conflicts
-        let token_program_id =
-            solana_sdk::pubkey::Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-                .map_err(|e| anyhow!("Invalid token program ID: {}", e))?;
+        let token_program_id = Self::get_token_program_id()?;
 
         // Build instruction data for transfer_checked
-        // Instruction layout: discriminator(1) + amount(8) + decimals(1) + optional extra
+        // Instruction layout: discriminator(1) + amount(8) + decimals(1)
         let mut instruction_data = Vec::with_capacity(10);
-        instruction_data.push(3); // transfer_checked instruction discriminator
+        instruction_data.push(12); // transfer_checked instruction discriminator
         instruction_data.extend_from_slice(&amount.to_le_bytes());
         instruction_data.push(decimals);
+
+        info!(
+            "TransferChecked Accounts: Source={}, Mint={}, Dest={}, Auth={}",
+            from_token_account,
+            mint,
+            to_token_account,
+            authority.pubkey()
+        );
 
         // Build accounts for the instruction
         let accounts = vec![
@@ -207,7 +180,7 @@ impl BlockchainUtils {
             solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true),
         ];
 
-        Ok(solana_sdk::instruction::Instruction {
+        Ok(Instruction {
             program_id: token_program_id,
             accounts,
             data: instruction_data,
@@ -368,6 +341,60 @@ impl BlockchainUtils {
         ))
     }
 
+    /// Burn energy tokens (for energy consumption)
+    pub fn create_burn_instruction(
+        authority: &Keypair,
+        user_token_account: &Pubkey,
+        mint: &Pubkey,
+        amount_kwh: f64,
+    ) -> Result<Instruction> {
+        info!(
+            "Creating burn instruction for {} kWh from {}",
+            amount_kwh, user_token_account
+        );
+
+        // Convert kWh to token amount (with 9 decimals)
+        let amount_lamports = (amount_kwh.abs() * 1_000_000_000.0) as u64;
+
+        let energy_token_program_id = Self::energy_token_program_id()?;
+
+        // Derive token_info PDA
+        let (token_info_pda, _) =
+            Pubkey::find_program_address(&[b"token_info"], &energy_token_program_id);
+
+        // Build instruction data
+        let mut instruction_data = Vec::new();
+
+        // Discriminator for "burn_tokens"
+        // global:burn_tokens = 9b4d08130831626e
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"global:burn_tokens");
+        let hash = hasher.finalize();
+        instruction_data.extend_from_slice(&hash[0..8]);
+
+        // Arguments
+        instruction_data.extend_from_slice(&amount_lamports.to_le_bytes());
+
+        // Accounts
+        let accounts = vec![
+            solana_sdk::instruction::AccountMeta::new(token_info_pda, false),
+            solana_sdk::instruction::AccountMeta::new(*mint, false),
+            solana_sdk::instruction::AccountMeta::new(*user_token_account, false),
+            solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true),
+            solana_sdk::instruction::AccountMeta::new_readonly(
+                Self::get_token_program_id()?,
+                false,
+            ), // Token program
+        ];
+
+        Ok(Instruction::new_with_bytes(
+            energy_token_program_id,
+            &instruction_data,
+            accounts,
+        ))
+    }
+
     // Helper methods for program IDs
 
     /// Get Registry program ID
@@ -420,6 +447,15 @@ impl BlockchainUtils {
         program_id
             .parse()
             .map_err(|e| anyhow!("Failed to parse trading program ID: {}", e))
+    }
+
+    /// Get the correct Token Program ID
+    /// For now, we use Token-2022 since our mint is deployed with Token-2022
+    /// In a production system, you would query the mint account to detect its owner
+    pub fn get_token_program_id() -> Result<Pubkey> {
+        // Use Token-2022 program ID since our energy token mint uses Token-2022
+        Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
+            .map_err(|e| anyhow!("Failed to parse token program ID: {}", e))
     }
 }
 
@@ -482,8 +518,7 @@ pub mod transaction_utils {
             (kwh_amount * kwh_to_token_ratio * 10_f64.powi(decimals as i32)) as u64;
 
         // Get or create associated token account
-        let token_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-            .map_err(|e| anyhow!("Invalid token program ID: {}", e))?;
+        let token_program_id = BlockchainUtils::get_token_program_id()?;
 
         let ata_program_id = Pubkey::from_str("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
             .map_err(|e| anyhow!("Invalid ATA program ID: {}", e))?;

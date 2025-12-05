@@ -515,6 +515,16 @@ impl TransactionHandler {
             .map_err(|e| anyhow!("Failed to get slot: {}", e))
     }
 
+    /// Get account info
+    pub async fn get_account(&self, pubkey: &Pubkey) -> Result<solana_sdk::account::Account> {
+        let conn = self.get_connection().await;
+        let account = conn
+            .get_account(pubkey)
+            .map_err(|e| anyhow!("Failed to get account: {}", e))?;
+        self.return_connection(conn).await;
+        Ok(account)
+    }
+
     /// Get account data
     pub async fn get_account_data(&self, pubkey: &Pubkey) -> Result<Vec<u8>> {
         let account = self

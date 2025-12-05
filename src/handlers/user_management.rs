@@ -4,6 +4,8 @@ use axum::{
     response::Json,
 };
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
+use tracing::{error, info};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
@@ -164,6 +166,12 @@ pub async fn register(
 
     // Generate verification token
     let token = crate::services::TokenService::generate_verification_token();
+    // Log token for testing purposes
+    info!(
+        "Verification token generated for {}: {}",
+        request.email, token
+    );
+
     let token_hash = crate::services::TokenService::hash_token(&token);
 
     // Calculate expiration time from config
@@ -209,7 +217,8 @@ pub async fn register(
             }
             Err(e) => {
                 // Log failed email send but don't fail registration
-                tracing::error!("Failed to send verification email: {}", e);
+                use tracing::{error, info};
+                error!("Failed to send verification email: {}", e);
                 let _ = log_user_activity(
                     &state.db,
                     user_id,
@@ -895,6 +904,10 @@ pub struct RegisterMeterRequest {
     #[schema(example = "METER-12345")]
     pub meter_serial: String,
 
+    #[validate(length(min = 32, max = 64))]
+    #[schema(example = "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP8")]
+    pub meter_public_key: Option<String>, // Base58 encoded Ed25519 public key
+
     #[validate(length(min = 1, max = 50))]
     #[schema(example = "solar")]
     pub meter_type: Option<String>,
@@ -983,23 +996,67 @@ pub async fn register_meter_handler(
         ));
     }
 
-    // Register meter via service
-    let meter = state
-        .meter_verification_service
-        .register_meter_simple(
-            user.0.sub,
-            request.meter_serial.clone(),
-            request.meter_type,
-            request.location_address,
-        )
-        .await
-        .map_err(|e| {
-            if e.to_string().contains("already registered") {
-                ApiError::BadRequest(e.to_string())
-            } else {
-                ApiError::Internal(format!("Failed to register meter: {}", e))
-            }
-        })?;
+    // Validate public key if provided
+    let meter_key_hash = if let Some(ref public_key) = request.meter_public_key {
+        // Validate public key format (base58, should decode to 32 bytes)
+        let public_key_bytes = bs58::decode(public_key)
+            .into_vec()
+            .map_err(|e| ApiError::BadRequest(format!("Invalid public key base58: {}", e)))?;
+
+        if public_key_bytes.len() != 32 {
+            return Err(ApiError::BadRequest(format!(
+                "Invalid public key length: expected 32 bytes, got {}",
+                public_key_bytes.len()
+            )));
+        }
+
+        // Hash the public key for storage
+        Some(format!("{:x}", sha2::Sha256::digest(&public_key_bytes)))
+    } else {
+        None
+    };
+
+    // Check if meter already registered
+    let existing = sqlx::query!(
+        "SELECT id FROM meter_registry WHERE meter_serial = $1",
+        request.meter_serial
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
+
+    if existing.is_some() {
+        return Err(ApiError::BadRequest(
+            "Meter serial number already registered".to_string(),
+        ));
+    }
+
+    // Insert meter registration with public key
+    let meter_id = sqlx::query_scalar!(
+        r#"
+        INSERT INTO meter_registry (
+            user_id,
+            meter_serial,
+            meter_key_hash,
+            meter_public_key,
+            verification_status,
+            meter_type,
+            location_address,
+            created_at,
+            updated_at
+        ) VALUES ($1, $2, $3, $4, 'pending', $5, $6, NOW(), NOW())
+        RETURNING id
+        "#,
+        user.0.sub,
+        request.meter_serial,
+        meter_key_hash,
+        request.meter_public_key,
+        request.meter_type,
+        request.location_address
+    )
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| ApiError::Internal(format!("Failed to register meter: {}", e)))?;
 
     // Log activity
     let _ = log_user_activity(
@@ -1007,8 +1064,9 @@ pub async fn register_meter_handler(
         user.0.sub,
         "meter_registered".to_string(),
         Some(serde_json::json!({
-            "meter_id": meter.id,
-            "meter_serial": meter.meter_serial
+            "meter_id": meter_id,
+            "meter_serial": request.meter_serial,
+            "has_public_key": request.meter_public_key.is_some()
         })),
         None,
         None,
@@ -1016,10 +1074,10 @@ pub async fn register_meter_handler(
     .await;
 
     let response = RegisterMeterResponse {
-        meter_id: meter.id,
-        meter_serial: meter.meter_serial,
+        meter_id,
+        meter_serial: request.meter_serial,
         wallet_address: user_info.wallet_address,
-        verification_status: meter.verification_status,
+        verification_status: "pending".to_string(),
         message: "Meter registered successfully. Status is pending until verified by admin."
             .to_string(),
     };

@@ -12,6 +12,7 @@ pub mod erc;
 pub mod governance;
 pub mod health;
 pub mod market_data;
+// pub mod meter_registration;  // Using user_management handlers instead
 pub mod meter_verification;
 pub mod meters;
 pub mod metrics;

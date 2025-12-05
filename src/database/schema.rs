@@ -11,6 +11,9 @@ pub mod types {
     pub enum UserRole {
         User,
         Admin,
+        Prosumer,
+        Consumer,
+        Corporate,
     }
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]

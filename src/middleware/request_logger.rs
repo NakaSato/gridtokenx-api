@@ -17,6 +17,7 @@ pub async fn request_logger_middleware(request: Request, next: Next) -> Response
     let start = Instant::now();
 
     // Log request
+    println!("DEBUG: Request Logger Middleware Hit: {} {}", method, uri);
     info!(
         request_id = %request_id,
         method = %method,
@@ -42,7 +43,7 @@ pub async fn request_logger_middleware(request: Request, next: Next) -> Response
 
     // Execute the request
     let response = next.run(request).await;
-    
+
     let status = response.status();
     let duration = start.elapsed();
 
@@ -92,10 +93,9 @@ pub async fn request_logger_middleware(request: Request, next: Next) -> Response
 
     // Add request ID to response headers for tracing
     let (mut parts, body) = response.into_parts();
-    parts.headers.insert(
-        "X-Request-ID",
-        request_id.parse().unwrap(),
-    );
+    parts
+        .headers
+        .insert("X-Request-ID", request_id.parse().unwrap());
 
     Response::from_parts(parts, body)
 }
@@ -104,10 +104,10 @@ pub async fn request_logger_middleware(request: Request, next: Next) -> Response
 pub async fn auth_logger_middleware(request: Request, next: Next) -> Response {
     let uri = request.uri().clone();
     let method = request.method().clone();
-    
+
     // Extract body for logging (if it's a POST request)
     let (parts, body) = request.into_parts();
-    
+
     // Log authentication attempt
     info!(
         method = %method,
@@ -117,7 +117,7 @@ pub async fn auth_logger_middleware(request: Request, next: Next) -> Response {
 
     // Reconstruct request
     let request = Request::from_parts(parts, body);
-    
+
     // Execute the request
     let response = next.run(request).await;
     let status = response.status();
@@ -208,7 +208,7 @@ pub async fn trading_logger_middleware(request: Request, next: Next) -> Response
 /// WebSocket connection logging middleware
 pub async fn websocket_logger_middleware(request: Request, next: Next) -> Response {
     let headers = request.headers().clone();
-    
+
     // Extract user info
     let user_info = extract_user_info(&headers).unwrap_or_else(|| "anonymous".to_string());
 
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn test_extract_user_info() {
         let mut headers = HeaderMap::new();
-        
+
         // Test without authorization header
         assert_eq!(extract_user_info(&headers), None);
 

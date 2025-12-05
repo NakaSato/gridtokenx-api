@@ -1,17 +1,18 @@
-use axum::{
-    extract::State,
-    http::{header::AUTHORIZATION, StatusCode, Request},
-    middleware::Next,
-    response::Response,
-    body::Body,
-};
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
+use axum::{
+    body::Body,
+    extract::State,
+    http::{Request, StatusCode, header::AUTHORIZATION},
+    middleware::Next,
+    response::Response,
+};
+use tracing::info;
 use uuid::Uuid;
 
+use crate::AppState;
 use crate::auth::{Claims, Role};
 use crate::error::{ApiError, Result};
-use crate::AppState;
 
 /// JWT Authentication middleware
 pub async fn auth_middleware(
@@ -30,18 +31,47 @@ pub async fn auth_middleware(
         }
         _ => {
             // Check for X-API-Key header
-            if let Some(api_key) = request.headers().get("X-API-Key").and_then(|h| h.to_str().ok()) {
-                 // Check if it matches engineering API key
-                 if api_key == state.config.engineering_api_key {
-                     // Create synthetic claims for simulator
-                     let claims = Claims::new(
-                         Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap(), // Use nil UUID for simulator
-                         "simulator".to_string(),
-                         "ami".to_string(), // Use AMI role
-                     );
-                     request.extensions_mut().insert(claims);
-                     return next.run(request).await;
-                 }
+            if let Some(api_key) = request
+                .headers()
+                .get("X-API-Key")
+                .and_then(|h| h.to_str().ok())
+            {
+                // Check if it matches engineering API key
+                if api_key == state.config.engineering_api_key {
+                    // Check for impersonation (only allowed with Engineering Key)
+                    info!("Auth Middleware: Checking for X-Impersonate-User header");
+                    for (name, value) in request.headers() {
+                        info!("Header: {} = {:?}", name, value);
+                    }
+
+                    let user_id = if let Some(impersonate_id) = request
+                        .headers()
+                        .get("X-Impersonate-User")
+                        .and_then(|h| h.to_str().ok())
+                    {
+                        info!("Auth Middleware: Impersonating user {}", impersonate_id);
+                        Uuid::parse_str(impersonate_id).unwrap_or_else(|_| {
+                            info!(
+                                "Auth Middleware: Failed to parse impersonation ID, falling back"
+                            );
+                            Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap()
+                        })
+                    } else {
+                        info!(
+                            "Auth Middleware: No impersonation header found, using default simulator user"
+                        );
+                        Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap()
+                    };
+
+                    // Create synthetic claims for simulator/impersonated user
+                    let claims = Claims::new(
+                        user_id,
+                        "simulator".to_string(),
+                        "ami".to_string(), // Use AMI role
+                    );
+                    request.extensions_mut().insert(claims);
+                    return next.run(request).await;
+                }
             }
 
             return Response::builder()
@@ -52,15 +82,50 @@ pub async fn auth_middleware(
     };
 
     // Check if token matches engineering API key (Simulator sends it as Bearer token)
+    // info!("Auth Middleware: Received token: '{}', Expected: '{}'", token, state.config.engineering_api_key);
     if token == state.config.engineering_api_key {
-         // Create synthetic claims for simulator
-         let claims = Claims::new(
-             Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap(), // Use nil UUID for simulator
-             "simulator".to_string(),
-             "ami".to_string(), // Use AMI role
-         );
-         request.extensions_mut().insert(claims);
-         return next.run(request).await;
+        info!("Auth Middleware: Engineering API key matched (Bearer)!");
+
+        // Debug headers
+        info!("Auth Middleware (Bearer): Checking for X-Impersonate-User header");
+        for (name, value) in request.headers() {
+            info!("Header: {} = {:?}", name, value);
+        }
+
+        // Check for impersonation (also allowed with Engineering Key via Bearer)
+        let user_id = if let Some(impersonate_id) = request
+            .headers()
+            .get("X-Impersonate-User")
+            .and_then(|h| h.to_str().ok())
+        {
+            info!(
+                "Auth Middleware (Bearer): Impersonating user {}",
+                impersonate_id
+            );
+            Uuid::parse_str(impersonate_id).unwrap_or_else(|_| {
+                info!("Auth Middleware (Bearer): Failed to parse impersonation ID, falling back");
+                Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap()
+            })
+        } else {
+            info!(
+                "Auth Middleware (Bearer): No impersonation header found, using default simulator user"
+            );
+            Uuid::parse_str("63c1d015-6765-4843-9ca3-5ba21ee54d7e").unwrap()
+        };
+
+        // Create synthetic claims for simulator
+        let claims = Claims::new(
+            user_id,
+            "simulator".to_string(),
+            "ami".to_string(), // Use AMI role
+        );
+        request.extensions_mut().insert(claims);
+        return next.run(request).await;
+    } else {
+        info!(
+            "Auth Middleware: Token mismatch. Received: '{}', Expected: '{}'",
+            token, state.config.engineering_api_key
+        );
     }
 
     match state.jwt_service.decode_token(token) {
@@ -112,7 +177,10 @@ where
 {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> std::result::Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
         let claims = parts
             .extensions
             .get::<Claims>()
@@ -137,7 +205,10 @@ async fn verify_api_key(state: &AppState, key: &str) -> Result<crate::auth::ApiK
         .map_err(|e| ApiError::Internal(format!("Database error: {}", e)))?;
 
     for api_key_row in api_keys {
-        if state.api_key_service.verify_key(key, &api_key_row.key_hash)? {
+        if state
+            .api_key_service
+            .verify_key(key, &api_key_row.key_hash)?
+        {
             // Update last_used_at
             let _ = sqlx::query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1")
                 .bind(api_key_row.id)
@@ -148,8 +219,7 @@ async fn verify_api_key(state: &AppState, key: &str) -> Result<crate::auth::ApiK
                 id: api_key_row.id,
                 key_hash: api_key_row.key_hash,
                 name: api_key_row.name,
-                permissions: serde_json::from_value(api_key_row.permissions)
-                    .unwrap_or_default(),
+                permissions: serde_json::from_value(api_key_row.permissions).unwrap_or_default(),
                 is_active: api_key_row.is_active,
                 created_at: api_key_row.created_at,
                 last_used_at: api_key_row.last_used_at,

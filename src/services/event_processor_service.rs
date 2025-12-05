@@ -374,7 +374,7 @@ impl EventProcessorService {
             signature,
             slot as i64,
             block_time.map(|t| t as f64),
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token program
+            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 program
             event_data
         )
         .execute(&*self.db)
