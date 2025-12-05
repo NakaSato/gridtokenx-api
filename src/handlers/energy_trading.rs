@@ -10,14 +10,13 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::database::schema::types::OrderSide;
 use crate::error::{ApiError, Result};
-use crate::utils::{PaginationMeta, PaginationParams, SortOrder, validation::Validator};
+use crate::utils::{validation::Validator, PaginationMeta, PaginationParams, SortOrder};
+use crate::AppState;
 
 // Helper to parse BigDecimal from string
-use solana_sdk::signer::Signer;
 use std::str::FromStr;
 
 // ==================== REQUEST/RESPONSE TYPES ====================
@@ -241,7 +240,7 @@ pub async fn create_order(
     // Use a default market address or load from env
     // In a real app, this would be the address of the initialized Market account
     let market_pubkey = std::env::var("MARKET_PUBKEY")
-        .unwrap_or_else(|_| "GZnqNTJsre6qB4pWCQRE9FiJU2GUeBtBDPp6s7zosctk".to_string());
+        .unwrap_or_else(|_| "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb".to_string());
 
     // Convert to appropriate units
     // Energy: kWh -> Wh (x1000)

@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use solana_sdk::sysvar::clock;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
@@ -15,7 +15,7 @@ pub const REGISTRY_PROGRAM_ID: &str = "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW
 pub const ORACLE_PROGRAM_ID: &str = "DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE";
 pub const GOVERNANCE_PROGRAM_ID: &str = "4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe";
 pub const ENERGY_TOKEN_PROGRAM_ID: &str = "94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur";
-pub const TRADING_PROGRAM_ID: &str = "GZnqNTJsre6qB4pWCQRE9FiJU2GUeBtBDPp6s7zosctk";
+pub const TRADING_PROGRAM_ID: &str = "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb";
 
 /// Instruction builder for Solana programs
 #[derive(Clone, Debug)]

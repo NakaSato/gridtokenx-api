@@ -1,8 +1,9 @@
+use crate::config::SolanaProgramsConfig;
 use crate::services::blockchain_instructions::InstructionBuilder;
 use crate::services::blockchain_transactions::TransactionHandler;
 use crate::services::blockchain_utils::BlockchainUtils;
 use crate::services::priority_fee_service::TransactionType;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     instruction::Instruction,
@@ -22,6 +23,8 @@ pub struct BlockchainService {
     instruction_builder: InstructionBuilder,
     rpc_client: Arc<RpcClient>,
     cluster: String,
+    /// Configurable program IDs loaded from environment
+    program_ids: SolanaProgramsConfig,
 }
 
 impl std::fmt::Debug for BlockchainService {
@@ -31,13 +34,14 @@ impl std::fmt::Debug for BlockchainService {
             .field("instruction_builder", &self.instruction_builder)
             .field("rpc_client", &"RpcClient")
             .field("cluster", &self.cluster)
+            .field("program_ids", &self.program_ids)
             .finish()
     }
 }
 
 impl BlockchainService {
-    /// Create a new blockchain service
-    pub fn new(rpc_url: String, cluster: String) -> Result<Self> {
+    /// Create a new blockchain service with program IDs from config
+    pub fn new(rpc_url: String, cluster: String, program_ids: SolanaProgramsConfig) -> Result<Self> {
         info!("Initializing blockchain service for cluster: {}", cluster);
 
         let rpc_client = Arc::new(RpcClient::new(rpc_url));
@@ -49,7 +53,10 @@ impl BlockchainService {
             .and_then(|key| key.parse().ok())
             .unwrap_or_else(|| {
                 warn!("Using placeholder payer key - set PAYER_PRIVATE_KEY env var for production");
-                "11111111111111111111111111111112".parse().unwrap()
+                // This is a well-known placeholder key, parse should never fail
+                "11111111111111111111111111111112"
+                    .parse()
+                    .expect("hardcoded placeholder pubkey is invalid")
             });
 
         let instruction_builder = InstructionBuilder::new(payer);
@@ -59,6 +66,7 @@ impl BlockchainService {
             instruction_builder,
             rpc_client,
             cluster,
+            program_ids,
         })
     }
 
@@ -76,7 +84,9 @@ impl BlockchainService {
     pub fn payer_pubkey(&self) -> Pubkey {
         // In a real implementation, this would load from secure storage
         // For now, return a placeholder
-        "11111111111111111111111111111111112".parse().unwrap()
+        "11111111111111111111111111111111112"
+            .parse()
+            .expect("hardcoded placeholder pubkey is invalid")
     }
 
     /// Submit transaction to blockchain
@@ -192,34 +202,34 @@ impl BlockchainService {
         BlockchainUtils::parse_pubkey(pubkey_str)
     }
 
-    /// Get Registry program ID
-    pub fn registry_program_id() -> Result<Pubkey> {
-        Pubkey::from_str("2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7")
-            .map_err(|e| anyhow!("Invalid Registry Program ID: {}", e))
+    /// Get Registry program ID from config
+    pub fn registry_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.program_ids.registry_program_id)
+            .map_err(|e| anyhow!("Invalid Registry Program ID '{}': {}", self.program_ids.registry_program_id, e))
     }
 
-    /// Get Oracle program ID
-    pub fn oracle_program_id() -> Result<Pubkey> {
-        Pubkey::from_str("DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE")
-            .map_err(|e| anyhow!("Invalid Oracle Program ID: {}", e))
+    /// Get Oracle program ID from config
+    pub fn oracle_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.program_ids.oracle_program_id)
+            .map_err(|e| anyhow!("Invalid Oracle Program ID '{}': {}", self.program_ids.oracle_program_id, e))
     }
 
-    /// Get Governance program ID
-    pub fn governance_program_id() -> Result<Pubkey> {
-        Pubkey::from_str("4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe")
-            .map_err(|e| anyhow!("Invalid Governance Program ID: {}", e))
+    /// Get Governance program ID from config
+    pub fn governance_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.program_ids.governance_program_id)
+            .map_err(|e| anyhow!("Invalid Governance Program ID '{}': {}", self.program_ids.governance_program_id, e))
     }
 
-    /// Get Energy Token program ID
-    pub fn energy_token_program_id() -> Result<Pubkey> {
-        Pubkey::from_str("94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur")
-            .map_err(|e| anyhow!("Invalid Energy Token Program ID: {}", e))
+    /// Get Energy Token program ID from config
+    pub fn energy_token_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.program_ids.energy_token_program_id)
+            .map_err(|e| anyhow!("Invalid Energy Token Program ID '{}': {}", self.program_ids.energy_token_program_id, e))
     }
 
-    /// Get Trading program ID
-    pub fn trading_program_id() -> Result<Pubkey> {
-        Pubkey::from_str("GZnqNTJsre6qB4pWCQRE9FiJU2GUeBtBDPp6s7zosctk")
-            .map_err(|e| anyhow!("Invalid Trading Program ID: {}", e))
+    /// Get Trading program ID from config
+    pub fn trading_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.program_ids.trading_program_id)
+            .map_err(|e| anyhow!("Invalid Trading Program ID '{}': {}", self.program_ids.trading_program_id, e))
     }
 
     // ====================================================================
@@ -238,7 +248,9 @@ impl BlockchainService {
             if account.data.len() < 48 {
                 return Err(anyhow!("Market account data too small"));
             }
-            let active_orders_bytes: [u8; 8] = account.data[40..48].try_into().unwrap();
+            let active_orders_bytes: [u8; 8] = account.data[40..48]
+                .try_into()
+                .expect("slice length already verified to be 8 bytes");
             Ok(u64::from_le_bytes(active_orders_bytes))
         })
         .await??;
@@ -265,7 +277,7 @@ impl BlockchainService {
 
         let (order_pda, _) = Pubkey::find_program_address(
             &[b"order", authority.as_ref(), &active_orders.to_le_bytes()],
-            &Self::trading_program_id()?,
+            &self.trading_program_id()?,
         );
 
         self.instruction_builder.build_create_order_instruction(
@@ -517,7 +529,7 @@ impl BlockchainService {
     /// Ensures user has an Associated Token Account for the token mint
     pub async fn ensure_token_account_exists(
         &self,
-        authority: &Keypair,
+        _authority: &Keypair,
         user_wallet: &Pubkey,
         mint: &Pubkey,
     ) -> Result<Pubkey> {
@@ -539,8 +551,8 @@ impl BlockchainService {
                     account.lamports
                 );
                 // Check if owned by Token-2022 program
-                let token_2022_id =
-                    Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").unwrap();
+                let token_2022_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+                    .expect("hardcoded Token-2022 program ID is invalid");
                 if account.owner == token_2022_id || account.owner == spl_token::id() {
                     println!("DEBUG: ATA is owned by Token Program (Token-2022 or legacy). Valid.");
                     return Ok(ata_address);
@@ -733,10 +745,16 @@ impl BlockchainService {
 
     /// Calculate the Associated Token Account address for a user and mint
     pub fn calculate_ata_address(&self, user_wallet: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
-        // Use the spl_associated_token_account crate to derive the address
-        // This ensures consistency with the create instruction
+        // Use Token-2022 program ID for ATA derivation
+        let token_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+            .map_err(|e| anyhow!("Failed to parse Token-2022 program ID: {}", e))?;
+
         let ata_address =
-            spl_associated_token_account::get_associated_token_address(user_wallet, mint);
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                user_wallet,
+                mint,
+                &token_program_id,
+            );
         Ok(ata_address)
     }
 }
@@ -744,14 +762,30 @@ impl BlockchainService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SolanaProgramsConfig;
+
+    fn test_config() -> SolanaProgramsConfig {
+        SolanaProgramsConfig {
+            registry_program_id: "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7".to_string(),
+            oracle_program_id: "DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE".to_string(),
+            governance_program_id: "4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe".to_string(),
+            energy_token_program_id: "94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur".to_string(),
+            trading_program_id: "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb".to_string(),
+        }
+    }
 
     #[test]
     fn test_parse_program_ids() {
-        assert!(BlockchainService::registry_program_id().is_ok());
-        assert!(BlockchainService::oracle_program_id().is_ok());
-        assert!(BlockchainService::governance_program_id().is_ok());
-        assert!(BlockchainService::energy_token_program_id().is_ok());
-        assert!(BlockchainService::trading_program_id().is_ok());
+        let service = BlockchainService::new(
+            "http://localhost:8899".to_string(),
+            "localnet".to_string(),
+            test_config(),
+        ).unwrap();
+        assert!(service.registry_program_id().is_ok());
+        assert!(service.oracle_program_id().is_ok());
+        assert!(service.governance_program_id().is_ok());
+        assert!(service.energy_token_program_id().is_ok());
+        assert!(service.trading_program_id().is_ok());
     }
 
     #[test]

@@ -487,7 +487,7 @@ pub async fn get_blockchain_market_data(
 
     // Get the Trading program ID
     let trading_program_id =
-        crate::services::BlockchainService::trading_program_id().map_err(|e| {
+        _state.blockchain_service.trading_program_id().map_err(|e| {
             error!("Failed to parse trading program ID: {}", e);
             ApiError::Internal(format!("Invalid program ID: {}", e))
         })?;

@@ -346,7 +346,9 @@ pub async fn get_trading_analytics(
     let trader_stats: Vec<TraderStats> = top_traders
         .into_iter()
         .map(|row| TraderStats {
-            user_id: row.try_get::<uuid::Uuid, _>("user_id").unwrap().to_string(),
+            user_id: row.try_get::<uuid::Uuid, _>("user_id")
+                .map(|u| u.to_string())
+                .unwrap_or_else(|_| "unknown".to_string()),
             total_trades: row.try_get::<i64, _>("total_trades").unwrap_or(0),
             total_volume: row
                 .try_get::<Decimal, _>("total_volume")

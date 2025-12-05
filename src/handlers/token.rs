@@ -203,7 +203,7 @@ pub async fn get_token_info(
     info!("Fetching token info from blockchain");
 
     // Get the Energy Token program ID
-    let energy_token_program_id = crate::services::BlockchainService::energy_token_program_id()
+    let energy_token_program_id = state.blockchain_service.energy_token_program_id()
         .map_err(|e| {
             error!("Failed to parse energy token program ID: {}", e);
             ApiError::Internal(format!("Invalid program ID: {}", e))

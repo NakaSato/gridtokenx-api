@@ -70,7 +70,6 @@ impl MeterService {
         verification_status: &str,
     ) -> Result<MeterReading> {
         // Validate reading amount
-        use std::str::FromStr;
         // Allow negative amounts for consumption (burn)
         // if request.kwh_amount <= Decimal::ZERO {
         //     return Err(anyhow!("kWh amount must be positive"));
@@ -625,7 +624,6 @@ impl MeterService {
     /// Validate meter reading data
     pub fn validate_reading(request: &SubmitMeterReadingRequest) -> Result<()> {
         // Amount validation
-        use std::str::FromStr;
         // Allow negative amounts for consumption (burn)
         // if request.kwh_amount <= Decimal::ZERO {
         //     return Err(anyhow!("kWh amount must be positive"));

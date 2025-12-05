@@ -217,7 +217,7 @@ pub async fn register(
             }
             Err(e) => {
                 // Log failed email send but don't fail registration
-                use tracing::{error, info};
+                use tracing::error;
                 error!("Failed to send verification email: {}", e);
                 let _ = log_user_activity(
                     &state.db,
@@ -894,8 +894,6 @@ struct ActivityRow {
     created_at: chrono::DateTime<chrono::Utc>,
 }
 // Meter Registration Handlers - Added for simplified meter registration
-
-use crate::services::meter_verification_service::MeterRegistry;
 
 /// Request to register a meter
 #[derive(Debug, Deserialize, Validate, ToSchema)]

@@ -951,7 +951,21 @@ async fn main() -> anyhow::Result<()> {
     let cluster = std::env::var("SOLANA_CLUSTER")
         .unwrap_or_else(|_| "devnet".to_string());
 
-    let blockchain_service = services::BlockchainService::new(rpc_url, cluster)?;
+    // Load program IDs from environment with defaults
+    let program_config = crate::config::SolanaProgramsConfig {
+        registry_program_id: std::env::var("SOLANA_REGISTRY_PROGRAM_ID")
+            .unwrap_or_else(|_| "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7".to_string()),
+        oracle_program_id: std::env::var("SOLANA_ORACLE_PROGRAM_ID")
+            .unwrap_or_else(|_| "DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE".to_string()),
+        governance_program_id: std::env::var("SOLANA_GOVERNANCE_PROGRAM_ID")
+            .unwrap_or_else(|_| "4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe".to_string()),
+        energy_token_program_id: std::env::var("SOLANA_ENERGY_TOKEN_PROGRAM_ID")
+            .unwrap_or_else(|_| "94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur".to_string()),
+        trading_program_id: std::env::var("SOLANA_TRADING_PROGRAM_ID")
+            .unwrap_or_else(|_| "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb".to_string()),
+    };
+
+    let blockchain_service = services::BlockchainService::new(rpc_url, cluster, program_config)?;
 
     // Initialize validation services
     let validation_service = TransactionValidationService::new(
