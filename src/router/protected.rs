@@ -12,7 +12,7 @@ use crate::app_state::AppState;
 use crate::auth;
 use crate::handlers::{
     self, admin, audit, auth as auth_handlers, blockchain, blockchain_test, epochs, erc,
-    governance, meters, oracle, registry, token, trading, transactions, user_management,
+    governance, meter, oracle, registry, token, trading, transactions, user,
 };
 use crate::middleware;
 
@@ -79,18 +79,20 @@ pub fn protected_routes(app_state: AppState) -> Router<AppState> {
 /// User self-management routes
 fn user_routes() -> Router<AppState> {
     Router::new()
-        .route("/wallet", post(user_management::update_wallet_address))
+        .route("/wallet", post(user::update_wallet_address))
         .route(
             "/wallet",
-            axum::routing::delete(user_management::remove_wallet_address),
+            axum::routing::delete(user::remove_wallet_address),
         )
-        .route("/activity", get(user_management::get_my_activity))
-        // Meter registration routes
-        .route("/meters", post(user_management::register_meter_handler))
-        .route("/meters", get(user_management::get_user_meters_handler))
+        .route("/activity", get(user::get_my_activity))
+        // Meters
         .route(
-            "/meters/{meter_id}",
-            axum::routing::delete(user_management::delete_meter_handler),
+            "/user/meters",
+            post(handlers::meter::registration::register_meter),
+        )
+        .route(
+            "/user/meters",
+            get(handlers::meter::registration::get_user_meters),
         )
 }
 
@@ -98,19 +100,10 @@ fn user_routes() -> Router<AppState> {
 fn admin_user_routes() -> Router<AppState> {
     Router::new()
         .route("/{id}", get(auth_handlers::get_user))
-        .route(
-            "/{id}",
-            axum::routing::put(user_management::admin_update_user),
-        )
-        .route(
-            "/{id}/deactivate",
-            post(user_management::admin_deactivate_user),
-        )
-        .route(
-            "/{id}/reactivate",
-            post(user_management::admin_reactivate_user),
-        )
-        .route("/{id}/activity", get(user_management::get_user_activity))
+        .route("/{id}", axum::routing::put(user::admin_update_user))
+        .route("/{id}/deactivate", post(user::admin_deactivate_user))
+        .route("/{id}/reactivate", post(user::admin_reactivate_user))
+        .route("/{id}/activity", get(user::get_user_activity))
         .route("/", get(auth_handlers::list_users))
 }
 
@@ -264,8 +257,8 @@ fn market_data_routes() -> Router<AppState> {
 /// Trading routes
 fn trading_routes() -> Router<AppState> {
     Router::new()
-        .route("/orders", post(handlers::energy_trading::create_order))
-        .route("/orders", get(handlers::energy_trading::list_orders))
+        .route("/orders", post(handlers::trading::create_order))
+        .route("/orders", get(handlers::trading::get_user_orders))
 }
 
 /// Token routes
@@ -278,29 +271,34 @@ fn token_routes() -> Router<AppState> {
 
 /// Meter routes
 fn meter_routes() -> Router<AppState> {
+    // Meter Verification (Prosumer)
     Router::new()
         .route(
-            "/verify",
-            post(handlers::meter_verification::verify_meter_handler),
+            "/meters/verify",
+            post(handlers::meter::verification::verify_meter_handler),
         )
         .route(
-            "/registered",
-            get(handlers::meter_verification::get_registered_meters_handler),
+            "/meters/registered",
+            get(handlers::meter::verification::get_registered_meters_handler),
         )
-        .route("/submit-reading", post(meters::submit_reading))
-        .route("/my-readings", get(meters::get_my_readings))
+        .route(
+            "/admin/meters/verification-stats",
+            get(handlers::meter::verification::get_verification_stats_handler),
+        )
+        .route("/submit-reading", post(meter::submit_reading))
+        .route("/my-readings", get(meter::get_my_readings))
         .route(
             "/readings/{wallet_address}",
-            get(meters::get_readings_by_wallet),
+            get(meter::get_readings_by_wallet),
         )
-        .route("/stats", get(meters::get_user_stats))
+        .route("/stats", get(meter::get_user_stats))
 }
 
 /// Admin meter routes
 fn admin_meter_routes() -> Router<AppState> {
     Router::new()
-        .route("/unminted", get(meters::get_unminted_readings))
-        .route("/mint-from-reading", post(meters::mint_from_reading))
+        .route("/unminted", get(meter::get_unminted_readings))
+        .route("/mint-from-reading", post(meter::mint_from_reading))
 }
 
 /// ERC certificate routes

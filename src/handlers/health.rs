@@ -129,7 +129,7 @@ pub async fn get_event_processor_stats(
     State(state): State<AppState>,
 ) -> Result<Json<EventProcessorStats>> {
     let stats = state
-        .event_processor_service
+        .event_processor
         .get_stats()
         .await
         .map_err(|e| {

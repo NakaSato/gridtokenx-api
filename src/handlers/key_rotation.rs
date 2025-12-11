@@ -4,7 +4,7 @@ use utoipa::ToSchema;
 use validator::Validate;
 
 use crate::auth::Claims;
-use crate::error::{ApiError, Result};
+use crate::error::ApiError;
 use crate::services::{KeyRotationService, RotationReport, RotationStatus};
 use crate::AppState;
 

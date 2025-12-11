@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use api_gateway::config::SolanaProgramsConfig;
-use api_gateway::services::{blockchain_service::BlockchainService, erc_service::ErcService};
+use api_gateway::services::{blockchain::BlockchainService, ErcService};
 use chrono::Utc;
 use solana_sdk::signature::{Keypair, Signer};
 use sqlx::PgPool;
@@ -205,9 +205,8 @@ async fn test_erc_transfer_on_chain() -> Result<()> {
     let transfer_tx = erc_service
         .transfer_certificate_on_chain(
             &certificate_id,
-            &from_keypair.pubkey(),
+            &from_keypair,
             &to_wallet,
-            &authority,
             &governance_program_id,
         )
         .await?;
@@ -339,9 +338,8 @@ async fn test_complete_erc_lifecycle() -> Result<()> {
     let transfer_tx = erc_service
         .transfer_certificate_on_chain(
             &certificate_id,
-            &original_owner_keypair.pubkey(),
+            &original_owner_keypair,
             &new_owner,
-            &authority,
             &governance_program_id,
         )
         .await?;
@@ -425,7 +423,7 @@ async fn test_erc_metadata_creation() -> Result<()> {
     let has_energy_attr = metadata
         .attributes
         .iter()
-        .any(|attr| attr.trait_type == "Energy Amount");
+        .any(|attr| attr.trait_type == "Energy Amount (kWh)");
     assert!(
         has_energy_attr,
         "Metadata should contain energy amount attribute"

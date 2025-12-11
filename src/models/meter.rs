@@ -45,4 +45,4 @@ impl std::str::FromStr for MeterReadingStatus {
 }
 
 // Re-export meter-related models from services
-pub use crate::services::meter_service::MeterReading;
+pub use crate::services::meter::service::MeterReading;

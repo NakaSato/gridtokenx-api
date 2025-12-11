@@ -1,0 +1,103 @@
+use crate::services::blockchain::transactions::TransactionHandler;
+use crate::services::blockchain::utils::BlockchainUtils;
+use anyhow::{anyhow, Result};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, Signature};
+use std::str::FromStr;
+use tracing::info;
+
+/// Manages Solana accounts and keypairs
+#[derive(Clone, Debug)]
+pub struct AccountManager {
+    transaction_handler: TransactionHandler,
+}
+
+impl AccountManager {
+    pub fn new(transaction_handler: TransactionHandler) -> Self {
+        Self {
+            transaction_handler,
+        }
+    }
+
+    /// Load keypair from a JSON file
+    pub fn load_keypair_from_file(filepath: &str) -> Result<Keypair> {
+        BlockchainUtils::load_keypair_from_file(filepath)
+    }
+
+    /// Get authority keypair
+    pub async fn get_authority_keypair(&self) -> Result<Keypair> {
+        let wallet_path = std::env::var("AUTHORITY_WALLET_PATH")
+            .unwrap_or_else(|_| "dev-wallet.json".to_string());
+
+        info!("Loading authority keypair from: {}", wallet_path);
+        Self::load_keypair_from_file(&wallet_path)
+    }
+
+    /// Get account balance in lamports
+    pub async fn get_balance(&self, pubkey: &Pubkey) -> Result<u64> {
+        self.transaction_handler.get_balance(pubkey).await
+    }
+
+    /// Get account balance in SOL
+    pub async fn get_balance_sol(&self, pubkey: &Pubkey) -> Result<f64> {
+        self.transaction_handler.get_balance_sol(pubkey).await
+    }
+
+    /// Check if account exists
+    pub async fn account_exists(&self, pubkey: &Pubkey) -> Result<bool> {
+        self.transaction_handler.account_exists(pubkey).await
+    }
+
+    /// Get account data
+    pub async fn get_account_data(&self, pubkey: &Pubkey) -> Result<Vec<u8>> {
+        self.transaction_handler.get_account_data(pubkey).await
+    }
+
+    /// Parse Pubkey from string
+    pub fn parse_pubkey(pubkey_str: &str) -> Result<Pubkey> {
+        BlockchainUtils::parse_pubkey(pubkey_str)
+    }
+
+    /// Calculate the Associated Token Account address
+    pub fn calculate_ata_address(&self, user_wallet: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
+        // Use Token-2022 program ID for ATA derivation as per original service
+        let token_program_id = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+            .map_err(|e| anyhow!("Failed to parse Token-2022 program ID: {}", e))?;
+
+        let ata_address =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                user_wallet,
+                mint,
+                &token_program_id,
+            );
+        Ok(ata_address)
+    }
+
+    /// Get transaction account keys
+    pub async fn get_transaction_account_keys(&self, signature: &str) -> Result<Vec<Pubkey>> {
+        let sig =
+            Signature::from_str(signature).map_err(|e| anyhow!("Invalid signature: {}", e))?;
+
+        let tx = self
+            .transaction_handler
+            .client()
+            .get_transaction(&sig, solana_transaction_status::UiTransactionEncoding::Json)?;
+
+        let transaction = tx.transaction.transaction;
+        match transaction {
+            solana_transaction_status::EncodedTransaction::Json(ui_tx) => match ui_tx.message {
+                solana_transaction_status::UiMessage::Parsed(msg) => Ok(msg
+                    .account_keys
+                    .iter()
+                    .map(|k| Pubkey::from_str(&k.pubkey).unwrap())
+                    .collect()),
+                solana_transaction_status::UiMessage::Raw(msg) => Ok(msg
+                    .account_keys
+                    .iter()
+                    .map(|k| Pubkey::from_str(k).unwrap())
+                    .collect()),
+            },
+            _ => Err(anyhow!("Unsupported transaction encoding")),
+        }
+    }
+}

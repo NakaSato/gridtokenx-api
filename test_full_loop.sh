@@ -468,7 +468,14 @@ test_scenario_8_auto_p2p() {
     print_substep "Creating consumer user..."
     CONSUMER_EMAIL="consumer_$(date +%s)@example.com"
     CONSUMER_USERNAME="consumer_$(date +%s)"
-    CONSUMER_WALLET="Consumer$(openssl rand -hex 20 | cut -c1-38)"
+    CONSUMER_WALLET=""
+    if command -v solana-keygen &> /dev/null; then
+        solana-keygen new --no-bip39-passphrase --outfile /tmp/cons_wallet.json --force > /dev/null 2>&1
+        CONSUMER_WALLET=$(solana-keygen pubkey /tmp/cons_wallet.json)
+        rm /tmp/cons_wallet.json
+    else
+        CONSUMER_WALLET="Consumer$(openssl rand -hex 20 | cut -c1-38)"
+    fi
     
     # Create consumer directly in database
     docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -c "
@@ -503,7 +510,8 @@ test_scenario_8_auto_p2p() {
         -H "X-Impersonate-User: ${USER_ID}" \
         -H "Content-Type: application/json" \
         -d '{
-            "order_type": "sell",
+            "order_type": "Limit",
+            "side": "Sell",
             "energy_amount": 5.0,
             "price_per_kwh": 0.15
         }')
@@ -524,7 +532,8 @@ test_scenario_8_auto_p2p() {
         -H "X-Impersonate-User: ${CONSUMER_ID}" \
         -H "Content-Type: application/json" \
         -d '{
-            "order_type": "buy",
+            "order_type": "Limit",
+            "side": "Buy",
             "energy_amount": 5.0,
             "price_per_kwh": 0.15
         }')
@@ -578,7 +587,14 @@ test_scenario_9_auto_p2c() {
     print_substep "Creating corporate user..."
     CORPORATE_EMAIL="corporate_$(date +%s)@example.com"
     CORPORATE_USERNAME="corporate_$(date +%s)"
-    CORPORATE_WALLET="Corporate$(openssl rand -hex 20 | cut -c1-36)"
+    CORPORATE_WALLET=""
+    if command -v solana-keygen &> /dev/null; then
+        solana-keygen new --no-bip39-passphrase --outfile /tmp/corp_wallet.json --force > /dev/null 2>&1
+        CORPORATE_WALLET=$(solana-keygen pubkey /tmp/corp_wallet.json)
+        rm /tmp/corp_wallet.json
+    else
+        CORPORATE_WALLET="Corporate$(openssl rand -hex 20 | cut -c1-36)"
+    fi
     
     # Create corporate directly in database
     docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -c "
@@ -613,7 +629,8 @@ test_scenario_9_auto_p2c() {
         -H "X-Impersonate-User: ${USER_ID}" \
         -H "Content-Type: application/json" \
         -d '{
-            "order_type": "sell",
+            "order_type": "Limit",
+            "side": "Sell",
             "energy_amount": 10.0,
             "price_per_kwh": 0.20
         }')
@@ -632,7 +649,8 @@ test_scenario_9_auto_p2c() {
         -H "X-Impersonate-User: ${CORPORATE_ID}" \
         -H "Content-Type: application/json" \
         -d '{
-            "order_type": "buy",
+            "order_type": "Limit",
+            "side": "Buy",
             "energy_amount": 10.0,
             "price_per_kwh": 0.20
         }')
@@ -677,6 +695,15 @@ setup_admin_user() {
     
     if [ "$ADMIN_EXISTS" -eq "0" ]; then
         # Create admin directly in database
+        ADMIN_WALLET=""
+        if command -v solana-keygen &> /dev/null; then
+            solana-keygen new --no-bip39-passphrase --outfile /tmp/admin_wallet.json --force > /dev/null 2>&1
+            ADMIN_WALLET=$(solana-keygen pubkey /tmp/admin_wallet.json)
+            rm /tmp/admin_wallet.json
+        else
+            ADMIN_WALLET="AdminWallet123456789012345678901234567890"
+        fi
+
         docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -c "
         INSERT INTO users (username, email, password_hash, email_verified, role, wallet_address, created_at, updated_at)
         VALUES (
@@ -685,7 +712,7 @@ setup_admin_user() {
             '\$2b\$12\$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYzpLhJ2olu',
             true,
             'admin',
-            'AdminWallet123456789012345678901234567890',
+            '${ADMIN_WALLET}',
             NOW(),
             NOW()
         )

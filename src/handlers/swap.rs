@@ -1,12 +1,9 @@
-use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::models::amm::SwapQuote;
-use crate::services::amm_service::SwapTransaction;
-use axum::{
-    Json,
-    extract::State,
-};
+use crate::services::amm::SwapTransaction;
+use crate::AppState;
+use axum::{extract::State, Json};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

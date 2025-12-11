@@ -16,10 +16,9 @@ use std::env;
 use std::time::Duration;
 
 // Import the services
-use api_gateway::services::blockchain_service::BlockchainService;
-use api_gateway::services::wallet_initialization_service::{
-    WalletInitializationService, WalletStatus,
-};
+use api_gateway::config::SolanaProgramsConfig;
+use api_gateway::services::blockchain::BlockchainService;
+use api_gateway::services::wallet::{WalletInitializationService, WalletStatus};
 
 #[derive(Parser, Debug)]
 #[command(name = "fix_user_wallets")]
@@ -88,7 +87,10 @@ async fn main() -> Result<()> {
 
     println!("🔧 Wallet Encryption Fix Tool");
     println!("==============================\n");
-    println!("Database: {}", database_url.split('@').last().unwrap_or(&database_url));
+    println!(
+        "Database: {}",
+        database_url.split('@').last().unwrap_or(&database_url)
+    );
     println!("Solana RPC: {}", solana_rpc_url);
     println!();
 
@@ -102,15 +104,15 @@ async fn main() -> Result<()> {
     println!("✅ Connected to database\n");
 
     // Create blockchain service
-    let blockchain_service = BlockchainService::new(solana_rpc_url.clone(), "localnet".to_string())?;
+    let blockchain_service = BlockchainService::new(
+        solana_rpc_url.clone(),
+        "localnet".to_string(),
+        SolanaProgramsConfig::default(),
+    )?;
 
     // Create wallet initialization service
-    let service = WalletInitializationService::new(
-        db,
-        encryption_secret,
-        blockchain_service,
-        solana_rpc_url,
-    );
+    let service =
+        WalletInitializationService::new(db, encryption_secret, blockchain_service, solana_rpc_url);
 
     if args.diagnose {
         // Diagnose only
@@ -123,7 +125,10 @@ async fn main() -> Result<()> {
         let mut legacy = 0;
         let mut corrupted = 0;
 
-        println!("{:<36} {:<20} {:<20} {:<10}", "User ID", "Email", "Status", "Can Decrypt");
+        println!(
+            "{:<36} {:<20} {:<20} {:<10}",
+            "User ID", "Email", "Status", "Can Decrypt"
+        );
         println!("{}", "-".repeat(90));
 
         for diagnosis in &diagnoses {
@@ -171,8 +176,10 @@ async fn main() -> Result<()> {
         println!("  Valid encryption:    {} ✅", valid);
         println!("  Legacy encryption:   {} ⚠️", legacy);
         println!("  Corrupted:           {} ❌", corrupted);
-        println!("\n  Users needing fix:   {}", no_wallet + address_only + legacy + corrupted);
-
+        println!(
+            "\n  Users needing fix:   {}",
+            no_wallet + address_only + legacy + corrupted
+        );
     } else if let Some(email) = args.user {
         // Fix specific user
         println!("🔧 Fixing wallet for user: {}\n", email);
@@ -188,7 +195,6 @@ async fn main() -> Result<()> {
                 println!("❌ Failed: {}", result.error.unwrap_or_default());
             }
         }
-
     } else if args.all {
         // Fix all users
         println!("🔧 Fixing all user wallets...\n");
@@ -200,9 +206,18 @@ async fn main() -> Result<()> {
         println!("{}", "=".repeat(60));
         println!("Total users:              {}", report.total_users);
         println!("Users without wallet:     {}", report.users_without_wallet);
-        println!("Users with legacy IV:     {}", report.users_with_legacy_encryption);
-        println!("Users with valid crypto:  {}", report.users_with_valid_encryption);
-        println!("Users with corrupted:     {}", report.users_with_corrupted_encryption);
+        println!(
+            "Users with legacy IV:     {}",
+            report.users_with_legacy_encryption
+        );
+        println!(
+            "Users with valid crypto:  {}",
+            report.users_with_valid_encryption
+        );
+        println!(
+            "Users with corrupted:     {}",
+            report.users_with_corrupted_encryption
+        );
         println!("{}", "-".repeat(60));
         println!("Wallets created:          {}", report.wallets_created);
         println!("Wallets re-encrypted:     {}", report.wallets_re_encrypted);
@@ -214,7 +229,6 @@ async fn main() -> Result<()> {
                 println!("   - {}", error);
             }
         }
-
     } else {
         println!("No action specified. Use --diagnose, --user <email>, or --all");
         println!("\nExamples:");

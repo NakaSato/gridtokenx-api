@@ -32,14 +32,14 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::auth::list_users,
         
         // User Management
-        crate::handlers::user_management::register,
-        crate::handlers::user_management::update_wallet_address,
-        crate::handlers::user_management::remove_wallet_address,
-        crate::handlers::user_management::get_my_activity,
-        crate::handlers::user_management::get_user_activity,
-        crate::handlers::user_management::admin_update_user,
-        crate::handlers::user_management::admin_deactivate_user,
-        crate::handlers::user_management::admin_reactivate_user,
+        crate::handlers::user::register,
+        crate::handlers::user::update_wallet_address,
+        crate::handlers::user::remove_wallet_address,
+        crate::handlers::user::get_my_activity,
+        crate::handlers::user::get_user_activity,
+        crate::handlers::user::admin_update_user,
+        crate::handlers::user::admin_deactivate_user,
+        crate::handlers::user::admin_reactivate_user,
         
         // Email Verification
         crate::handlers::email_verification::verify_email,
@@ -50,8 +50,8 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::wallet_auth::login_with_wallet,
         
         // Trading Operations
-        crate::handlers::trading::create_order,
-        crate::handlers::trading::get_user_orders,
+        crate::handlers::trading::orders::create::create_order,
+        crate::handlers::trading::orders::queries::get_user_orders,
         crate::handlers::trading::get_market_data,
         crate::handlers::trading::get_trading_stats,
         crate::handlers::trading::get_blockchain_market_data,
@@ -67,12 +67,12 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::blockchain::get_network_status,
         
         // Smart Meters
-        crate::handlers::meters::submit_reading,
-        crate::handlers::meters::get_my_readings,
-        crate::handlers::meters::get_readings_by_wallet,
-        crate::handlers::meters::get_unminted_readings,
-        crate::handlers::meters::mint_from_reading,
-        crate::handlers::meters::get_user_stats,
+        crate::handlers::meter::submit_reading,
+        crate::handlers::meter::get_my_readings,
+        crate::handlers::meter::get_readings_by_wallet,
+        crate::handlers::meter::get_unminted_readings,
+        crate::handlers::meter::mint_from_reading,
+        crate::handlers::meter::get_user_stats,
         
         // Token Operations
         crate::handlers::token::get_token_balance,
@@ -134,20 +134,20 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::auth::UserListResponse,
         
         // User Management types
-        crate::handlers::user_management::RegisterRequest,
-        crate::handlers::user_management::UpdateWalletRequest,
-        crate::handlers::user_management::AdminUpdateUserRequest,
-        crate::handlers::user_management::UserActivity,
-        crate::handlers::user_management::UserActivityResponse,
-        crate::handlers::user_management::RegisterResponse,
-        crate::handlers::user_management::ActivityQuery,
-        crate::handlers::user_management::ActivityListResponse,
+        crate::handlers::user::RegisterRequest,
+        crate::handlers::user::UpdateWalletRequest,
+        crate::handlers::user::AdminUpdateUserRequest,
+        crate::handlers::user::UserActivity,
+        crate::handlers::user::UserActivityResponse,
+        crate::handlers::user::RegisterResponse,
+        crate::handlers::user::ActivityQuery,
+        crate::handlers::user::ActivityListResponse,
         
         // Email Verification types
         crate::handlers::email_verification::VerifyEmailQuery,
-        crate::handlers::email_verification::VerifyEmailResponse,
+        crate::services::auth::VerifyEmailResult,
         crate::handlers::email_verification::ResendVerificationRequest,
-        crate::handlers::email_verification::ResendVerificationResponse,
+        crate::services::auth::ResendVerificationResult,
         
         // Wallet Authentication types
         crate::handlers::wallet_auth::WalletRegistrationRequest,
@@ -173,12 +173,12 @@ use utoipa::openapi::security::{SecurityScheme, HttpAuthScheme, HttpBuilder};
         crate::handlers::blockchain::ProgramInteractionRequest,
         
         // Meter handler types
-        crate::handlers::meters::SubmitReadingRequest,
-        crate::handlers::meters::MeterReadingResponse,
-        crate::handlers::meters::GetReadingsQuery,
-        crate::handlers::meters::MintFromReadingRequest,
-        crate::handlers::meters::MintResponse,
-        crate::handlers::meters::UserStatsResponse,
+        crate::handlers::meter::SubmitReadingRequest,
+        crate::handlers::meter::MeterReadingResponse,
+        crate::handlers::meter::GetReadingsQuery,
+        crate::handlers::meter::MintFromReadingRequest,
+        crate::handlers::meter::MintResponse,
+        crate::handlers::meter::UserStatsResponse,
         
         // Token handler types
         crate::handlers::token::TokenBalanceResponse,

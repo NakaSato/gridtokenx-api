@@ -25,6 +25,8 @@ pub struct AppState {
     pub jwt_service: JwtService,
     /// API key authentication service
     pub api_key_service: ApiKeyService,
+    /// Authentication service used for email verification and other auth logic
+    pub auth: services::AuthService,
     /// Optional email service (disabled if SMTP not configured)
     pub email_service: Option<services::EmailService>,
     /// Solana blockchain interaction service
@@ -42,15 +44,15 @@ pub struct AppState {
     /// Market clearing engine for P2P trading
     pub market_clearing_engine: services::MarketClearingEngine,
     /// Market clearing service for epoch management
-    pub market_clearing_service: services::MarketClearingService,
+    pub market_clearing: services::MarketClearingService,
     /// Trade settlement service
-    pub settlement_service: services::SettlementService,
+    pub settlement: services::SettlementService,
     /// WebSocket service for real-time updates
     pub websocket_service: services::WebSocketService,
     /// Meter polling service for automated readings
     pub meter_polling_service: services::MeterPollingService,
     /// Blockchain event processor service
-    pub event_processor_service: services::EventProcessorService,
+    pub event_processor: services::EventProcessorService,
     /// Health check service
     pub health_checker: services::HealthChecker,
     /// Audit logging service

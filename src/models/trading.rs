@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct TradingOrder {
@@ -99,4 +100,11 @@ pub struct TradeExecution {
     #[schema(value_type = f64)]
     pub total_price: rust_decimal::Decimal,
     pub executed_at: DateTime<Utc>,
+}
+#[derive(Debug, Serialize, Deserialize, ToSchema, Validate)]
+pub struct UpdateOrderRequest {
+    #[schema(value_type = Option<f64>)]
+    pub energy_amount: Option<rust_decimal::Decimal>,
+    #[schema(value_type = Option<f64>)]
+    pub price_per_kwh: Option<rust_decimal::Decimal>,
 }

@@ -42,6 +42,16 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     // Initialize email service (optional)
     let email_service = initialize_email_service(config);
 
+    // Initialize auth service
+    let auth = services::AuthService::new(
+        db_pool.clone(),
+        config.clone(),
+        email_service.clone(),
+        jwt_service.clone(),
+        services::AuditLogger::new(db_pool.clone()),
+    );
+    info!("Auth service initialized");
+
     // Initialize blockchain service
     let blockchain_service = services::BlockchainService::new(
         config.solana_rpc_url.clone(),
@@ -72,16 +82,24 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     info!("ERC service initialized");
 
     // Initialize settlement service
-    let settlement_service =
-        services::SettlementService::new(db_pool.clone(), blockchain_service.clone());
+    // Initialize settlement service
+    let settlement_config = services::SettlementConfig {
+        enable_real_blockchain: config.tokenization.enable_real_blockchain,
+        ..services::SettlementConfig::default()
+    };
+    let settlement = services::SettlementService::with_config(
+        db_pool.clone(),
+        blockchain_service.clone(),
+        settlement_config,
+    );
     info!("✅ Settlement service initialized");
 
     // Initialize metrics
-    services::transaction_metrics::init_metrics();
+    services::transaction::metrics::init_metrics();
     info!("Prometheus metrics initialized");
 
     // Initialize market clearing service
-    let market_clearing_service =
+    let market_clearing =
         services::MarketClearingService::new(db_pool.clone(), blockchain_service.clone());
     info!("✅ Market clearing service initialized for epoch management");
 
@@ -92,14 +110,14 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     // Initialize order matching engine
     let order_matching_engine = services::OrderMatchingEngine::new(db_pool.clone())
         .with_websocket(websocket_service.clone())
-        .with_settlement_service(settlement_service.clone());
+        .with_settlement(settlement.clone());
     info!("Order matching engine initialized");
 
     // Initialize market clearing engine
     let market_clearing_engine =
         services::MarketClearingEngine::new(db_pool.clone(), redis_client.clone())
             .with_websocket(websocket_service.clone())
-            .with_settlement_service(settlement_service.clone());
+            .with_settlement(settlement.clone());
     info!("✅ Market clearing engine initialized with WebSocket support");
 
     // Load active orders into order book
@@ -125,7 +143,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     info!("✅ Cache service initialized for performance optimization");
 
     // Initialize event processor service
-    let event_processor_service = services::EventProcessorService::new(
+    let event_processor = services::EventProcessorService::new(
         Arc::new(db_pool.clone()),
         config.solana_rpc_url.clone(),
         config.event_processor.clone(),
@@ -135,7 +153,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
 
     // Initialize dashboard service
     let dashboard_service =
-        services::DashboardService::new(health_checker.clone(), event_processor_service.clone());
+        services::DashboardService::new(health_checker.clone(), event_processor.clone());
     info!("✅ Dashboard service initialized");
 
     // Initialize AMM service
@@ -163,6 +181,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         config: config.clone(),
         jwt_service,
         api_key_service,
+        auth,
         email_service,
         blockchain_service,
         wallet_service,
@@ -171,11 +190,11 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         erc_service,
         order_matching_engine,
         market_clearing_engine,
-        market_clearing_service,
-        settlement_service,
+        market_clearing,
+        settlement,
         websocket_service,
         meter_polling_service,
-        event_processor_service,
+        event_processor,
         health_checker,
         audit_logger,
         cache_service,
@@ -278,14 +297,14 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
     info!("✅ Automated order matching engine started");
 
     // Start settlement processing loop
-    let settlement_service = app_state.settlement_service.clone();
+    let settlement = app_state.settlement.clone();
     tokio::spawn(async move {
         info!("🚀 Settlement processing loop started");
         loop {
-            if let Err(e) = settlement_service.process_pending_settlements().await {
+            if let Err(e) = settlement.process_pending_settlements().await {
                 error!("Error in settlement loop: {}", e);
             }
-            if let Err(e) = settlement_service.retry_failed_settlements(3).await {
+            if let Err(e) = settlement.retry_failed_settlements(3).await {
                 error!("Error retrying settlements: {}", e);
             }
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -313,10 +332,10 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
     });
 
     // Start event processor service
-    let event_processor_service = app_state.event_processor_service.clone();
+    let event_processor = app_state.event_processor.clone();
     tokio::spawn(async move {
         info!("🚀 Event processor service started");
-        event_processor_service.start().await;
+        event_processor.start().await;
     });
 }
 

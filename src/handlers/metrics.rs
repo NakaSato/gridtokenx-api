@@ -1,10 +1,10 @@
 // Metrics endpoint for Prometheus
 // Provides a Prometheus-compatible metrics endpoint
 
-use crate::{AppState, error::ApiError, services::transaction_metrics::MetricsExporter};
+use crate::{error::ApiError, services::transaction::metrics::MetricsExporter, AppState};
 use axum::{
     extract::State,
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
 };
 

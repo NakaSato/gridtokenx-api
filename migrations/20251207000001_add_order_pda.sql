@@ -2,7 +2,7 @@
 -- This stores the on-chain Order PDA address for settlement execution
 
 ALTER TABLE trading_orders
-ADD COLUMN order_pda TEXT;
+ADD COLUMN IF NOT EXISTS order_pda TEXT;
 
 -- Add index for faster lookups
-CREATE INDEX idx_trading_orders_order_pda ON trading_orders(order_pda);
+CREATE INDEX IF NOT EXISTS idx_trading_orders_order_pda ON trading_orders(order_pda);

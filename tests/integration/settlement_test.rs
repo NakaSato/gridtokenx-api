@@ -4,9 +4,10 @@
 
 use anyhow::Result;
 use api_gateway::config::SolanaProgramsConfig;
+use api_gateway::database::schema::types::OrderSide;
 use api_gateway::services::{
-    blockchain_service::BlockchainService,
-    market_clearing::{OrderSide, TradeMatch},
+    blockchain::BlockchainService,
+    market::{ClearingPrice, TradeMatch},
     settlement_service::{SettlementConfig, SettlementService, SettlementStatus},
 };
 use chrono::Utc;
@@ -471,7 +472,7 @@ async fn test_on_chain_settlement_execution() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_complete_settlement_workflow() -> Result<()> {
     let (db_pool, blockchain_service, settlement_service, epoch_id) =
         setup_settlement_test().await?;

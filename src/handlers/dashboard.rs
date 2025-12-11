@@ -1,6 +1,6 @@
 use crate::error::{ApiError, Result};
-use crate::services::dashboard_service::{DashboardMetrics, DashboardService};
-use axum::{Json, extract::State};
+use crate::services::dashboard::{DashboardMetrics, DashboardService};
+use axum::{extract::State, Json};
 
 /// Get dashboard metrics
 #[utoipa::path(

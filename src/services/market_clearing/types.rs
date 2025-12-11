@@ -1,0 +1,54 @@
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use uuid::Uuid;
+
+use crate::database::schema::types::{EpochStatus, OrderSide};
+
+#[derive(Debug, Clone)]
+pub struct MarketEpoch {
+    pub id: Uuid,
+    pub epoch_number: i64,
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub status: EpochStatus,
+    pub clearing_price: Option<Decimal>,
+    pub total_volume: Option<Decimal>,
+    pub total_orders: Option<i64>,
+    pub matched_orders: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderMatch {
+    pub id: Uuid,
+    pub epoch_id: Uuid,
+    pub buy_order_id: Uuid,
+    pub sell_order_id: Uuid,
+    pub matched_amount: Decimal,
+    pub match_price: Decimal,
+    pub match_time: DateTime<Utc>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Settlement {
+    pub id: Uuid,
+    pub epoch_id: Uuid,
+    pub buyer_id: Uuid,
+    pub seller_id: Uuid,
+    pub energy_amount: Decimal,
+    pub price_per_kwh: Decimal,
+    pub total_amount: Decimal,
+    pub fee_amount: Decimal,
+    pub net_amount: Decimal,
+    pub status: String,
+}
+
+#[derive(Debug)]
+pub struct OrderBookEntry {
+    pub order_id: Uuid,
+    pub user_id: Uuid,
+    pub side: Option<OrderSide>,
+    pub energy_amount: Decimal,
+    pub price_per_kwh: Decimal,
+    pub created_at: Option<DateTime<Utc>>,
+}

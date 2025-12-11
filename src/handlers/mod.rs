@@ -7,27 +7,28 @@ pub mod blockchain;
 pub mod blockchain_test;
 pub mod dashboard;
 pub mod email_verification;
-pub mod energy_trading;
+
 pub mod epochs;
 pub mod erc;
 pub mod extractors;
 pub mod governance;
 pub mod health;
-pub mod market_data;
-// pub mod meter_registration;  // Using user_management handlers instead
 pub mod key_rotation;
-pub mod meter_verification;
-pub mod meters;
+pub mod market_data;
+pub mod meter;
+// pub mod meter_registration; // Removed
+// pub mod meter_verification; // Removed
+// pub use meter::*; // Ambiguous export
 pub mod metrics;
 pub mod oracle;
-pub mod queries;
 pub mod registry;
 pub mod response;
 pub mod swap;
 pub mod token;
 pub mod trading;
 pub mod transactions;
-pub mod user_management;
+pub mod user;
+// pub use erc::*; // Ambiguous export
 pub mod wallet_auth;
 pub mod websocket;
 
@@ -37,8 +38,4 @@ pub use authorization::{
     require_admin_or_owner, require_any_role, require_role, roles,
 };
 pub use extractors::{DateRangeParams, PaginationParams, SearchParams, SortOrder, ValidatedUuid};
-pub use queries::{
-    AuditLogQuery, MeterReadingsQuery, OrderQuery, StandardPaginationQuery, TransactionQuery,
-    UserSearchQuery,
-};
 pub use response::{ApiResponse, ListResponse, PaginatedResponse};

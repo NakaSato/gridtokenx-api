@@ -1,77 +1,79 @@
-pub mod amm_service;
+//! Services module - Business logic and external integrations
+
+// Core services
+pub mod amm;
+// pub mod amm_service_test;
 pub mod audit_logger;
-pub mod blockchain_instructions;
-pub mod blockchain_service;
-pub mod blockchain_transactions;
-pub mod blockchain_utils;
-pub mod cache_service;
-pub mod dashboard_service;
-pub mod email_service;
-pub mod email_templates;
+pub mod auth;
+pub mod cache;
+pub mod dashboard;
+pub mod email;
 pub mod epoch_scheduler;
-pub mod erc_service;
-pub mod event_processor_service;
+pub mod erc;
+pub mod event_processor;
 pub mod health_check;
+pub mod key_rotation;
 pub mod market_clearing;
-pub mod market_clearing_service;
-pub mod meter_polling_service;
-pub mod meter_service;
-pub mod meter_verification_service;
 pub mod order_matching_engine;
-pub mod priority_fee_service;
-// pub mod redis_cache_warming;
-// pub mod redis_json;
-// pub mod redis_lock;
-// pub mod redis_pubsub;
-// pub mod redis_timeseries;
-pub mod key_rotation_service;
-pub mod settlement_service;
-pub mod token_service;
-pub mod traits;
-pub mod transaction_coordinator;
-pub mod transaction_metrics;
-pub mod transaction_service;
+pub mod priority_fee;
+pub mod settlement;
+pub mod token;
 pub mod validation;
-pub mod wallet_audit_logger;
-pub mod wallet_initialization_service;
-pub mod wallet_service;
-pub mod webhook_service;
-pub mod websocket_service;
+pub mod wallet;
+pub mod webhook;
+pub mod websocket;
 
-pub use amm_service::AmmService;
+// Modular services (reorganized into subdirectories)
+pub mod blockchain;
+pub mod market;
+pub mod meter;
+pub mod redis;
+pub mod transaction;
 
+// Validation submodule
+// pub mod validation;
+
+// Re-exports for backward compatibility
+pub use amm::AmmService;
 pub use audit_logger::AuditLogger;
-pub use blockchain_service::BlockchainService;
-pub use cache_service::CacheService;
-pub use dashboard_service::DashboardService;
-pub use email_service::EmailService;
+pub use auth::AuthService;
+pub use blockchain::BlockchainService;
+pub use cache::CacheService;
+pub use dashboard::DashboardService;
+pub use email::EmailService;
 pub use epoch_scheduler::{EpochConfig, EpochScheduler};
-pub use erc_service::ErcService;
-pub use event_processor_service::EventProcessorService;
+pub use erc::ErcService;
+pub use event_processor::EventProcessorService;
 pub use health_check::HealthChecker;
-pub use key_rotation_service::{KeyRotationService, RotationReport, RotationStatus};
-pub use market_clearing::MarketClearingEngine;
-pub use market_clearing_service::MarketClearingService;
-pub use meter_polling_service::MeterPollingService;
-pub use meter_service::MeterService;
-pub use meter_verification_service::MeterVerificationService;
+pub use key_rotation::{KeyRotationService, RotationReport, RotationStatus};
+pub use market::MarketClearingEngine;
+pub use market_clearing::MarketClearingService;
+pub use meter::polling::MeterPollingService;
+pub use meter::service::MeterService;
+pub use meter::verification::MeterVerificationService;
 pub use order_matching_engine::OrderMatchingEngine;
-pub use settlement_service::SettlementService;
-pub use token_service::TokenService;
-pub use transaction_coordinator::TransactionCoordinator;
-pub use transaction_service::TransactionService;
-pub use wallet_audit_logger::WalletAuditLogger;
-pub use wallet_initialization_service::{
-    WalletDiagnosis, WalletFixResult, WalletInitializationReport, WalletInitializationService,
-    WalletStatus,
-};
-pub use wallet_service::WalletService;
-pub use webhook_service::WebhookService;
-pub use websocket_service::WebSocketService;
+pub use priority_fee::PriorityFeeService;
+// pub use redis::*;
+pub use event_processor::EventType;
+pub use redis::json::RedisJSONService;
+pub use redis::lock::{LockInfo, RedisLock};
+pub use redis::pubsub::RedisPubSubService as RedisPubSub;
+pub use settlement::{SettlementConfig, SettlementService};
+pub use token::TokenService;
+// pub use token::TokenService;
+pub use webhook::WebhookService;
+// pub use transaction::*;
+pub use transaction::metrics::TransactionMetrics;
+pub use transaction::service::TransactionService;
+// pub use wallet::*;
+pub use validation::TransactionValidationService as ValidationService;
+pub use wallet::audit_logger::{WalletAuditEntry, WalletAuditLogger};
+pub use wallet::initialization::{WalletInitializationService, WalletStatus};
+pub use wallet::WalletService;
+pub use websocket::WebSocketService;
 
 // Re-export common types if needed
-pub use audit_logger::AuditEvent;
-pub use audit_logger::AuditEventRecord;
-pub use event_processor_service::EventProcessorStats;
-pub use market_clearing::ClearingPrice;
-pub use transaction_metrics::TransactionMetrics;
+pub use audit_logger::{AuditEvent, AuditEventRecord};
+pub use event_processor::EventProcessorStats;
+pub use market::ClearingPrice;
+// pub use transaction::TransactionMetrics; // Already exported above

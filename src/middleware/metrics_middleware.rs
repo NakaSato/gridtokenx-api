@@ -11,7 +11,7 @@ use std::time::Instant;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use crate::services::transaction_metrics::ApiMetrics;
+use crate::services::transaction::metrics::ApiMetrics;
 
 /// Request ID header name
 const REQUEST_ID_HEADER: &str = "x-request-id";

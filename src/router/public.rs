@@ -2,14 +2,15 @@
 //!
 //! Includes: health checks, authentication endpoints, public market data, WebSocket, Swagger UI.
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::app_state::AppState;
-use crate::handlers::{
-    self, auth as auth_handlers, epochs, health, user_management, wallet_auth,
-};
+use crate::handlers::{self, auth as auth_handlers, epochs, health, user, wallet_auth};
 
 /// OpenAPI documentation
 #[derive(OpenApi)]
@@ -18,7 +19,7 @@ struct ApiDoc;
 
 /// Build public routes that don't require authentication.
 pub fn public_routes() -> Router<AppState> {
-    Router::new()
+    Router::<AppState>::new()
         // Health check routes
         .route("/health", get(health::health_check))
         .route("/metrics", get(handlers::metrics::get_prometheus_metrics))
@@ -36,7 +37,7 @@ pub fn public_routes() -> Router<AppState> {
         )
         // Authentication routes
         .route("/api/auth/login", post(auth_handlers::login))
-        .route("/api/auth/register", post(user_management::register))
+        .route("/api/auth/register", post(user::register))
         .route(
             "/api/auth/verify-email",
             get(handlers::email_verification::verify_email),
@@ -59,11 +60,11 @@ pub fn public_routes() -> Router<AppState> {
         .route("/api/market/epoch/status", get(epochs::get_epoch_status))
         .route(
             "/api/market/orderbook",
-            get(handlers::energy_trading::get_orderbook),
+            get(handlers::trading::market_data::get_orderbook),
         )
         .route(
             "/api/market/stats",
-            get(handlers::energy_trading::get_market_stats),
+            get(handlers::trading::market_data::get_market_stats),
         )
         // WebSocket endpoints
         .route(
@@ -72,7 +73,5 @@ pub fn public_routes() -> Router<AppState> {
         )
         .route("/ws", get(handlers::websocket::websocket_handler))
         // Swagger UI
-        .merge(
-            SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", ApiDoc::openapi()),
-        )
+        .merge(SwaggerUi::new("/api/docs").url("/api/docs/openapi.json", ApiDoc::openapi()))
 }

@@ -4,12 +4,12 @@
 
 use anyhow::Result;
 use api_gateway::config::SolanaProgramsConfig;
-use api_gateway::services::blockchain_service::BlockchainService;
+use api_gateway::services::blockchain::BlockchainService;
 use solana_sdk::{
+    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::{Keypair, Signer},
     transaction::Transaction,
-    instruction::{Instruction, AccountMeta},
 };
 use std::str::FromStr;
 use std::sync::Arc;
@@ -17,11 +17,8 @@ use std::sync::Arc;
 /// Helper function to create a system transfer instruction manually
 /// This avoids dependency conflicts between solana-sdk and anchor-lang
 fn create_transfer_instruction(from: &Pubkey, to: &Pubkey, lamports: u64) -> Instruction {
-    let account_metas = vec![
-        AccountMeta::new(*from, true),
-        AccountMeta::new(*to, false),
-    ];
-    
+    let account_metas = vec![AccountMeta::new(*from, true), AccountMeta::new(*to, false)];
+
     // System program transfer instruction layout:
     // u32: instruction index (2)
     // u64: lamports
@@ -71,7 +68,9 @@ async fn test_energy_token_program_exists() -> Result<()> {
 
     // Step 2: Verify program exists on-chain
     println!("\n📋 Step 2: Verify program exists on-chain");
-    let program_exists = blockchain_service.account_exists(&energy_token_program_id).await?;
+    let program_exists = blockchain_service
+        .account_exists(&energy_token_program_id)
+        .await?;
 
     if program_exists {
         println!("✅ Energy Token program is deployed");
@@ -83,7 +82,9 @@ async fn test_energy_token_program_exists() -> Result<()> {
     // Step 3: Get program account data (if exists)
     if program_exists {
         println!("\n📋 Step 3: Get program account data");
-        let account_data = blockchain_service.get_account_data(&energy_token_program_id).await?;
+        let account_data = blockchain_service
+            .get_account_data(&energy_token_program_id)
+            .await?;
         println!("✅ Program account data size: {} bytes", account_data.len());
     }
 
@@ -109,7 +110,9 @@ async fn test_token_mint_authority() -> Result<()> {
 
     // Step 2: Check authority balance
     println!("\n📋 Step 2: Check authority balance");
-    let balance = blockchain_service.get_balance_sol(&authority.pubkey()).await?;
+    let balance = blockchain_service
+        .get_balance_sol(&authority.pubkey())
+        .await?;
     println!("✅ Authority balance: {} SOL", balance);
 
     // Verify sufficient balance for minting operations
@@ -213,7 +216,10 @@ async fn test_mint_tokens_instruction() -> Result<()> {
 
     // Step 3: Verify instruction structure
     println!("\n📋 Step 3: Verify instruction structure");
-    assert_eq!(test_instruction.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
+    assert_eq!(
+        test_instruction.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
     assert!(!test_instruction.accounts.is_empty());
     assert!(!test_instruction.data.is_empty());
     println!("✅ Instruction structure valid");
@@ -265,7 +271,10 @@ async fn test_token_transfer_instruction() -> Result<()> {
 
     // Step 3: Verify instruction
     println!("\n📋 Step 3: Verify transfer instruction");
-    assert_eq!(transfer_instruction.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
+    assert_eq!(
+        transfer_instruction.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
     assert!(!transfer_instruction.accounts.is_empty());
     println!("✅ Transfer instruction valid");
 
@@ -309,7 +318,10 @@ async fn test_token_burn_instruction() -> Result<()> {
 
     // Step 3: Verify instruction
     println!("\n📋 Step 3: Verify burn instruction");
-    assert_eq!(burn_instruction.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
+    assert_eq!(
+        burn_instruction.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
     println!("✅ Burn instruction valid");
 
     println!("\n🎉 ============================================");
@@ -379,9 +391,18 @@ async fn test_complete_token_lifecycle() -> Result<()> {
     println!("   Recipient Balance: 600.0 GRID");
 
     // Verify all instructions created successfully
-    assert_eq!(mint_ix.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
-    assert_eq!(transfer_ix.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
-    assert_eq!(burn_ix.program_id, Pubkey::from_str("11111111111111111111111111111111").unwrap());
+    assert_eq!(
+        mint_ix.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
+    assert_eq!(
+        transfer_ix.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
+    assert_eq!(
+        burn_ix.program_id,
+        Pubkey::from_str("11111111111111111111111111111111").unwrap()
+    );
 
     println!("\n🎉 ============================================");
     println!("   Complete Token Lifecycle Test PASSED");
