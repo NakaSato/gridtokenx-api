@@ -11,8 +11,8 @@ use axum::{
 use crate::app_state::AppState;
 use crate::auth;
 use crate::handlers::{
-    self, admin, audit, auth as auth_handlers, blockchain, blockchain_test, epochs, erc,
-    governance, meter, oracle, registry, token, trading, transactions, user,
+    self, audit, auth as auth_handlers, blockchain, blockchain_test, health, meter,
+    wallet_auth, websocket,
 };
 use crate::middleware;
 
@@ -32,40 +32,50 @@ pub fn protected_routes(app_state: AppState) -> Router<AppState> {
             post(handlers::wallet_auth::export_wallet_handler),
         )
         // User management routes
-        .nest("/api/user", user_routes())
+        // .nest("/api/user", user_routes())
         // Admin-only user management routes
-        .nest("/api/users", admin_user_routes())
+        // .nest("/api/users", admin_user_routes())
         // Blockchain interaction routes
         .nest("/api/blockchain", blockchain_routes())
         // Blockchain testing routes
         .nest("/api/test", test_routes())
         // Admin-only routes
-        .nest("/api/admin", admin_routes())
+        // .nest("/api/admin", admin_routes())
         // Oracle routes
-        .nest("/api/oracle", oracle_routes())
+        // .nest("/api/oracle", oracle_routes())
         // Governance routes
-        .nest("/api/governance", governance_routes())
+        // .nest("/api/governance", governance_routes())
         // Market data routes
-        .nest("/api/market-data", market_data_routes())
+        // .nest("/api/market-data", market_data_routes())
         // Trading routes
-        .nest("/api/trading", trading_routes())
+        // .nest("/api/trading", trading_routes())
         // Analytics routes
-        .route(
-            "/api/analytics/market",
-            get(handlers::analytics::get_market_analytics),
-        )
-        .route(
-            "/api/analytics/my-stats",
-            get(handlers::analytics::get_user_trading_stats),
-        )
+        // .route(
+        //     "/api/analytics/market",
+        //     get(handlers::analytics::get_market_analytics),
+        // )
+        // .route(
+        //     "/api/analytics/my-stats",
+        //     get(handlers::analytics::get_user_trading_stats),
+        // )
         // Token routes
-        .nest("/api/tokens", token_routes())
+        // .nest("/api/tokens", token_routes())
         // Meter routes
-        .nest("/api/meters", meter_routes())
+        // .nest("/api/meters", meter_routes())
         // Admin meter routes
-        .nest("/api/admin/meters", admin_meter_routes())
+        // .nest("/api/admin/meters", admin_meter_routes())
         // ERC routes
-        .nest("/api/erc", erc_routes())
+        // .nest("/api/erc", erc_routes())
+        // Futures routes
+        // .nest("/api/futures", futures_routes())
+        // P2P routes
+        // .nest("/api/p2p", p2p_routes())
+        // Swap routes
+        // .nest("/api/swap", swap_routes())
+        // Transaction routes
+        // .nest("/api/tx", transaction_routes())
+        // Epoch routes
+        // .nest("/api/epochs", epoch_routes())
         // Apply authentication middleware
         .layer(from_fn_with_state(
             app_state,
@@ -76,7 +86,8 @@ pub fn protected_routes(app_state: AppState) -> Router<AppState> {
         ))
 }
 
-/// User self-management routes
+/// User self-managem/*
+/// User routes
 fn user_routes() -> Router<AppState> {
     Router::new()
         .route("/wallet", post(user::update_wallet_address))
@@ -106,6 +117,7 @@ fn admin_user_routes() -> Router<AppState> {
         .route("/{id}/activity", get(user::get_user_activity))
         .route("/", get(auth_handlers::list_users))
 }
+*/
 
 /// Blockchain interaction routes
 fn blockchain_routes() -> Router<AppState> {
@@ -119,10 +131,10 @@ fn blockchain_routes() -> Router<AppState> {
         .route("/programs/{name}", post(blockchain::interact_with_program))
         .route("/accounts/{address}", get(blockchain::get_account_info))
         .route("/network", get(blockchain::get_network_status))
-        .route(
-            "/users/{wallet_address}",
-            get(registry::get_blockchain_user),
-        )
+// .route(
+//     "/users/{wallet_address}",
+//     get(registry::get_blockchain_user),
+// )
 }
 
 /// Blockchain testing routes
@@ -139,6 +151,7 @@ fn test_routes() -> Router<AppState> {
         .route("/statistics", get(blockchain_test::get_test_statistics))
 }
 
+/*
 /// Admin routes
 fn admin_routes() -> Router<AppState> {
     Router::new()
@@ -212,7 +225,9 @@ fn admin_routes() -> Router<AppState> {
             post(epochs::trigger_manual_clearing),
         )
 }
+*/
 
+/*
 /// Transaction routes
 fn transaction_routes() -> Router<AppState> {
     Router::new()
@@ -222,7 +237,9 @@ fn transaction_routes() -> Router<AppState> {
         .route("/stats", get(transactions::get_transaction_stats))
         .route("/{id}/retry", post(transactions::retry_transaction))
 }
+*/
 
+/*
 /// Oracle routes
 fn oracle_routes() -> Router<AppState> {
     Router::new()
@@ -230,7 +247,9 @@ fn oracle_routes() -> Router<AppState> {
         .route("/prices/current", get(oracle::get_current_prices))
         .route("/data", get(oracle::get_oracle_data))
 }
+*/
 
+/*
 /// Governance routes
 fn governance_routes() -> Router<AppState> {
     Router::new().route("/status", get(governance::get_governance_status))
@@ -268,32 +287,34 @@ fn token_routes() -> Router<AppState> {
         .route("/info", get(token::get_token_info))
         .route("/mint-from-reading", post(token::mint_from_reading))
 }
+*/
 
 /// Meter routes
-fn meter_routes() -> Router<AppState> {
+pub fn meter_routes() -> Router<AppState> {
     // Meter Verification (Prosumer)
     Router::new()
-        .route(
-            "/meters/verify",
-            post(handlers::meter::verification::verify_meter_handler),
-        )
-        .route(
-            "/meters/registered",
-            get(handlers::meter::verification::get_registered_meters_handler),
-        )
-        .route(
-            "/admin/meters/verification-stats",
-            get(handlers::meter::verification::get_verification_stats_handler),
-        )
+        // .route(
+        //     "/meters/verify",
+        //     post(handlers::meter::verification::verify_meter_handler),
+        // )
+        // .route(
+        //     "/meters/registered",
+        //     get(handlers::meter::verification::get_registered_meters_handler),
+        // )
+        // .route(
+        //     "/admin/meters/verification-stats",
+        //     get(handlers::meter::verification::get_verification_stats_handler),
+        // )
         .route("/submit-reading", post(meter::submit_reading))
-        .route("/my-readings", get(meter::get_my_readings))
-        .route(
-            "/readings/{wallet_address}",
-            get(meter::get_readings_by_wallet),
-        )
-        .route("/stats", get(meter::get_user_stats))
+        // .route("/my-readings", get(meter::get_my_readings))
+        // .route(
+        //     "/readings/{wallet_address}",
+        //     get(meter::get_readings_by_wallet),
+        // )
+        // .route("/stats", get(meter::get_user_stats))
 }
 
+/*
 /// Admin meter routes
 fn admin_meter_routes() -> Router<AppState> {
     Router::new()
@@ -314,3 +335,29 @@ fn erc_routes() -> Router<AppState> {
             get(erc::get_certificates_by_wallet),
         )
 }
+*/
+
+/*
+/// Futures routes
+fn futures_routes() -> Router<AppState> {
+    Router::new()
+        .route("/products", get(handlers::futures::get_products))
+        .route("/orders", post(handlers::futures::create_order))
+        .route("/orders/my", get(handlers::futures::get_my_orders))
+        .route("/positions", get(handlers::futures::get_positions))
+        .route(
+            "/positions/{id}/close",
+            post(handlers::futures::close_position),
+        )
+        .route("/candles", get(handlers::futures::get_candles))
+        .route("/orderbook", get(handlers::futures::get_order_book))
+}
+
+/// P2P routes
+fn p2p_routes() -> Router<AppState> {
+    Router::new()
+        .route("/orders", post(handlers::p2p::create_order))
+        .route("/orderbook", get(handlers::p2p::get_order_book))
+        .route("/orders/my", get(handlers::p2p::get_my_orders))
+}
+*/

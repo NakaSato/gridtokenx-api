@@ -1,4 +1,4 @@
-use crate::services::priority_fee::{PriorityFeeService, TransactionType};
+// use crate::services::priority_fee::{PriorityFeeService, TransactionType};  // DISABLED
 use anyhow::{anyhow, Result};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -108,15 +108,14 @@ impl TransactionHandler {
     }
 
     /// Determine transaction type for priority fee calculation
-    fn determine_transaction_type(&self, transaction: &Transaction) -> TransactionType {
-        // Simple logic - in production, this would be determined from context
+    fn determine_transaction_type(&self, transaction: &Transaction) -> &'static str {
+        // Simple logic - returns string for logging
         if transaction.message.instructions.len() > 3 {
-            TransactionType::Settlement
+            "settlement"
         } else if transaction.message.instructions.len() == 1 {
-            // Just return a default type for now
-            TransactionType::TokenTransfer
+            "token_transfer"
         } else {
-            TransactionType::TokenTransfer
+            "token_transfer"
         }
     }
 
@@ -166,26 +165,10 @@ impl TransactionHandler {
     async fn add_priority_fees(
         &self,
         _transaction: &mut Transaction,
-        tx_type: TransactionType,
+        tx_type: &'static str,
     ) -> Result<()> {
-        let priority_level = PriorityFeeService::recommend_priority_level(tx_type);
-        let compute_limit = PriorityFeeService::recommend_compute_limit(tx_type);
-        let fee = PriorityFeeService::estimate_fee_cost(priority_level, Some(compute_limit));
-
-        debug!(
-            "Adding priority fees: level={}, limit={}, estimated_cost={} SOL",
-            priority_level.description(),
-            compute_limit,
-            fee
-        );
-
-        // Note: Priority fees implementation
-        // TODO: Uncomment and implement proper compute budget instructions
-        // let compute_budget_instruction = ComputeBudgetInstruction::set_compute_unit_limit(compute_limit);
-        // let priority_fee_instruction = ComputeBudgetInstruction::set_compute_unit_price(fee);
-        // transaction.message.instructions.insert(0, compute_budget_instruction);
-        // transaction.message.instructions.insert(0, priority_fee_instruction);
-
+        debug!("Adding priority fees for transaction type: {}", tx_type);
+        // DISABLED - priority_fee module not available
         Ok(())
     }
 
@@ -429,10 +412,10 @@ impl TransactionHandler {
     pub fn add_priority_fee(
         &self,
         _transaction: &mut Transaction,
-        _tx_type: TransactionType,
+        _tx_type: &'static str,
         _fee: u64,
     ) -> Result<()> {
-        // TODO: Implement priority fee addition
+        // DISABLED - priority_fee module not available
         Ok(())
     }
 
@@ -449,14 +432,13 @@ impl TransactionHandler {
         Ok(status.is_some())
     }
 
-    /// Get trade record from blockchain
-    pub async fn get_trade_record(
-        &self,
-        _signature: &str,
-    ) -> Result<crate::models::transaction::TradeRecord> {
-        // TODO: Implement trade record fetching from blockchain
-        Err(anyhow!("Trade record fetching not implemented"))
-    }
+    /// Get trade record from blockchain - DISABLED
+    // pub async fn get_trade_record(
+    //     &self,
+    //     _signature: &str,
+    // ) -> Result<crate::models::transaction::TradeRecord> {
+    //     Err(anyhow!("Trade record fetching not implemented"))
+    // }
 
     /// Check if the service is healthy
     pub async fn health_check(&self) -> Result<bool> {
@@ -572,7 +554,7 @@ impl TransactionHandler {
         &self,
         instructions: Vec<solana_sdk::instruction::Instruction>,
         signers: &[&Keypair],
-        _transaction_type: TransactionType,
+        _transaction_type: &'static str,
     ) -> Result<Signature> {
         // For now, just call the regular method
         self.build_and_send_transaction(instructions, signers).await

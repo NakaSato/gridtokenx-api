@@ -178,6 +178,7 @@ pub async fn register_with_wallet(
     // Create user with enhanced fields
     let user_id = Uuid::new_v4();
     let now = chrono::Utc::now();
+    let pool: &sqlx::PgPool = &state.db;
     sqlx::query(
         "INSERT INTO users (id, username, email, password_hash, role,
                             first_name, last_name, wallet_address, is_active, email_verified, created_at, updated_at,
@@ -190,24 +191,22 @@ pub async fn register_with_wallet(
     .bind(&password_hash)
     .bind(&request.role)
     .bind(&request.first_name)
-    .bind(&request.last_name)
-    .bind(&wallet_address)
+    .bind(request.last_name.clone())
+    .bind(wallet_address.clone())
     .bind(now)
     .bind(now)
     .bind(encrypted_private_key)
     .bind(wallet_salt)
     .bind(encryption_iv)
-    .execute(&state.db)
+    .execute(pool)
     .await
     .map_err(|e| ApiError::Internal(format!("Failed to create user: {}", e)))?;
 
     // Log wallet creation for security monitoring
-    state
+    let _ = state
         .wallet_audit_logger
         .log_wallet_creation(user_id, wallet_address.as_deref().unwrap_or(""), None, None)
-        .await
-        .ok(); // Don't fail registration if audit logging fails
-
+        .await;
     // Create JWT claims
     let claims = Claims::new(user_id, request.username.clone(), request.role.clone());
 

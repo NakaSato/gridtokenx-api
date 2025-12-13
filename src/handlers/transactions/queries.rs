@@ -7,7 +7,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use crate::database::schema::types::{OrderSide, OrderStatus};
+use crate::database::schema::types::{OrderSide, OrderStatus, OrderType};
 use crate::error::ApiError;
 use crate::models::transaction::{TransactionResponse, TransactionStatus, TransactionType};
 use crate::AppState;
@@ -44,7 +44,7 @@ pub async fn get_transaction_status(
     // 1. Check Trading Orders
     let p2p_order = sqlx::query!(
         r#"
-        SELECT id, user_id, order_type, side as "side!: OrderSide", energy_amount, price_per_kwh, 
+        SELECT id, user_id, order_type as "order_type!: OrderType", side as "side!: OrderSide", energy_amount, price_per_kwh, 
                status as "status!: OrderStatus", created_at, settled_at as filled_at, epoch_id
         FROM trading_orders 
         WHERE id = $1
@@ -190,7 +190,7 @@ pub async fn get_user_transactions(
 
     let p2p_query = sqlx::query!(
         r#"
-        SELECT id, user_id, order_type, side as "side!: OrderSide", energy_amount, price_per_kwh, 
+        SELECT id, user_id, order_type as "order_type!: OrderType", side as "side!: OrderSide", energy_amount, price_per_kwh, 
                status as "status!: OrderStatus", created_at, settled_at as filled_at, epoch_id
         FROM trading_orders 
         WHERE user_id = $1

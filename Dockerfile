@@ -24,24 +24,23 @@ RUN apt-get update && apt-get install -y \
     libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
-
-
 # Install spl-token CLI via Cargo (network safe fallback)
 RUN cargo install spl-token-cli
 
-
-# Enable offline mode for sqlx
-ENV SQLX_OFFLINE=true
-
-COPY --from=planner /app/recipe.json recipe.json
-
 # Build dependencies - this is the caching Docker layer
 ENV CARGO_BUILD_JOBS=2
+
+COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy source code and build application
 COPY . .
 ENV CARGO_BUILD_JOBS=2
+
+# Enable offline mode for sqlx (prepared queries are in .sqlx directory)
+ENV SQLX_OFFLINE=true
+
+# Build with sqlx offline mode
 RUN cargo build --release --bin api-gateway
 
 # Runtime stage

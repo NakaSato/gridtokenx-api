@@ -308,7 +308,8 @@ impl WalletService {
 
         // 2. Derive key from password using PBKDF2
         let mut derived_key = [0u8; 32]; // AES-256 needs 32 bytes
-        pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, 100_000, &mut derived_key);
+        pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, 100_000, &mut derived_key)
+            .map_err(|e| anyhow!("Key derivation failed: {:?}", e))?;
 
         // 3. Generate IV (Nonce)
         let mut iv = [0u8; 12]; // AES-GCM standard nonce size
@@ -349,7 +350,8 @@ impl WalletService {
 
         // 2. Derive key again
         let mut derived_key = [0u8; 32];
-        pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, 100_000, &mut derived_key);
+        pbkdf2::<Hmac<Sha256>>(password.as_bytes(), &salt, 100_000, &mut derived_key)
+            .map_err(|e| anyhow!("Key derivation failed: {:?}", e))?;
 
         // 3. Decrypt
         let cipher = Aes256Gcm::new(&derived_key.into());

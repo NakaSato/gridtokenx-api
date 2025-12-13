@@ -128,7 +128,7 @@ pub async fn create_order(
     // ========================================================================
     // ON-CHAIN ORDER CREATION (Added to fix P2P Settlement)
     // ========================================================================
-    let signature = if _state.config.tokenization.enable_real_blockchain {
+    let (signature, order_pda) = if _state.config.tokenization.enable_real_blockchain {
         // Fetch user keys to sign the transaction
         let db_user = sqlx::query!(
             "SELECT wallet_address, encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
@@ -264,7 +264,7 @@ pub async fn create_order(
             .unwrap_or(0);
 
         // Execute Transaction
-        let signature = _state
+        let (signature, order_pda) = _state
             .blockchain_service
             .execute_create_order(
                 &keypair,
@@ -283,22 +283,36 @@ pub async fn create_order(
                 ApiError::Internal(format!("On-chain failure: {}", e))
             })?;
 
-        tracing::info!("On-chain order created. Signature: {}", signature);
-        signature.to_string()
+        tracing::info!("On-chain order created. Signature: {}, PDA: {}", signature, order_pda);
+        (signature.to_string(), Some(order_pda))
     } else {
         tracing::info!("Mocking on-chain order creation for user: {}", user.0.sub);
-        format!("mock_order_sig_{}", order_id)
+        (format!("mock_order_sig_{}", order_id), None)
     };
 
-    // Update DB with signature
-    sqlx::query!(
-        "UPDATE trading_orders SET blockchain_tx_signature = $1 WHERE id = $2",
-        signature,
-        order_id
-    )
-    .execute(&_state.db)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    // Update DB with signature and PDA
+    // Using sqlx::query instead of macro because we are in offline mode and 
+    // the new query is not in sqlx-data.json yet.
+    if let Some(pda) = order_pda {
+        sqlx::query(
+            "UPDATE trading_orders SET blockchain_tx_signature = $1, order_pda = $2 WHERE id = $3",
+        )
+        .bind(&signature)
+        .bind(pda)
+        .bind(order_id)
+        .execute(&_state.db)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+    } else {
+         sqlx::query(
+            "UPDATE trading_orders SET blockchain_tx_signature = $1 WHERE id = $2",
+        )
+        .bind(&signature)
+        .bind(order_id)
+        .execute(&_state.db)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
+    }
 
     let signature_str = Some(signature);
 

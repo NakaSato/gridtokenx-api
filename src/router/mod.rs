@@ -1,45 +1,28 @@
-//! Router configuration module.
+//! Router configuration module - Minimal build
 //!
-//! This module organizes all API routes into logical groups:
-//! - `public`: Unauthenticated routes (health, auth, public market data)
-//! - `protected`: Authenticated routes (user operations, trading, meters)
-//! - `admin`: Admin-only routes (system management, analytics)
+//! Only includes health check and meter stub routes for testing.
 
-mod admin;
-mod protected;
-mod public;
-
-pub use admin::admin_routes;
-pub use protected::protected_routes;
-pub use public::public_routes;
-
-use axum::Router;
+use axum::{routing::get, Router};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
 use crate::app_state::AppState;
-use crate::middleware;
+use crate::handlers::meter_stub;
 
-/// Build the complete application router with all routes and middleware.
+/// Build the minimal application router for testing.
 pub fn build_router(app_state: AppState) -> Router {
-    let public = public_routes();
-    let protected = protected_routes(app_state.clone());
+    // Health check routes
+    let health = Router::new()
+        .route("/health", get(health_check))
+        .route("/api/health", get(health_check));
 
-    public
-        .merge(protected)
+    // Meter stub routes (publicly accessible for simulator testing)
+    let meters = meter_stub::meter_routes();
+
+    health
+        .nest("/api/meters", meters)
         .layer(
             ServiceBuilder::new()
-                .layer(axum::middleware::from_fn(
-                    middleware::json_validation_middleware,
-                ))
-                .layer(axum::middleware::from_fn(middleware::add_security_headers))
-                .layer(axum::middleware::from_fn(middleware::metrics_middleware))
-                .layer(axum::middleware::from_fn(
-                    middleware::active_requests_middleware,
-                ))
-                .layer(axum::middleware::from_fn(
-                    middleware::request_logger_middleware,
-                ))
                 .layer(TraceLayer::new_for_http())
                 .layer(TimeoutLayer::with_status_code(
                     axum::http::StatusCode::REQUEST_TIMEOUT,
@@ -48,4 +31,9 @@ pub fn build_router(app_state: AppState) -> Router {
                 .layer(CorsLayer::permissive()),
         )
         .with_state(app_state)
+}
+
+/// Simple health check endpoint
+async fn health_check() -> &'static str {
+    "OK - Minimal Gateway Running"
 }

@@ -17,8 +17,6 @@ use crate::{
     services::{market::TradeMatch, SettlementService, WebSocketService},
 };
 
-pub use types::*;
-
 /// Background service that automatically matches orders with offers
 #[derive(Clone)]
 pub struct OrderMatchingEngine {

@@ -8,7 +8,7 @@ use tracing::info;
 use crate::services::blockchain::account_management::AccountManager; // Dependency
 use crate::services::blockchain::transactions::TransactionHandler;
 use crate::services::blockchain::utils::BlockchainUtils;
-use crate::services::priority_fee::TransactionType;
+// use crate::services::priority_fee::TransactionType; // DISABLED
 
 /// Manages Token operations (mint, burn, transfer)
 #[derive(Clone, Debug)]
@@ -144,7 +144,7 @@ impl TokenManager {
             .build_and_send_transaction_with_priority(
                 instructions,
                 &signers,
-                TransactionType::TokenMinting,
+                "token_transaction",
             )
             .await
     }
@@ -169,7 +169,7 @@ impl TokenManager {
             .build_and_send_transaction_with_priority(
                 vec![burn_instruction],
                 &signers,
-                TransactionType::Settlement, // Use Settlement priority for burning
+                "token_transaction", // Use Settlement priority for burning
             )
             .await
     }
@@ -200,7 +200,7 @@ impl TokenManager {
             .build_and_send_transaction_with_priority(
                 vec![transfer_instruction],
                 &signers,
-                TransactionType::Settlement,
+                "token_transaction",
             )
             .await
     }
@@ -229,7 +229,7 @@ impl TokenManager {
             .build_and_send_transaction_with_priority(
                 vec![transfer_instruction],
                 &signers,
-                TransactionType::Settlement,
+                "token_transaction",
             )
             .await
     }

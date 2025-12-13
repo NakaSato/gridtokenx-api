@@ -1,16 +1,7 @@
-//! Blockchain API Module
+//! Blockchain API Module - Minimal version
 //!
-//! Provides endpoints for:
-//! - Transaction submission and history
-//! - Program interactions
-//! - Account and network information
+//! Only includes types for now, handlers disabled
 
-pub mod info;
-pub mod programs;
-pub mod transactions;
 pub mod types;
 
-pub use info::*;
-pub use programs::*;
-pub use transactions::*;
 pub use types::*;

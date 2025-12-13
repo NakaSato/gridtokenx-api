@@ -10,11 +10,11 @@ use std::str::FromStr;
 const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 
 /// Program IDs (localnet) — keep in sync with `gridtokenx-anchor/Anchor.toml`
-pub const REGISTRY_PROGRAM_ID: &str = "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7";
-pub const ORACLE_PROGRAM_ID: &str = "DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE";
-pub const GOVERNANCE_PROGRAM_ID: &str = "4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe";
-pub const ENERGY_TOKEN_PROGRAM_ID: &str = "94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur";
-pub const TRADING_PROGRAM_ID: &str = "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb";
+pub const REGISTRY_PROGRAM_ID: &str = "ExXGeZ2bZpWQrtHpc1CRoBNHsozEJSSj7UioVZSf4U8F";
+pub const ORACLE_PROGRAM_ID: &str = "4vXCNesjspqZUsKWU1Zaa3pucDAdZNeFnbbwem7DefbT";
+pub const GOVERNANCE_PROGRAM_ID: &str = "55ix8BxEAErEyK7jHjerCr6z8aTei4vaXqwVfoGiz6C3";
+pub const ENERGY_TOKEN_PROGRAM_ID: &str = "Ct8j89GLmk4XEqGsUbB6kigeZjDnhf5xfmAT1MZhvxSj";
+pub const TRADING_PROGRAM_ID: &str = "Fo9hGqQu2beFAVGS5BVKhHwU5fingYwAMoALhKdgToXq";
 
 /// Instruction builder for Solana programs
 #[derive(Clone, Debug)]
@@ -302,9 +302,10 @@ impl InstructionBuilder {
 
     /// Get token mint pubkey
     fn get_token_mint_pubkey(&self) -> Result<Pubkey> {
-        // In a real implementation, this would be configured or derived
-        "GRXTokenMint11111111111111111111111111"
-            .parse()
+        let mint_str = std::env::var("ENERGY_TOKEN_MINT")
+            .map_err(|e| anyhow!("ENERGY_TOKEN_MINT not set: {}", e))?;
+            
+        Pubkey::from_str(&mint_str)
             .map_err(|e| anyhow!("Failed to parse token mint pubkey: {}", e))
     }
 

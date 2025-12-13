@@ -1,3 +1,73 @@
+// GridTokenX API Error Handling
+//!
+//! This module provides a comprehensive error handling system for the API Gateway.
+//!
+//! ## Architecture
+//!
+//! The error handling follows a two-tier pattern:
+//!
+//! 1. **Service Layer** (`anyhow::Result<T>`):
+//!    - Services use `anyhow::Result` for internal error handling
+//!    - Allows flexible error context with `.context()` method
+//!    - Example: `query.await.context("Failed to fetch user from database")?`
+//!
+//! 2. **Handler Layer** (`Result<T, ApiError>`):
+//!    - HTTP handlers convert `anyhow::Error` to `ApiError` at the boundary
+//!    - `ApiError` provides structured error responses with error codes
+//!    - Automatically converts to JSON responses with proper HTTP status codes
+//!
+//! ## Error Codes
+//!
+//! Errors are categorized using a numeric code system:
+//! - `1xxx` - Authentication errors
+//! - `2xxx` - Authorization errors
+//! - `3xxx` - Validation errors
+//! - `4xxx` - Resource errors (not found, conflict, etc.)
+//! - `5xxx` - Business logic errors
+//! - `6xxx` - Blockchain errors
+//! - `7xxx` - Database errors
+//! - `8xxx` - External service errors
+//! - `9xxx` - Rate limiting and internalerrors
+//!
+//! ## Usage Examples
+//!
+//! ### In Services
+//! ```rust
+//! use anyhow::{Context, Result};
+//!
+//! async fn get_user(db: &PgPool, user_id: Uuid) -> Result<User> {
+//!     sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", user_id)
+//!         .fetch_optional(db)
+//!         .await
+//!         .context("Failed to query user from database")?
+//!         .ok_or_else(|| anyhow::anyhow!("User {} not found", user_id))
+//! }
+//! ```
+//!
+//! ### In Handlers
+//! ```rust
+//! use crate::error::{ApiError, Result};
+//!
+//! pub async fn get_user_handler(
+//!     State(state): State<AppState>,
+//!     Path(user_id): Path<Uuid>,
+//! ) -> Result<Json<User>> {
+//!     let user = get_user(&state.db, user_id)
+//!         .await
+//!         .map_err(|e| ApiError::not_found(&format!("User {}", user_id)))?;
+//!     Ok(Json(user))
+//! }
+//! ```
+//!
+//! ### Using Helper Methods
+//! ```rust
+//! // Instead of
+//! return Err(ApiError::NotFound("Meter not found".to_string()));
+//!
+//! // Use
+//! return Err(ApiError::meter_not_found(meter_id));
+//! ```
+
 use axum::{
     extract::rejection::JsonRejection,
     http::StatusCode,
@@ -441,6 +511,81 @@ impl ApiError {
     /// Helper: Invalid wallet address
     pub fn invalid_wallet() -> Self {
         ApiError::with_code(ErrorCode::InvalidWalletAddress, "Invalid wallet address")
+    }
+
+    // Domain-specific helpers for common business logic errors
+
+    /// Helper: Meter not found
+    pub fn meter_not_found(meter_id: &str) -> Self {
+        ApiError::with_details(
+            ErrorCode::NotFound,
+            format!("Meter {} not found", meter_id),
+            "The specified meter does not exist in the system",
+        )
+    }
+
+    /// Helper: Order already matched
+    pub fn order_already_matched(order_id: impl std::fmt::Display) -> Self {
+        ApiError::with_details(
+            ErrorCode::Conflict,
+            format!("Order {} has already been matched", order_id),
+            "This order cannot be modified as it has been matched",
+        )
+    }
+
+    /// Helper: Order not found
+    pub fn order_not_found(order_id: impl std::fmt::Display) -> Self {
+        ApiError::not_found(&format!("Order {}", order_id))
+    }
+
+    /// Helper: Epoch not active
+    pub fn epoch_not_active(epoch_id: impl std::fmt::Display) -> Self {
+        ApiError::with_details(
+            ErrorCode::EpochNotActive,
+            format!("Epoch {} is not active", epoch_id),
+            "Trading is only allowed during active epochs",
+        )
+    }
+
+    /// Helper: Certificate not found
+    pub fn certificate_not_found(cert_id: &str) -> Self {
+        ApiError::not_found(&format!("Certificate {}", cert_id))
+    }
+
+    /// Helper: Invalid meter reading
+    pub fn invalid_meter_reading(reason: &str) -> Self {
+        ApiError::with_details(
+            ErrorCode::MeterReadingInvalid,
+            "Invalid meter reading",
+            reason,
+        )
+    }
+
+    /// Helper: Blockchain transaction failed with details
+    pub fn blockchain_tx_failed(details: &str) -> Self {
+        ApiError::with_details(
+            ErrorCode::BlockchainTransactionFailed,
+            "Blockchain transaction failed",
+            details,
+        )
+    }
+
+    /// Helper: Database constraint violation
+    pub fn constraint_violation(constraint: &str) -> Self {
+        ApiError::with_details(
+            ErrorCode::ConstraintViolation,
+            "Database constraint violation",
+            format!("Constraint '{}' was violated", constraint),
+        )
+    }
+
+    /// Helper: Service unavailable
+    pub fn service_unavailable(service: &str) -> Self {
+        ApiError::with_details(
+            ErrorCode::ServiceUnavailable,
+            format!("{} service is currently unavailable", service),
+            "Please try again later",
+        )
     }
 
     /// Get error code

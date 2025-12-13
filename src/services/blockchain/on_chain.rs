@@ -15,7 +15,7 @@ use std::str::FromStr;
 use crate::config::SolanaProgramsConfig;
 use crate::services::blockchain::instructions::InstructionBuilder;
 use crate::services::blockchain::transactions::TransactionHandler;
-use crate::services::priority_fee::TransactionType;
+// use crate::services::priority_fee::TransactionType; // DISABLED
 
 /// Manages On-Chain transactions and program interactions
 #[derive(Clone, Debug)]
@@ -68,7 +68,7 @@ impl OnChainManager {
         &self,
         instructions: Vec<Instruction>,
         signers: &[&Keypair],
-        transaction_type: TransactionType,
+        transaction_type: &'static str,
     ) -> Result<Signature> {
         self.transaction_handler
             .build_and_send_transaction_with_priority(instructions, signers, transaction_type)

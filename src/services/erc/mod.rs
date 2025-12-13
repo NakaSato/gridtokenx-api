@@ -24,6 +24,7 @@ use crate::services::BlockchainService;
 #[derive(Clone)]
 pub struct ErcService {
     db_pool: PgPool,
+    #[allow(dead_code)]
     blockchain_service: BlockchainService,
     issuance_manager: AggregatedIssuance,
     retiring_manager: CertificateRetiring,

@@ -1,10 +1,9 @@
 use crate::services::erc::types::{
-    ErcAttribute, ErcCertificate, ErcFile, ErcMetadata, ErcProperties, IssueErcRequest,
+    ErcAttribute, ErcCertificate, ErcFile, ErcMetadata, ErcProperties,
 };
 use crate::services::BlockchainService;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -18,6 +17,7 @@ use sqlx::PgPool;
 #[derive(Clone)]
 pub struct AggregatedIssuance {
     db_pool: PgPool,
+    #[allow(dead_code)]
     blockchain_service: BlockchainService,
 }
 
@@ -71,10 +71,10 @@ impl AggregatedIssuance {
         &self,
         certificate_id: &str,
         user_wallet: &Pubkey,
-        meter_id: &str,
+        _meter_id: &str,
         energy_amount: f64,
-        renewable_source: &str,
-        validation_data: &str,
+        _renewable_source: &str,
+        _validation_data: &str,
         authority: &Keypair,
         governance_program_id: &Pubkey,
     ) -> Result<solana_sdk::signature::Signature> {
@@ -104,7 +104,7 @@ impl AggregatedIssuance {
         // But `issue_certificate` usually requires specific accounts.
 
         // Let's assume we construct a raw Instruction here:
-        let instruction = Instruction {
+        let _instruction = Instruction {
             program_id: *governance_program_id,
             accounts: vec![
                 AccountMeta::new(certificate_pda, false),
@@ -215,8 +215,8 @@ impl AggregatedIssuance {
     /// Validate certificate on-chain for trading
     pub async fn validate_certificate_on_chain(
         &self,
-        certificate_id: &str,
-        governance_program_id: &Pubkey,
+        _certificate_id: &str,
+        _governance_program_id: &Pubkey,
     ) -> Result<bool> {
         // We need blockchain service to fetch account info
         // self.blockchain_service.get_account_info(&certificate_pda).await

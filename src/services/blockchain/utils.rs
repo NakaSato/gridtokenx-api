@@ -10,6 +10,7 @@ use tracing::info;
 // Token Program IDs
 #[allow(dead_code)]
 const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+#[allow(dead_code)]
 const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /// Utility functions for Solana blockchain operations
@@ -60,7 +61,7 @@ impl BlockchainUtils {
     }
 
     /// Mint energy tokens directly to a user's token account
-    /// This calls the energy_token program's mint_to_wallet instruction
+    /// This calls the energy_token program's mint_tokens_direct instruction
     pub fn create_mint_instruction(
         authority: &Keypair,
         user_token_account: &Pubkey,
@@ -69,31 +70,50 @@ impl BlockchainUtils {
         amount_kwh: f64,
     ) -> Result<Instruction> {
         info!(
-            "Creating mint instruction for {} kWh to {}",
+            "Creating mint instruction (Anchor) for {} kWh to {}",
             amount_kwh, user_token_account
         );
 
         // Convert kWh to token amount (with 9 decimals)
         let amount_lamports = (amount_kwh * 1_000_000_000.0) as u64;
 
-        // Manually build MintTo instruction to bypass spl_token library validation
-        // The spl_token library's check_spl_token_program_account() rejects our Token-2022 program ID
+        let energy_token_program_id = Self::energy_token_program_id()?;
         let token_program_id = Self::get_token_program_id()?;
 
-        // MintTo instruction discriminator is 7
-        let mut instruction_data = Vec::with_capacity(9);
-        instruction_data.push(7); // MintTo discriminator
+        // Derive token_info PDA
+        let (token_info_pda, _) =
+            Pubkey::find_program_address(&[b"token_info"], &energy_token_program_id);
+
+        // Build instruction data
+        let mut instruction_data = Vec::new();
+
+        // Discriminator for "mint_tokens_direct": [13, 246, 31, 237, 99, 19, 88, 226]
+        // Calculated via sha256("global:mint_tokens_direct")[:8]
+        instruction_data.extend_from_slice(&[13, 246, 31, 237, 99, 19, 88, 226]);
+
+        // Arguments
         instruction_data.extend_from_slice(&amount_lamports.to_le_bytes());
 
+        // Accounts required by MintTokensDirect context:
+        // 0. token_info (mut)
+        // 1. mint (mut)
+        // 2. user_token_account (mut)
+        // 3. authority (signer)
+        // 4. token_program
+        
         use solana_sdk::instruction::{AccountMeta, Instruction};
 
+        let accounts = vec![
+            AccountMeta::new(token_info_pda, false),
+            AccountMeta::new(*mint, false),
+            AccountMeta::new(*user_token_account, false),
+            AccountMeta::new(authority.pubkey(), true),
+            AccountMeta::new_readonly(token_program_id, false),
+        ];
+
         let mint_instruction = Instruction {
-            program_id: token_program_id,
-            accounts: vec![
-                AccountMeta::new(*mint, false),                      // Mint account
-                AccountMeta::new(*user_token_account, false),        // Destination token account
-                AccountMeta::new_readonly(authority.pubkey(), true), // Mint authority (signer)
-            ],
+            program_id: energy_token_program_id,
+            accounts,
             data: instruction_data,
         };
 
@@ -403,7 +423,7 @@ impl BlockchainUtils {
     /// Get Registry program ID
     fn registry_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("REGISTRY_PROGRAM_ID")
-            .unwrap_or_else(|_| "2XPQmFYMdXjP7ffoBB3mXeCdboSFg5Yeb6QmTSGbW8a7".to_string());
+            .unwrap_or_else(|_| "ExXGeZ2bZpWQrtHpc1CRoBNHsozEJSSj7UioVZSf4U8F".to_string());
 
         program_id
             .parse()
@@ -413,7 +433,7 @@ impl BlockchainUtils {
     /// Get Oracle program ID
     fn oracle_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("ORACLE_PROGRAM_ID")
-            .unwrap_or_else(|_| "DvdtU4quEbuxUY2FckmvcXwTpC9qp4HLJKb1PMLaqAoE".to_string());
+            .unwrap_or_else(|_| "4vXCNesjspqZUsKWU1Zaa3pucDAdZNeFnbbwem7DefbT".to_string());
 
         program_id
             .parse()
@@ -424,7 +444,7 @@ impl BlockchainUtils {
     #[allow(dead_code)]
     fn governance_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("GOVERNANCE_PROGRAM_ID")
-            .unwrap_or_else(|_| "4DY97YYBt4bxvG7xaSmWy3MhYhmA6HoMajBHVqhySvXe".to_string());
+            .unwrap_or_else(|_| "55ix8BxEAErEyK7jHjerCr6z8aTei4vaXqwVfoGiz6C3".to_string());
 
         program_id
             .parse()
@@ -434,7 +454,7 @@ impl BlockchainUtils {
     /// Get Energy Token program ID
     fn energy_token_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("ENERGY_TOKEN_PROGRAM_ID")
-            .unwrap_or_else(|_| "94G1r674LmRDmLN2UPjDFD8Eh7zT8JaSaxv9v68GyEur".to_string());
+            .unwrap_or_else(|_| "Ct8j89GLmk4XEqGsUbB6kigeZjDnhf5xfmAT1MZhvxSj".to_string());
 
         program_id
             .parse()
@@ -445,7 +465,7 @@ impl BlockchainUtils {
     #[allow(dead_code)]
     fn trading_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("TRADING_PROGRAM_ID")
-            .unwrap_or_else(|_| "9t3s8sCgVUG9kAgVPsozj8mDpJp9cy6SF5HwRK5nvAHb".to_string());
+            .unwrap_or_else(|_| "Fo9hGqQu2beFAVGS5BVKhHwU5fingYwAMoALhKdgToXq".to_string());
 
         program_id
             .parse()

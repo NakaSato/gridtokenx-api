@@ -7,19 +7,19 @@
 //! - Meter statistics
 //! - Meter registration and verification
 
-pub mod minting;
-pub mod queries;
+// pub mod minting;
+// pub mod queries;
 pub mod readings;
-pub mod registration;
-pub mod statistics;
+// pub mod registration;
+// pub mod statistics;
 pub mod types;
-pub mod verification;
+// pub mod verification;
 
 // Re-export all public items
-pub use minting::*;
-pub use queries::*;
+// pub use minting::*;
+// pub use queries::*;
 pub use readings::*;
-pub use registration::*;
-pub use statistics::*;
+// pub use registration::*;
+// pub use statistics::*;
 pub use types::*;
-pub use verification::*;
+// pub use verification::*;

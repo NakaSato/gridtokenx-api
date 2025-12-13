@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use solana_sdk::signature::Keypair;
 use sqlx::PgPool;
 use tracing::instrument;
 use uuid::Uuid;
@@ -11,6 +10,7 @@ use crate::services::BlockchainService;
 #[derive(Clone)]
 pub struct ErcQueryManager {
     db_pool: PgPool,
+    #[allow(dead_code)]
     blockchain_service: BlockchainService,
 }
 

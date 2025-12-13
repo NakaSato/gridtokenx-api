@@ -1,4 +1,5 @@
 use anyhow::Result;
+use sqlx::types::ipnetwork::IpNetwork;
 use serde_json::json;
 use sqlx::PgPool;
 use std::net::IpAddr;
@@ -117,7 +118,10 @@ impl WalletAuditLogger {
         error_message: Option<String>,
         metadata: Option<serde_json::Value>,
     ) -> Result<()> {
-        let ip_str = ip_address.map(|ip| ip.to_string());
+        let ip_network = ip_address.map(|ip| match ip {
+            IpAddr::V4(ipv4) => IpNetwork::V4(ipv4.into()),
+            IpAddr::V6(ipv6) => IpNetwork::V6(ipv6.into()),
+        });
 
         let result = sqlx::query!(
             r#"
@@ -128,7 +132,7 @@ impl WalletAuditLogger {
             user_id,
             operation,
             success,
-            ip_str.as_deref(),
+            ip_network as Option<IpNetwork>,
             user_agent,
             error_message,
             metadata

@@ -157,7 +157,7 @@ impl MeterService {
 
         let existing: Option<Uuid> = if let Some(mid) = meter_id {
             // Check for duplicate reading for this specific meter (verified)
-            let record = sqlx::query!(
+            let record: Option<Uuid> = sqlx::query_scalar(
                 r#"
                 SELECT id FROM meter_readings
                 WHERE user_id = $1
@@ -165,19 +165,19 @@ impl MeterService {
                 AND reading_timestamp BETWEEN $3 AND $4
                 LIMIT 1
                 "#,
-                user_id,
-                mid,
-                window_start,
-                window_end,
             )
+            .bind(user_id)
+            .bind(mid)
+            .bind(window_start)
+            .bind(window_end)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| anyhow!("Failed to check duplicate readings: {}", e))?;
 
-            record.map(|r| r.id)
+            record
         } else if let Some(serial) = meter_serial {
             // Check for duplicate reading for this specific meter serial (unverified/legacy)
-            let record = sqlx::query!(
+            let record: Option<Uuid> = sqlx::query_scalar(
                 r#"
                 SELECT id FROM meter_readings
                 WHERE user_id = $1
@@ -185,34 +185,34 @@ impl MeterService {
                 AND reading_timestamp BETWEEN $3 AND $4
                 LIMIT 1
                 "#,
-                user_id,
-                serial,
-                window_start,
-                window_end,
             )
+            .bind(user_id)
+            .bind(serial)
+            .bind(window_start)
+            .bind(window_end)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| anyhow!("Failed to check duplicate readings: {}", e))?;
 
-            record.map(|r| r.id)
+            record
         } else {
             // Legacy check: Check for duplicate reading for the user (any meter)
-            let record = sqlx::query!(
+            let record: Option<Uuid> = sqlx::query_scalar(
                 r#"
                 SELECT id FROM meter_readings
                 WHERE user_id = $1
                 AND reading_timestamp BETWEEN $2 AND $3
                 LIMIT 1
                 "#,
-                user_id,
-                window_start,
-                window_end,
             )
+            .bind(user_id)
+            .bind(window_start)
+            .bind(window_end)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| anyhow!("Failed to check duplicate readings: {}", e))?;
 
-            record.map(|r| r.id)
+            record
         };
 
         if let Some(existing_id) = existing {
@@ -594,36 +594,28 @@ impl MeterService {
 
     /// Calculate total unminted kWh for a user
     pub async fn get_unminted_total(&self, user_id: Uuid) -> Result<Decimal> {
-        let result = sqlx::query!(
-            r#"
-            SELECT COALESCE(SUM(kwh_amount), 0) as "total!"
-            FROM meter_readings
-            WHERE user_id = $1 AND minted = false
-            "#,
-            user_id,
+        let total: Decimal = sqlx::query_scalar(
+            r#"SELECT COALESCE(SUM(kwh_amount), 0) FROM meter_readings WHERE user_id = $1 AND minted = false"#,
         )
+        .bind(user_id)
         .fetch_one(&self.db_pool)
         .await
         .map_err(|e| anyhow!("Failed to calculate unminted total: {}", e))?;
 
-        Ok(result.total)
+        Ok(total)
     }
 
     /// Get total minted kWh for a user
     pub async fn get_minted_total(&self, user_id: Uuid) -> Result<Decimal> {
-        let result = sqlx::query!(
-            r#"
-            SELECT COALESCE(SUM(kwh_amount), 0) as "total!"
-            FROM meter_readings
-            WHERE user_id = $1 AND minted = true
-            "#,
-            user_id,
+        let total: Decimal = sqlx::query_scalar(
+            r#"SELECT COALESCE(SUM(kwh_amount), 0) FROM meter_readings WHERE user_id = $1 AND minted = true"#,
         )
+        .bind(user_id)
         .fetch_one(&self.db_pool)
         .await
         .map_err(|e| anyhow!("Failed to calculate minted total: {}", e))?;
 
-        Ok(result.total)
+        Ok(total)
     }
 
     /// Validate meter reading data

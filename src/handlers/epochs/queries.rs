@@ -3,7 +3,6 @@ use axum::{
     response::Json,
 };
 use chrono::Utc;
-use utoipa::ToSchema;
 
 use super::types::*;
 use crate::database::schema::types::EpochStatus;

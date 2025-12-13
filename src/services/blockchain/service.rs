@@ -5,7 +5,7 @@ use super::token_management::TokenManager;
 use super::transactions::TransactionHandler;
 use super::utils::BlockchainUtils;
 use crate::config::SolanaProgramsConfig;
-use crate::services::priority_fee::TransactionType;
+// use crate::services::priority_fee::TransactionType; // DISABLED
 use anyhow::{anyhow, Result};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -107,12 +107,7 @@ impl BlockchainService {
 
     /// Get the payer pubkey
     pub fn payer_pubkey(&self) -> Pubkey {
-        // Delegate to InstructionBuilder if possible, or keep placeholder
-        // InstructionBuilder has `payer` but it's not exposed publicly in `InstructionBuilder` definition (based on assumption)
-        // Let's keep the existing placeholder logic for now
-        "11111111111111111111111111111111112"
-            .parse()
-            .expect("hardcoded placeholder pubkey is invalid")
+        self.instruction_builder.payer()
     }
 
     /// Submit transaction to blockchain
@@ -124,7 +119,7 @@ impl BlockchainService {
     pub fn add_priority_fee(
         &self,
         transaction: &mut Transaction,
-        tx_type: TransactionType,
+        tx_type: &'static str,
         fee: u64,
     ) -> Result<()> {
         self.transaction_handler
@@ -136,13 +131,14 @@ impl BlockchainService {
         self.on_chain_manager.confirm_transaction(signature).await
     }
 
-    /// Get trade record from blockchain
-    pub async fn get_trade_record(
-        &self,
-        signature: &str,
-    ) -> Result<crate::models::transaction::TradeRecord> {
-        self.transaction_handler.get_trade_record(signature).await
-    }
+    // DISABLED - uses models module
+    // /// Get trade record from blockchain
+    // pub async fn get_trade_record(
+    //     &self,
+    //     signature: &str,
+    // ) -> Result<crate::models::transaction::TradeRecord> {
+    //     self.transaction_handler.get_trade_record(signature).await
+    // }
 
     /// Check if the service is healthy
     pub async fn health_check(&self) -> Result<bool> {
@@ -372,7 +368,7 @@ impl BlockchainService {
         self.build_and_send_transaction_with_priority(
             vec![instruction],
             &signers,
-            TransactionType::Settlement,
+            "token_transaction",
         )
         .await
     }
@@ -386,11 +382,11 @@ impl BlockchainService {
         price_per_kwh: u64,
         order_type: &str,
         erc_certificate_id: Option<&str>,
-    ) -> Result<Signature> {
+    ) -> Result<(Signature, String)> {
         let market =
             Pubkey::from_str(market_pubkey).map_err(|e| anyhow!("Invalid market pubkey: {}", e))?;
 
-        let (instruction, _order_pda) = self
+        let (instruction, order_pda) = self
             .build_create_order_instruction(
                 &market,
                 authority.pubkey(),
@@ -403,12 +399,14 @@ impl BlockchainService {
 
         let signers = vec![authority];
 
-        self.build_and_send_transaction_with_priority(
+        let signature = self.build_and_send_transaction_with_priority(
             vec![instruction],
             &signers,
-            TransactionType::OrderCreation,
+            "token_transaction",
         )
-        .await
+        .await?;
+
+        Ok((signature, order_pda.to_string()))
     }
 
     /// Build instruction for creating energy trade order
@@ -536,7 +534,7 @@ impl BlockchainService {
         &self,
         instructions: Vec<Instruction>,
         signers: &[&Keypair],
-        transaction_type: TransactionType,
+        transaction_type: &'static str,
     ) -> Result<Signature> {
         self.on_chain_manager
             .build_and_send_transaction_with_priority(instructions, signers, transaction_type)

@@ -2,7 +2,6 @@ pub mod types;
 
 use axum::extract::ws::{Message, WebSocket};
 use futures::{stream::SplitSink, SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};

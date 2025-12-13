@@ -1,7 +1,7 @@
 use axum::{extract::State, response::Json};
 use chrono::Utc;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sqlx::Row;
 use std::str::FromStr;
 use utoipa::ToSchema;

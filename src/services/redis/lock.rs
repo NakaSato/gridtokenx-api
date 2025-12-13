@@ -366,7 +366,7 @@ impl RedisLock {
         let mut conn = self.client.get_multiplexed_async_connection().await?;
 
         let keys: Vec<String> = conn.keys(pattern).await?;
-        let mut total_locks = keys.len() as u32;
+        let total_locks = keys.len() as u32;
         let mut expired_locks = 0u32;
         let mut total_ttl = Duration::from_secs(0);
 
@@ -501,7 +501,7 @@ impl GridTokenXLockManager {
     }
 
     /// Lock for order matching to prevent race conditions
-    pub async fn lock_order_matching(&self, symbol: &str) -> RedisResult<Option<LockGuard>> {
+    pub async fn lock_order_matching(&self, symbol: &str) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("order_matching:{}", symbol);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
@@ -518,7 +518,7 @@ impl GridTokenXLockManager {
     pub async fn lock_settlement_processing(
         &self,
         user_id: &str,
-    ) -> RedisResult<Option<LockGuard>> {
+    ) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("settlement:{}", user_id);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
@@ -532,7 +532,7 @@ impl GridTokenXLockManager {
     }
 
     /// Lock for token minting operations
-    pub async fn lock_token_minting(&self, wallet: &str) -> RedisResult<Option<LockGuard>> {
+    pub async fn lock_token_minting(&self, wallet: &str) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("token_minting:{}", wallet);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
@@ -543,7 +543,7 @@ impl GridTokenXLockManager {
     }
 
     /// Lock for market clearing operations
-    pub async fn lock_market_clearing(&self, epoch: u64) -> RedisResult<Option<LockGuard>> {
+    pub async fn lock_market_clearing(&self, epoch: u64) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("market_clearing:{}", epoch);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
@@ -557,7 +557,7 @@ impl GridTokenXLockManager {
     }
 
     /// Lock for meter verification operations
-    pub async fn lock_meter_verification(&self, meter_id: &str) -> RedisResult<Option<LockGuard>> {
+    pub async fn lock_meter_verification(&self, meter_id: &str) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("meter_verification:{}", meter_id);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
@@ -568,7 +568,7 @@ impl GridTokenXLockManager {
     }
 
     /// Lock for batch operations (e.g., bulk settlements)
-    pub async fn lock_batch_operation(&self, batch_id: &str) -> RedisResult<Option<LockGuard>> {
+    pub async fn lock_batch_operation(&self, batch_id: &str) -> RedisResult<Option<LockGuard<'_>>> {
         let resource = format!("batch_operation:{}", batch_id);
 
         if let Some(lock_info) = self.redis_lock.acquire_lock(&resource).await? {
