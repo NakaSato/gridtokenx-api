@@ -15,6 +15,7 @@ use super::{
     meters::{
         get_my_meters, register_meter, get_registered_meters, 
         get_registered_meters_filtered, update_meter_status, verify_meter, create_reading,
+        get_my_readings,
     },
     wallets::token_balance,
     status::{system_status, meter_status},
@@ -45,6 +46,7 @@ pub fn v1_meters_routes() -> Router<AppState> {
         .route("/", post(register_meter))  // POST /api/v1/meters
         .route("/", get(get_registered_meters_filtered))  // GET /api/v1/meters?status=verified
         .route("/{serial}", axum::routing::patch(update_meter_status))  // PATCH /api/v1/meters/{serial}
+        .route("/readings", get(get_my_readings))  // GET /api/v1/meters/readings
         .route("/{serial}/readings", post(create_reading))  // POST /api/v1/meters/{serial}/readings
 }
 

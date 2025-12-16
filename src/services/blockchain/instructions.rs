@@ -10,11 +10,11 @@ use std::str::FromStr;
 const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 
 /// Program IDs (localnet) — keep in sync with `gridtokenx-anchor/Anchor.toml`
-pub const REGISTRY_PROGRAM_ID: &str = "ExXGeZ2bZpWQrtHpc1CRoBNHsozEJSSj7UioVZSf4U8F";
-pub const ORACLE_PROGRAM_ID: &str = "4vXCNesjspqZUsKWU1Zaa3pucDAdZNeFnbbwem7DefbT";
-pub const GOVERNANCE_PROGRAM_ID: &str = "55ix8BxEAErEyK7jHjerCr6z8aTei4vaXqwVfoGiz6C3";
-pub const ENERGY_TOKEN_PROGRAM_ID: &str = "Ct8j89GLmk4XEqGsUbB6kigeZjDnhf5xfmAT1MZhvxSj";
-pub const TRADING_PROGRAM_ID: &str = "Fo9hGqQu2beFAVGS5BVKhHwU5fingYwAMoALhKdgToXq";
+pub const REGISTRY_PROGRAM_ID: &str = "9wvMT6f2Y7A37LB8y5LEQRSJxbnwLYqw1Bqq1RBtD3oM";
+pub const ORACLE_PROGRAM_ID: &str = "69e8LaTfPnFycbD1kAhStfkyJxe1LnN323k3NQAMYBHr";
+pub const GOVERNANCE_PROGRAM_ID: &str = "2GprryNp7j7yxGuPNNjpJLHELfCdXH8UPfKSxXCvisjL";
+pub const ENERGY_TOKEN_PROGRAM_ID: &str = "AZBstnPmUeRJnwv55128awdfi2tmCFzcK4W6NPXbTkWA";
+pub const TRADING_PROGRAM_ID: &str = "e7rS5sykWMXtciUEgUZ6xByqo6VqwNRNeAmQQn3Sbj2";
 
 /// Instruction builder for Solana programs
 #[derive(Clone, Debug)]

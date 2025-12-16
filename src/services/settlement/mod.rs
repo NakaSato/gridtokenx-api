@@ -11,7 +11,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::services::market::TradeMatch;
+use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
 
 pub use types::*;
@@ -22,24 +22,27 @@ pub struct SettlementService {
     db: PgPool,
     blockchain: BlockchainService,
     config: SettlementConfig,
+    encryption_secret: String,
     #[allow(dead_code)]
     pending_settlements: Arc<RwLock<Vec<Uuid>>>,
 }
 
 impl SettlementService {
-    pub fn new(db: PgPool, blockchain: BlockchainService) -> Self {
-        Self::with_config(db, blockchain, SettlementConfig::default())
+    pub fn new(db: PgPool, blockchain: BlockchainService, encryption_secret: String) -> Self {
+        Self::with_config(db, blockchain, SettlementConfig::default(), encryption_secret)
     }
 
     pub fn with_config(
         db: PgPool,
         blockchain: BlockchainService,
         config: SettlementConfig,
+        encryption_secret: String,
     ) -> Self {
         Self {
             db,
             blockchain,
             config,
+            encryption_secret,
             pending_settlements: Arc::new(RwLock::new(Vec::new())),
         }
     }
@@ -576,7 +579,7 @@ impl SettlementService {
 
         // Fetch encrypted_private_key from users table
         let row = sqlx::query!(
-            "SELECT encrypted_private_key FROM users WHERE id = $1",
+            "SELECT encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
             user_id
         )
         .fetch_one(&self.db)
@@ -586,30 +589,61 @@ impl SettlementService {
         let encrypted_pk = row.encrypted_private_key.ok_or_else(|| {
             ApiError::Internal(format!("User {} has no private key stored", user_id))
         })?;
-
-        use base64::{engine::general_purpose, Engine as _};
-
-        // MOCK DECRYPTION: Base64 decode
-        // Try to decode as Base64 first
-        let decoded = match general_purpose::STANDARD.decode(&encrypted_pk) {
-            Ok(d) => d,
-            Err(_) => {
-                // If not valid Base64, assume it's raw bytes (legacy/test data)
-                encrypted_pk
+        
+        // If we have salt and iv (new flow), decrypt properly
+        if let (Some(salt), Some(iv)) = (row.wallet_salt, row.encryption_iv) {
+            use base64::{engine::general_purpose, Engine as _};
+            
+            // Convert bytes back to Base64 for the decrypt function
+            let encrypted_b64 = general_purpose::STANDARD.encode(&encrypted_pk);
+            let salt_b64 = general_purpose::STANDARD.encode(&salt);
+            let iv_b64 = general_purpose::STANDARD.encode(&iv);
+            
+            use crate::services::WalletService;
+            let decrypted = WalletService::decrypt_private_key(
+                &self.encryption_secret,
+                &encrypted_b64,
+                &salt_b64,
+                &iv_b64
+            ).map_err(|e| ApiError::Internal(format!("Failed to decrypt wallet: {}", e)))?;
+            
+             // Valid key should be 32 (seed) or 64 (full keypair) bytes
+            if decrypted.len() == 64 || decrypted.len() == 32 {
+                let secret_key: [u8; 32] = decrypted[..32]
+                    .try_into()
+                    .map_err(|_| ApiError::Internal("Invalid key slice".to_string()))?;
+                Ok(Keypair::new_from_array(secret_key))
+            } else {
+                Err(ApiError::Internal(format!(
+                    "Invalid key length: {}",
+                    decrypted.len()
+                )))
             }
-        };
-
-        // Valid key should be 32 (seed) or 64 (full keypair) bytes
-        if decoded.len() == 64 || decoded.len() == 32 {
-            let secret_key: [u8; 32] = decoded[..32]
-                .try_into()
-                .map_err(|_| ApiError::Internal("Invalid key slice".to_string()))?;
-            Ok(Keypair::new_from_array(secret_key))
         } else {
-            Err(ApiError::Internal(format!(
-                "Invalid key length: {}",
-                decoded.len()
-            )))
+             // Fallback minimal decryption logic (legacy)
+            use base64::{engine::general_purpose, Engine as _};
+            
+            // Try to decode as Base64 first
+            let decoded = match general_purpose::STANDARD.decode(&encrypted_pk) {
+                Ok(d) => d,
+                Err(_) => {
+                    // If not valid Base64, assume it's raw bytes (legacy/test data)
+                    encrypted_pk
+                }
+            };
+
+            // Valid key should be 32 (seed) or 64 (full keypair) bytes
+            if decoded.len() == 64 || decoded.len() == 32 {
+                let secret_key: [u8; 32] = decoded[..32]
+                    .try_into()
+                    .map_err(|_| ApiError::Internal("Invalid key slice".to_string()))?;
+                Ok(Keypair::new_from_array(secret_key))
+            } else {
+                Err(ApiError::Internal(format!(
+                    "Invalid key length: {}",
+                    decoded.len()
+                )))
+            }
         }
     }
 }

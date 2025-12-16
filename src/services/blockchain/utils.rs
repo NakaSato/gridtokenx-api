@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
+    instruction::Instruction,
     pubkey::Pubkey,
     signature::{Keypair, Signer},
 };
@@ -152,18 +152,18 @@ impl BlockchainUtils {
     }
 
     /// Ensures user has an Associated Token Account for the token mint
-    /// Creates ATA if it doesn't exist, returns ATA address
-    pub fn create_ata_instruction(
+    /// Creates ATA if it doesn't exist (idempotent - won't fail if already exists)
+    pub fn create_ata_instruction_idempotent(
         authority: &Keypair,
         user_wallet: &Pubkey,
         mint: &Pubkey,
     ) -> Result<Instruction> {
-        info!("Creating ATA instruction for user: {}", user_wallet);
+        info!("Creating idempotent ATA instruction for user: {}", user_wallet);
 
         let token_program_id = Self::get_token_program_id()?;
 
-        // Use the proper spl_associated_token_account instruction
-        let instruction = spl_associated_token_account::instruction::create_associated_token_account(
+        // Use idempotent version - doesn't fail if account already exists
+        let instruction = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
             &authority.pubkey(),  // Payer
             user_wallet,          // Owner of the ATA
             mint,                 // Token mint

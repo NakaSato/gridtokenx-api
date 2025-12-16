@@ -12,6 +12,8 @@
 pub mod auth;
 pub mod blockchain;
 pub mod meter;
+pub mod dev;
+pub mod trading; // Added trading
 pub mod websocket;
 
 // Shared utilities
@@ -25,6 +27,7 @@ pub use common::{
 
 // Re-export V1 route builders (new RESTful API)
 pub use auth::{v1_auth_routes, v1_users_routes, v1_meters_routes, v1_wallets_routes, v1_status_routes};
+pub use trading::v1_trading_routes;
 
 // Re-export legacy route builders (backward compatibility)
 pub use auth::{auth_routes, token_routes, user_meter_routes, meter_info_routes};

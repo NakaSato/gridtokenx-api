@@ -30,6 +30,21 @@ pub struct OrderMatch {
 }
 
 #[derive(Debug, Clone)]
+pub struct TradeMatch {
+    pub id: Uuid, // Unique ID for this trade event
+    pub match_id: Uuid, // Reference to OrderMatch
+    pub epoch_id: Uuid,
+    pub buyer_id: Uuid,
+    pub seller_id: Uuid,
+    pub buy_order_id: Uuid,
+    pub sell_order_id: Uuid,
+    pub quantity: Decimal,
+    pub price: Decimal,
+    pub total_value: Decimal,
+    pub matched_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Settlement {
     pub id: Uuid,
     pub epoch_id: Uuid,

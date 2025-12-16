@@ -130,7 +130,7 @@ impl AuditEvent {
 }
 
 /// Audit event database record
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema, sqlx::FromRow)]
 pub struct AuditEventRecord {
     pub id: Uuid,
     pub event_type: String,

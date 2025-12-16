@@ -598,6 +598,9 @@ impl BlockchainService {
     }
 
     /// Mint energy tokens directly to a user's token account
+    /// Mint (or Burn) energy tokens based on reading amount
+    /// Positive amount = Mint
+    /// Negative amount = Burn
     pub async fn mint_energy_tokens(
         &self,
         authority: &Keypair,
@@ -606,9 +609,27 @@ impl BlockchainService {
         mint: &Pubkey,
         amount_kwh: f64,
     ) -> Result<Signature> {
-        self.token_manager
-            .mint_energy_tokens(authority, user_token_account, user_wallet, mint, amount_kwh)
-            .await
+        if amount_kwh > 0.0 {
+            info!("Minting {} kWh tokens for wallet {}", amount_kwh, user_wallet);
+            self.token_manager
+                .mint_energy_tokens(authority, user_token_account, user_wallet, mint, amount_kwh)
+                .await
+        } else if amount_kwh < 0.0 {
+            let burn_amount = amount_kwh.abs();
+            info!("Burning {} kWh tokens from wallet {}", burn_amount, user_wallet);
+            self.token_manager
+                .burn_energy_tokens(authority, user_token_account, mint, burn_amount)
+                .await
+        } else {
+            // Zero reading, no-op but return successful "signature" placeholder?
+            // Or technically this shouldn't happen if validation works.
+            // Let's just return a log and skip. 
+            // We need to return a signature though.
+            // Returning an error might fail the flow, but zero tokens is valid state.
+            // We can return the last signature or a dummy one if we had one.
+            // For now, let's treat it as a warning.
+            Err(anyhow!("Cannot mint/burn zero tokens"))
+        }
     }
 
     /// Burn energy tokens from a user's token account
@@ -751,6 +772,8 @@ impl BlockchainService {
             .token_manager
             .ensure_token_account_exists(&authority, user_wallet, &mint)
             .await?;
+
+        println!("DEBUG: Using ATA for minting: {}", user_token_account);
 
         // Call the token manager mint method
         self.token_manager

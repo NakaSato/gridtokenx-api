@@ -63,20 +63,7 @@ pub async fn cancel_order(
     .map_err(ApiError::Database)?;
 
     // 4. Return updated order
-    Ok(Json(TradingOrder {
-        id: updated_order.id,
-        user_id: updated_order.user_id,
-        epoch_id: updated_order.epoch_id,
-        order_type: updated_order.order_type,
-        side: updated_order.side,
-        energy_amount: updated_order.energy_amount,
-        price_per_kwh: updated_order.price_per_kwh,
-        filled_amount: updated_order.filled_amount,
-        status: updated_order.status,
-        expires_at: updated_order.expires_at,
-        created_at: updated_order.created_at,
-        filled_at: updated_order.filled_at,
-    }))
+    Ok(Json(updated_order.into()))
 }
 
 /// Update a trading order
@@ -158,18 +145,5 @@ pub async fn update_order(
     .map_err(ApiError::Database)?;
 
     // 6. Return updated order
-    Ok(Json(TradingOrder {
-        id: updated_order.id,
-        user_id: updated_order.user_id,
-        epoch_id: updated_order.epoch_id,
-        order_type: updated_order.order_type,
-        side: updated_order.side,
-        energy_amount: updated_order.energy_amount,
-        price_per_kwh: updated_order.price_per_kwh,
-        filled_amount: updated_order.filled_amount,
-        status: updated_order.status,
-        expires_at: updated_order.expires_at,
-        created_at: updated_order.created_at,
-        filled_at: updated_order.filled_at,
-    }))
+    Ok(Json(updated_order.into()))
 }

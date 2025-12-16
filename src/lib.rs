@@ -8,7 +8,7 @@ pub mod database;
 pub mod error;
 pub mod handlers;
 pub mod middleware;
-// pub mod models;  // Disabled - not needed for minimal build
+pub mod models;
 // pub mod openapi; // Disabled - references disabled modules
 pub mod router;
 pub mod services;

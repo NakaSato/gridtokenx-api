@@ -35,6 +35,13 @@ pub struct AppState {
     pub cache_service: services::CacheService,
     /// Health check service
     pub health_checker: services::HealthChecker,
+
+    // P2P Trading Services
+    pub audit_logger: services::AuditLogger,
+    pub market_clearing: services::MarketClearingService,
+    pub settlement: services::SettlementService,
+    pub market_clearing_engine: services::OrderMatchingEngine,
+    
 }
 
 // Implement FromRef for services that need to be extracted from AppState

@@ -11,6 +11,12 @@ pub mod health_check;
 pub mod wallet;
 pub mod websocket;
 
+// Newly Enabled Services for P2P Trading
+pub mod audit_logger;
+pub mod market_clearing;
+pub mod settlement;
+pub mod order_matching_engine;
+
 // Re-exports
 pub use auth::AuthService;
 pub use blockchain::BlockchainService;
@@ -19,3 +25,8 @@ pub use email::EmailService;
 pub use health_check::HealthChecker;
 pub use wallet::WalletService;
 pub use websocket::WebSocketService;
+
+pub use audit_logger::{AuditLogger, AuditEvent};
+pub use market_clearing::MarketClearingService;
+pub use settlement::SettlementService;
+pub use order_matching_engine::OrderMatchingEngine;

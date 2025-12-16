@@ -239,7 +239,7 @@ pub async fn match_blockchain_orders(
     // Trigger matching cycle
     let matched_count = _state
         .market_clearing_engine
-        .execute_matching_cycle()
+        .trigger_matching()
         .await
         .map_err(|e| {
             error!("Failed to execute matching cycle: {}", e);

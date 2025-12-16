@@ -77,6 +77,31 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     );
     info!("✅ Health checker initialized");
 
+    // Initialize audit logger
+    let audit_logger = services::AuditLogger::new(db_pool.clone());
+    info!("✅ Audit logger initialized");
+
+    // Initialize market clearing service
+    let market_clearing = services::MarketClearingService::new(
+        db_pool.clone(),
+        blockchain_service.clone(),
+    );
+    info!("✅ Market clearing service initialized");
+
+    // Initialize settlement service
+    let settlement = services::SettlementService::new(
+        db_pool.clone(),
+        blockchain_service.clone(),
+        config.encryption_secret.clone(),
+    );
+    info!("✅ Settlement service initialized");
+
+    // Initialize matching engine
+    let market_clearing_engine = services::OrderMatchingEngine::new(db_pool.clone())
+        .with_websocket(websocket_service.clone())
+        .with_settlement(settlement.clone());
+    info!("✅ Order matching engine initialized");
+
     // Create minimal application state
     let app_state = AppState {
         db: db_pool,
@@ -91,9 +116,13 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         websocket_service,
         cache_service,
         health_checker,
+        audit_logger,
+        market_clearing,
+        settlement,
+        market_clearing_engine,
     };
 
-    info!("✅ Minimal AppState created successfully");
+    info!("✅ AppState created successfully with P2P services");
     info!("📊 Ready to receive meter readings at /api/meters/submit-reading");
 
     Ok(app_state)
@@ -155,9 +184,33 @@ async fn initialize_wallet(wallet_service: &services::WalletService) {
     }
 }
 
-/// Spawn background tasks (minimal version - no background tasks).
-pub async fn spawn_background_tasks(_app_state: &AppState, _config: &Config) {
-    info!("📌 Background tasks disabled in minimal build");
+/// Spawn background tasks.
+pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
+    info!("📌 Spawning background tasks...");
+    
+    // Start the Order Matching Engine
+    app_state.market_clearing_engine.start().await;
+    info!("✅ Order Matching Engine started");
+
+    // Start Settlement Service Loop
+    let settlement = app_state.settlement.clone();
+    tokio::spawn(async move {
+        info!("🚀 Starting automated settlement processing (interval: 5s)");
+        loop {
+            match settlement.process_pending_settlements().await {
+                Ok(count) => {
+                    if count > 0 {
+                        info!("✅ Processed {} settlements", count);
+                    }
+                }
+                Err(e) => {
+                    error!("❌ Error processing settlements: {}", e);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        }
+    });
+    info!("✅ Settlement Service started");
 }
 
 /// Wait for shutdown signal.

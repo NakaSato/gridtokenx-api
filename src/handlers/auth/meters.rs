@@ -14,7 +14,7 @@ use crate::AppState;
 use super::types::{
     MeterResponse, RegisterMeterRequest, RegisterMeterResponse,
     VerifyMeterRequest, MeterFilterParams, UpdateMeterStatusRequest,
-    CreateReadingRequest, CreateReadingResponse,
+    CreateReadingRequest, CreateReadingResponse, MeterReadingResponse, ReadingFilterParams,
 };
 
 /// Get user's registered meters from database
@@ -373,19 +373,32 @@ pub async fn create_reading(
     info!("📊 Create reading for meter {}: {} kWh", serial, request.kwh);
 
     // Get wallet address from meter or request
-    let wallet_address = if let Some(addr) = request.wallet_address.clone() {
-        addr
-    } else {
-        // Try to get wallet from meter's user
-        let wallet_result = sqlx::query_as::<_, (Option<String>,)>(
-            "SELECT u.wallet_address FROM meters m JOIN users u ON m.user_id = u.id WHERE m.serial_number = $1"
+    // Get wallet address, meter_id, user_id from meter or request
+    let (meter_id, user_id, wallet_address) = {
+        let meter_info = sqlx::query_as::<_, (Uuid, Uuid, Option<String>)>(
+            "SELECT m.id, m.user_id, u.wallet_address FROM meters m JOIN users u ON m.user_id = u.id WHERE m.serial_number = $1"
         )
         .bind(&serial)
         .fetch_optional(&state.db)
         .await;
 
-        match wallet_result {
-            Ok(Some((Some(w),))) => w,
+        match meter_info {
+            Ok(Some((mid, uid, Some(w)))) => (mid, uid, w),
+            Ok(Some((mid, uid, None))) => {
+                if let Some(req_w) = request.wallet_address.clone() {
+                    (mid, uid, req_w)
+                } else {
+                     return Json(CreateReadingResponse {
+                        id: Uuid::new_v4(),
+                        serial_number: serial,
+                        kwh: request.kwh,
+                        timestamp: request.timestamp.unwrap_or_else(chrono::Utc::now),
+                        minted: false,
+                        tx_signature: None,
+                        message: "Wallet address required (not found on user profile)".to_string(),
+                    });
+                }
+            }
             _ => {
                 return Json(CreateReadingResponse {
                     id: Uuid::new_v4(),
@@ -394,7 +407,7 @@ pub async fn create_reading(
                     timestamp: request.timestamp.unwrap_or_else(chrono::Utc::now),
                     minted: false,
                     tx_signature: None,
-                    message: "Wallet address required".to_string(),
+                    message: "Meter not found".to_string(),
                 });
             }
         }
@@ -408,7 +421,7 @@ pub async fn create_reading(
     let mut tx_signature: Option<String> = None;
     let mut message = "Reading recorded".to_string();
 
-    if request.kwh > 0.0 {
+    if request.kwh != 0.0 {
         if let Ok(authority) = state.wallet_service.get_authority_keypair().await {
             if let (Ok(mint), Ok(wallet)) = (
                 crate::services::BlockchainService::parse_pubkey(&state.config.energy_token_mint),
@@ -418,12 +431,49 @@ pub async fn create_reading(
                     if let Ok(sig) = state.blockchain_service.mint_energy_tokens(&authority, &token_account, &wallet, &mint, request.kwh).await {
                         minted = true;
                         tx_signature = Some(sig.to_string());
-                        message = format!("{} kWh minted successfully", request.kwh);
-                        info!("🎉 Minted {} kWh for meter {}", request.kwh, serial);
+                        
+                        if request.kwh > 0.0 {
+                            message = format!("{} kWh minted successfully", request.kwh);
+                            info!("🎉 Minted {} kWh for meter {}", request.kwh, serial);
+                        } else {
+                            message = format!("{} kWh burned successfully", request.kwh.abs());
+                            info!("🔥 Burned {} kWh for meter {}", request.kwh.abs(), serial);
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Persist reading to database
+    let (gen, cons) = if request.kwh > 0.0 { (request.kwh, 0.0) } else { (0.0, request.kwh.abs()) };
+    
+    let insert_result = sqlx::query(
+        "INSERT INTO meter_readings (
+            id, meter_serial, meter_id, user_id, wallet_address, 
+            timestamp, reading_timestamp, kwh_amount,
+            energy_generated, energy_consumed, surplus_energy, deficit_energy,
+            minted, mint_tx_signature, created_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $8, $9, $10, $11, NOW())"
+    )
+    .bind(reading_id)
+    .bind(&serial)
+    .bind(meter_id)
+    .bind(user_id)
+    .bind(&wallet_address)
+    .bind(timestamp)
+    .bind(request.kwh)
+    .bind(gen)
+    .bind(cons)
+    .bind(minted)
+    .bind(tx_signature.clone())
+    .execute(&state.db)
+    .await;
+
+    if let Err(e) = insert_result {
+        info!("⚠️ Failed to save reading to DB: {}", e);
+    } else {
+        info!("💾 Saved reading {} to DB", reading_id);
     }
 
     Json(CreateReadingResponse {
@@ -435,4 +485,61 @@ pub async fn create_reading(
         tx_signature,
         message,
     })
+}
+
+/// Get meter readings for the authenticated user
+/// GET /api/v1/meters/readings
+pub async fn get_my_readings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(params): axum::extract::Query<ReadingFilterParams>,
+) -> Json<Vec<MeterReadingResponse>> {
+    let auth_header = headers
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    
+    let token = auth_header.strip_prefix("Bearer ").unwrap_or(auth_header);
+    
+    info!("📊 Get readings request");
+
+    if let Ok(claims) = state.jwt_service.decode_token(token) {
+        let limit = params.limit.unwrap_or(50).min(100);
+        let offset = params.offset.unwrap_or(0);
+        
+        // We query meter_readings. Note: Partition key is reading_timestamp.
+        // We order by reading_timestamp DESC.
+        let readings_result = sqlx::query_as::<_, MeterReadingResponse>(
+            "SELECT 
+                id, 
+                meter_serial, 
+                kwh_amount as kwh, 
+                reading_timestamp as timestamp, 
+                created_at as submitted_at, 
+                minted, 
+                mint_tx_signature as tx_signature,
+                NULL::text as message
+             FROM meter_readings
+             WHERE user_id = $1
+             ORDER BY reading_timestamp DESC
+             LIMIT $2 OFFSET $3"
+        )
+        .bind(claims.sub)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&state.db)
+        .await;
+
+        match readings_result {
+            Ok(readings) => {
+                info!("✅ Returning {} readings", readings.len());
+                return Json(readings);
+            }
+            Err(e) => {
+                info!("⚠️ Error fetching readings: {}", e);
+            }
+        }
+    }
+    
+    Json(vec![])
 }

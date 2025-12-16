@@ -83,6 +83,9 @@ impl TokenManager {
         let rpc_url =
             std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "http://localhost:8899".to_string());
 
+        println!("DEBUG: Creating ATA via CLI for wallet {} and mint {}", user_wallet, mint);
+        println!("DEBUG: Using authority: {} and RPC: {}", wallet_path, rpc_url);
+
         let output = std::process::Command::new("spl-token")
             .arg("create-account")
             .arg(mint.to_string())
@@ -95,15 +98,18 @@ impl TokenManager {
             .output()
             .map_err(|e| anyhow!("Failed to execute spl-token CLI: {}", e))?;
 
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        println!("DEBUG: spl-token stdout: {}", stdout_str);
+        println!("DEBUG: spl-token stderr: {}", stderr_str);
+
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if !stderr.contains("already exists") && !stdout.contains("already exists") {
-                return Err(anyhow!("spl-token CLI failed: {}", stderr));
+            if !stderr_str.contains("already exists") && !stdout_str.contains("already exists") {
+                return Err(anyhow!("spl-token CLI failed: {}", stderr_str));
             }
         }
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
         Ok(ata_address)
     }
 
@@ -118,17 +124,10 @@ impl TokenManager {
     ) -> Result<Signature> {
         let mut instructions = Vec::new();
 
-        // Check if ATA exists
-        if !self
-            .account_manager
-            .account_exists(user_token_account)
-            .await?
-        {
-            info!("ATA {} does not exist, creating it...", user_token_account);
-            let create_ata_ix =
-                BlockchainUtils::create_ata_instruction(authority, user_wallet, mint)?;
-            instructions.push(create_ata_ix);
-        }
+        // Always include idempotent ATA creation - won't fail if account exists
+        let create_ata_ix =
+            BlockchainUtils::create_ata_instruction_idempotent(authority, user_wallet, mint)?;
+        instructions.push(create_ata_ix);
 
         let mint_instruction = BlockchainUtils::create_spl_mint_instruction(
             authority,

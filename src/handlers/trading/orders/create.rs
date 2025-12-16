@@ -152,8 +152,7 @@ pub async fn create_order(
                 user.0.sub
             );
 
-            let master_secret = std::env::var("WALLET_MASTER_SECRET")
-                .unwrap_or_else(|_| "dev-secret-key".to_string());
+            let master_secret = &_state.config.encryption_secret;
 
             // Encode bytea to Base64 strings for WalletService
             let enc_key_b64 = general_purpose::STANDARD.encode(enc_key);
@@ -175,13 +174,13 @@ pub async fn create_order(
             // Keypair::from_bytes seems missing, use base58 workaround
             let keypair =
                 Keypair::from_base58_string(&bs58::encode(&private_key_bytes).into_string());
+            tracing::info!("Starting on-chain order creation with decrypted wallet: {}", keypair.pubkey());
             keypair
         } else {
             // LAZY WALLET GENERATION
             tracing::info!("User {} missing keys, generating new wallet...", user.0.sub);
 
-            let master_secret = std::env::var("WALLET_MASTER_SECRET")
-                .unwrap_or_else(|_| "dev-secret-key".to_string());
+            let master_secret = &_state.config.encryption_secret;
             let new_keypair = Keypair::new();
             let pubkey = new_keypair.pubkey().to_string();
 
@@ -243,25 +242,23 @@ pub async fn create_order(
             .map_err(|e| ApiError::Internal(format!("Failed to get trading program ID: {}", e)))?;
         let (market_pda, _) = Pubkey::find_program_address(&[b"market"], &trading_program_id);
 
-        // Convert decimals to u64
-        let amount_str = payload.energy_amount.to_string();
-        let amount_u64 = amount_str
-            .split('.')
-            .next()
-            .unwrap_or("0")
+        // Convert decimals to u64 (atomic units, 9 decimals)
+        let multiplier = rust_decimal::Decimal::from(1_000_000_000);
+        
+        let amount_atomic = payload.energy_amount * multiplier;
+        let amount_u64 = amount_atomic
+            .trunc()
+            .to_string()
             .parse::<u64>()
-            .unwrap_or(0);
+            .map_err(|_| ApiError::BadRequest("Invalid energy amount".to_string()))?;
 
-        let price_str = payload
-            .price_per_kwh
-            .unwrap_or(rust_decimal::Decimal::ZERO)
-            .to_string();
-        let price_u64 = price_str
-            .split('.')
-            .next()
-            .unwrap_or("0")
+        let price_bd = payload.price_per_kwh.unwrap_or(rust_decimal::Decimal::ZERO);
+        let price_atomic = price_bd * multiplier;
+        let price_u64 = price_atomic
+            .trunc()
+            .to_string()
             .parse::<u64>()
-            .unwrap_or(0);
+            .map_err(|_| ApiError::BadRequest("Invalid price".to_string()))?;
 
         // Execute Transaction
         let (signature, order_pda) = _state
@@ -298,7 +295,7 @@ pub async fn create_order(
             "UPDATE trading_orders SET blockchain_tx_signature = $1, order_pda = $2 WHERE id = $3",
         )
         .bind(&signature)
-        .bind(pda)
+        .bind(pda.to_string())
         .bind(order_id)
         .execute(&_state.db)
         .await

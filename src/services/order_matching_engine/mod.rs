@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     database::schema::types::OrderStatus,
-    services::{market::TradeMatch, SettlementService, WebSocketService},
+    services::{market_clearing::TradeMatch, SettlementService, WebSocketService},
 };
 
 /// Background service that automatically matches orders with offers
@@ -414,6 +414,8 @@ impl OrderMatchingEngine {
         if let Some(settlement) = &self.settlement {
             // Create a TradeMatch object to pass to settlement service
             let trade_match = TradeMatch {
+                id: Uuid::new_v4(),
+                match_id,
                 buy_order_id,
                 sell_order_id,
                 buyer_id,

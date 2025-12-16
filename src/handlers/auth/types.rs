@@ -164,6 +164,28 @@ pub struct CreateReadingResponse {
     pub message: String,
 }
 
+/// Reading Response Object
+#[derive(Debug, Serialize, FromRow)]
+pub struct MeterReadingResponse {
+    pub id: Uuid,
+    pub meter_serial: String,
+    pub kwh: f64,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub submitted_at: chrono::DateTime<chrono::Utc>,
+    pub minted: bool,
+    pub tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Query Params for Readings
+#[derive(Debug, Deserialize)]
+pub struct ReadingFilterParams {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub serial_number: Option<String>,
+}
+
 // ============================================================================
 // Token/Wallet Types
 // ============================================================================

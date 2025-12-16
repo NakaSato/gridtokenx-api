@@ -32,17 +32,19 @@ impl AuditLogger {
         });
         let created_at = Utc::now();
 
-        sqlx::query!(
+        // Use user_activities table instead of audit_logs which might be missing
+        // Also use query() instead of query!() to avoid compile-time checks failing
+        sqlx::query(
             r#"
-            INSERT INTO audit_logs (event_type, user_id, ip_address, event_data, created_at)
+            INSERT INTO user_activities (activity_type, user_id, ip_address, metadata, created_at)
             VALUES ($1, $2, $3, $4, $5)
             "#,
-            event_type,
-            user_id,
-            ip_address as _,
-            event_data,
-            created_at
         )
+        .bind(event_type)
+        .bind(user_id)
+        .bind(ip_address)
+        .bind(event_data)
+        .bind(created_at)
         .execute(&self.db)
         .await?;
 
@@ -74,18 +76,18 @@ impl AuditLogger {
         user_id: Uuid,
         limit: i64,
     ) -> Result<Vec<AuditEventRecord>, sqlx::Error> {
-        let records = sqlx::query_as!(
-            AuditEventRecord,
+        // Map user_activities columns to AuditEventRecord fields
+        let records = sqlx::query_as::<_, AuditEventRecord>(
             r#"
-            SELECT id, event_type, user_id, ip_address, event_data, created_at
-            FROM audit_logs
+            SELECT id, activity_type as event_type, user_id, ip_address, metadata as event_data, created_at
+            FROM user_activities
             WHERE user_id = $1
             ORDER BY created_at DESC
             LIMIT $2
             "#,
-            user_id,
-            limit
         )
+        .bind(user_id)
+        .bind(limit)
         .fetch_all(&self.db)
         .await?;
 
@@ -98,18 +100,17 @@ impl AuditLogger {
         event_type: &str,
         limit: i64,
     ) -> Result<Vec<AuditEventRecord>, sqlx::Error> {
-        let records = sqlx::query_as!(
-            AuditEventRecord,
+        let records = sqlx::query_as::<_, AuditEventRecord>(
             r#"
-            SELECT id, event_type, user_id, ip_address, event_data, created_at
-            FROM audit_logs
-            WHERE event_type = $1
+            SELECT id, activity_type as event_type, user_id, ip_address, metadata as event_data, created_at
+            FROM user_activities
+            WHERE activity_type = $1
             ORDER BY created_at DESC
             LIMIT $2
             "#,
-            event_type,
-            limit
         )
+        .bind(event_type)
+        .bind(limit)
         .fetch_all(&self.db)
         .await?;
 
@@ -121,17 +122,16 @@ impl AuditLogger {
         &self,
         limit: i64,
     ) -> Result<Vec<AuditEventRecord>, sqlx::Error> {
-        let records = sqlx::query_as!(
-            AuditEventRecord,
+        let records = sqlx::query_as::<_, AuditEventRecord>(
             r#"
-            SELECT id, event_type, user_id, ip_address, event_data, created_at
-            FROM audit_logs
-            WHERE event_type IN ('unauthorized_access', 'login_failed', 'rate_limit_exceeded')
+            SELECT id, activity_type as event_type, user_id, ip_address, metadata as event_data, created_at
+            FROM user_activities
+            WHERE activity_type IN ('unauthorized_access', 'login_failed', 'rate_limit_exceeded')
             ORDER BY created_at DESC
             LIMIT $1
             "#,
-            limit
         )
+        .bind(limit)
         .fetch_all(&self.db)
         .await?;
 

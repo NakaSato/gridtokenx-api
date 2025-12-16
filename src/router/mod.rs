@@ -2,18 +2,23 @@
 //!
 //! Supports both v1 RESTful API and legacy routes for backward compatibility.
 
-use axum::{routing::get, Router, extract::{State, WebSocketUpgrade}, response::IntoResponse};
+use axum::{routing::get, Router, extract::{State, WebSocketUpgrade}, response::IntoResponse, middleware};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
+
+pub mod dev;
+
 
 use crate::app_state::AppState;
 use crate::handlers::{
     // V1 RESTful routes
     v1_auth_routes, v1_users_routes, v1_meters_routes, v1_wallets_routes, v1_status_routes,
+    v1_trading_routes,
     // Legacy routes
     auth_routes, token_routes, user_meter_routes, meter_info_routes, meter_routes,
 };
 use crate::services::WebSocketService;
+use crate::auth::middleware::auth_middleware;
 
 /// Build the application router with both v1 and legacy routes.
 pub fn build_router(app_state: AppState) -> Router {
@@ -29,12 +34,17 @@ pub fn build_router(app_state: AppState) -> Router {
     // =========================================================================
     // V1 RESTful API Routes (New)
     // =========================================================================
+    let trading_routes = v1_trading_routes()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify
         .nest("/users", v1_users_routes())     // POST /api/v1/users, GET /api/v1/users/me
         .nest("/meters", v1_meters_routes())   // POST /api/v1/meters, PATCH /api/v1/meters/{serial}
         .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance
-        .nest("/status", v1_status_routes());  // GET /api/v1/status
+        .nest("/status", v1_status_routes())   // GET /api/v1/status
+        .nest("/trading", trading_routes)      // POST /api/v1/trading/orders
+        .nest("/dev", dev::dev_routes());      // POST /api/v1/dev/faucet
 
     // =========================================================================
     // Legacy Routes (Backward Compatibility - Deprecated)

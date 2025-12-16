@@ -2,7 +2,7 @@ use crate::services::blockchain::transactions::TransactionHandler;
 use crate::services::blockchain::utils::BlockchainUtils;
 use anyhow::{anyhow, Result};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signature};
+use solana_sdk::signature::{Keypair, Signature, Signer};
 use std::str::FromStr;
 use tracing::info;
 
