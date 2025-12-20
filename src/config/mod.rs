@@ -98,12 +98,20 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:8086".to_string()),
             redis_url: env::var("REDIS_URL")
                 .map_err(|_| anyhow::anyhow!("REDIS_URL environment variable is required"))?,
-            jwt_secret: env::var("JWT_SECRET")
-                .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable is required"))?,
+            jwt_secret: {
+                let secret = env::var("JWT_SECRET")
+                    .map_err(|_| anyhow::anyhow!("JWT_SECRET environment variable is required"))?;
+                let env_name = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+                
+                if env_name != "development" && secret == "supersecretjwtkey" {
+                     return Err(anyhow::anyhow!("FATAL SECURITY ERROR: You are using the default insecure JWT_SECRET in a non-development environment!"));
+                }
+                secret
+            },
             jwt_expiration: env::var("JWT_EXPIRATION")
                 .unwrap_or_else(|_| "86400".to_string())
                 .parse()
-                .unwrap_or(86400),
+                .map_err(|e| anyhow::anyhow!("Invalid JWT_EXPIRATION: {}", e))?,
             solana_rpc_url: env::var("SOLANA_RPC_URL")
                 .map_err(|_| anyhow::anyhow!("SOLANA_RPC_URL environment variable is required"))?,
             solana_ws_url: env::var("SOLANA_WS_URL")
@@ -134,13 +142,13 @@ impl Config {
             test_mode: env::var("TEST_MODE")
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
-                .unwrap_or(false),
+                .map_err(|e| anyhow::anyhow!("Invalid TEST_MODE: {}", e))?,
             email: EmailConfig {
                 smtp_host: env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".to_string()),
                 smtp_port: env::var("SMTP_PORT")
                     .unwrap_or_else(|_| "587".to_string())
                     .parse()
-                    .unwrap_or(587),
+                    .map_err(|e| anyhow::anyhow!("Invalid SMTP_PORT: {}", e))?,
                 smtp_username: env::var("SMTP_USERNAME")
                     .unwrap_or_else(|_| "noreply@gridtokenx.com".to_string()),
                 smtp_password: env::var("SMTP_PASSWORD").unwrap_or_else(|_| "".to_string()),
@@ -151,21 +159,21 @@ impl Config {
                 verification_expiry_hours: env::var("EMAIL_VERIFICATION_EXPIRY_HOURS")
                     .unwrap_or_else(|_| "24".to_string())
                     .parse()
-                    .unwrap_or(24),
+                    .map_err(|e| anyhow::anyhow!("Invalid EMAIL_VERIFICATION_EXPIRY_HOURS: {}", e))?,
                 verification_base_url: env::var("EMAIL_VERIFICATION_BASE_URL")
                     .unwrap_or_else(|_| "http://localhost:3000".to_string()),
                 verification_required: env::var("EMAIL_VERIFICATION_REQUIRED")
                     .unwrap_or_else(|_| "true".to_string())
                     .parse()
-                    .unwrap_or(true),
+                    .map_err(|e| anyhow::anyhow!("Invalid EMAIL_VERIFICATION_REQUIRED: {}", e))?,
                 verification_enabled: env::var("EMAIL_VERIFICATION_ENABLED")
                     .unwrap_or_else(|_| "true".to_string())
                     .parse()
-                    .unwrap_or(true),
+                    .map_err(|e| anyhow::anyhow!("Invalid EMAIL_VERIFICATION_ENABLED: {}", e))?,
                 auto_login_after_verification: env::var("EMAIL_AUTO_LOGIN_AFTER_VERIFICATION")
                     .unwrap_or_else(|_| "true".to_string())
                     .parse()
-                    .unwrap_or(true),
+                    .map_err(|e| anyhow::anyhow!("Invalid EMAIL_AUTO_LOGIN_AFTER_VERIFICATION: {}", e))?,
             },
             tokenization: TokenizationConfig::from_env()
                 .map_err(|e| anyhow::anyhow!("Failed to load tokenization config: {}", e))?,
@@ -173,19 +181,19 @@ impl Config {
                 enabled: env::var("EVENT_PROCESSOR_ENABLED")
                     .unwrap_or_else(|_| "true".to_string())
                     .parse()
-                    .unwrap_or(true),
+                    .map_err(|e| anyhow::anyhow!("Invalid EVENT_PROCESSOR_ENABLED: {}", e))?,
                 polling_interval_secs: env::var("EVENT_PROCESSOR_POLLING_INTERVAL_SECS")
                     .unwrap_or_else(|_| "10".to_string())
                     .parse()
-                    .unwrap_or(10),
+                    .map_err(|e| anyhow::anyhow!("Invalid EVENT_PROCESSOR_POLLING_INTERVAL_SECS: {}", e))?,
                 batch_size: env::var("EVENT_PROCESSOR_BATCH_SIZE")
                     .unwrap_or_else(|_| "100".to_string())
                     .parse()
-                    .unwrap_or(100),
+                    .map_err(|e| anyhow::anyhow!("Invalid EVENT_PROCESSOR_BATCH_SIZE: {}", e))?,
                 max_retries: env::var("EVENT_PROCESSOR_MAX_RETRIES")
                     .unwrap_or_else(|_| "3".to_string())
                     .parse()
-                    .unwrap_or(3),
+                    .map_err(|e| anyhow::anyhow!("Invalid EVENT_PROCESSOR_MAX_RETRIES: {}", e))?,
                 webhook_url: env::var("EVENT_PROCESSOR_WEBHOOK_URL").ok(),
                 webhook_secret: env::var("EVENT_PROCESSOR_WEBHOOK_SECRET").ok(),
             },

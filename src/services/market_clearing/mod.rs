@@ -500,7 +500,7 @@ impl MarketClearingService {
 
         // Calculate settlement amounts
         let total_amount = order_match.matched_amount * order_match.match_price;
-        let fee_rate = Decimal::from_str("0.01").unwrap(); // 1% fee
+        let fee_rate = Decimal::from_str("0.01").expect("Invalid fee rate constant"); // 1% fee
         let fee_amount = total_amount * fee_rate;
         let net_amount = total_amount - fee_amount;
 

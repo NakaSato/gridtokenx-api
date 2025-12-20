@@ -1,0 +1,158 @@
+time="2025-12-20T16:56:16+07:00" level=warning msg="\"cli\" level configuration overrode scenarios configuration entirely"
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: tests/load/meters.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 5 max VUs, 1m0s max duration (incl. graceful stop):
+              * default: 5 looping VUs for 30s (gracefulStop: 30s)
+
+time="2025-12-20T16:56:16+07:00" level=info msg="Setting up test environment for http://localhost:4000..." source=console
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+time="2025-12-20T16:56:19+07:00" level=info msg="Successfully authenticated as meter_test_1766224576512" source=console
+time="2025-12-20T16:56:19+07:00" level=info msg="Registered meter: TEST_METER_1766224576512" source=console
+
+running (0m03.0s), 5/5 VUs, 0 complete and 0 interrupted iterations
+default   [   1% ] 5 VUs  00.4s/30s
+
+running (0m04.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+default   [   5% ] 5 VUs  01.4s/30s
+
+running (0m05.0s), 5/5 VUs, 10 complete and 0 interrupted iterations
+default   [   8% ] 5 VUs  02.4s/30s
+
+running (0m06.0s), 5/5 VUs, 15 complete and 0 interrupted iterations
+default   [  11% ] 5 VUs  03.4s/30s
+
+running (0m07.0s), 5/5 VUs, 15 complete and 0 interrupted iterations
+default   [  15% ] 5 VUs  04.4s/30s
+
+running (0m08.0s), 5/5 VUs, 18 complete and 0 interrupted iterations
+default   [  18% ] 5 VUs  05.4s/30s
+
+running (0m09.0s), 5/5 VUs, 20 complete and 0 interrupted iterations
+default   [  21% ] 5 VUs  06.4s/30s
+
+running (0m10.0s), 5/5 VUs, 23 complete and 0 interrupted iterations
+default   [  25% ] 5 VUs  07.4s/30s
+
+running (0m11.0s), 5/5 VUs, 25 complete and 0 interrupted iterations
+default   [  28% ] 5 VUs  08.4s/30s
+
+running (0m12.0s), 5/5 VUs, 30 complete and 0 interrupted iterations
+default   [  31% ] 5 VUs  09.4s/30s
+
+running (0m13.0s), 5/5 VUs, 35 complete and 0 interrupted iterations
+default   [  35% ] 5 VUs  10.4s/30s
+
+running (0m14.0s), 5/5 VUs, 40 complete and 0 interrupted iterations
+default   [  38% ] 5 VUs  11.4s/30s
+
+running (0m15.0s), 5/5 VUs, 45 complete and 0 interrupted iterations
+default   [  41% ] 5 VUs  12.4s/30s
+
+running (0m16.0s), 5/5 VUs, 50 complete and 0 interrupted iterations
+default   [  45% ] 5 VUs  13.4s/30s
+
+running (0m17.0s), 5/5 VUs, 55 complete and 0 interrupted iterations
+default   [  48% ] 5 VUs  14.4s/30s
+
+running (0m18.0s), 5/5 VUs, 60 complete and 0 interrupted iterations
+default   [  51% ] 5 VUs  15.4s/30s
+
+running (0m19.0s), 5/5 VUs, 65 complete and 0 interrupted iterations
+default   [  55% ] 5 VUs  16.4s/30s
+
+running (0m20.0s), 5/5 VUs, 73 complete and 0 interrupted iterations
+default   [  58% ] 5 VUs  17.4s/30s
+
+running (0m21.0s), 5/5 VUs, 78 complete and 0 interrupted iterations
+default   [  61% ] 5 VUs  18.4s/30s
+
+running (0m22.0s), 5/5 VUs, 85 complete and 0 interrupted iterations
+default   [  65% ] 5 VUs  19.4s/30s
+
+running (0m23.0s), 5/5 VUs, 90 complete and 0 interrupted iterations
+default   [  68% ] 5 VUs  20.4s/30s
+
+running (0m24.0s), 5/5 VUs, 95 complete and 0 interrupted iterations
+default   [  71% ] 5 VUs  21.4s/30s
+
+running (0m25.0s), 5/5 VUs, 100 complete and 0 interrupted iterations
+default   [  75% ] 5 VUs  22.4s/30s
+
+running (0m26.0s), 5/5 VUs, 105 complete and 0 interrupted iterations
+default   [  78% ] 5 VUs  23.4s/30s
+
+running (0m27.0s), 5/5 VUs, 110 complete and 0 interrupted iterations
+default   [  81% ] 5 VUs  24.4s/30s
+
+running (0m28.0s), 5/5 VUs, 115 complete and 0 interrupted iterations
+default   [  85% ] 5 VUs  25.4s/30s
+
+running (0m29.0s), 5/5 VUs, 120 complete and 0 interrupted iterations
+default   [  88% ] 5 VUs  26.4s/30s
+
+running (0m30.0s), 5/5 VUs, 128 complete and 0 interrupted iterations
+default   [  91% ] 5 VUs  27.4s/30s
+
+running (0m31.0s), 5/5 VUs, 133 complete and 0 interrupted iterations
+default   [  95% ] 5 VUs  28.4s/30s
+
+running (0m32.0s), 5/5 VUs, 140 complete and 0 interrupted iterations
+default   [  98% ] 5 VUs  29.4s/30s
+time="2025-12-20T16:56:49+07:00" level=info msg="\n========== Meter Load Test Summary ==========" source=console
+time="2025-12-20T16:56:49+07:00" level=info msg="Total requests: 322" source=console
+time="2025-12-20T16:56:49+07:00" level=info msg="Readings submitted: 0" source=console
+time="2025-12-20T16:56:49+07:00" level=info msg="Avg meter list latency: 47.39ms" source=console
+time="2025-12-20T16:56:49+07:00" level=info msg="95th percentile: 798.37ms" source=console
+time="2025-12-20T16:56:49+07:00" level=info msg="==============================================\n" source=console
+     █ List Meters
+
+[32m       ✓ list meters status is 200[0m
+
+     █ Meter Status
+
+[32m       ✓ meter status is 200 or 404[0m
+
+     █ Submit Reading
+
+[31m       ✗ reading submitted
+        ↳  0% — ✓ 0 / ✗ 29[0m
+
+     checks[2m.........................:[0m [36m90.90%[0m [36;2m✓ 290[0m      [36;2m✗ 29[0m 
+     data_received[2m..................:[0m [36m341 kB[0m [36;2m10 kB/s[0m
+     data_sent[2m......................:[0m [36m145 kB[0m [36;2m4.4 kB/s[0m
+   [32m✓[0m errors[2m.........................:[0m [36m9.09%[0m  [36;2m✓ 29[0m       [36;2m✗ 290[0m
+     group_duration[2m.................:[0m avg=[36m62.5ms[0m    min=[36m252.54µs[0m med=[36m2.59ms[0m   max=[36m885.09ms[0m p(90)=[36m15.4ms[0m   p(95)=[36m552.73ms[0m
+     http_req_blocked[2m...............:[0m avg=[36m12.11µs[0m   min=[36m1µs[0m      med=[36m5µs[0m      max=[36m370µs[0m    p(90)=[36m12µs[0m     p(95)=[36m15µs[0m    
+     http_req_connecting[2m............:[0m avg=[36m3.24µs[0m    min=[36m0s[0m       med=[36m0s[0m       max=[36m208µs[0m    p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+   [32m✓[0m http_req_duration[2m..............:[0m avg=[36m69.69ms[0m   min=[36m196µs[0m    med=[36m2.47ms[0m   max=[36m1.75s[0m    p(90)=[36m15.27ms[0m  p(95)=[36m798.37ms[0m
+       { expected_response:true }[2m...:[0m avg=[36m63.76ms[0m   min=[36m1.1ms[0m    med=[36m4.7ms[0m    max=[36m1.75s[0m    p(90)=[36m341.87ms[0m p(95)=[36m463.1ms[0m 
+   [31m✗[0m http_req_failed[2m................:[0m [36m54.03%[0m [36;2m✓ 174[0m      [36;2m✗ 148[0m
+     http_req_receiving[2m.............:[0m avg=[36m52.74µs[0m   min=[36m8µs[0m      med=[36m34µs[0m     max=[36m2.85ms[0m   p(90)=[36m69µs[0m     p(95)=[36m93.74µs[0m 
+     http_req_sending[2m...............:[0m avg=[36m23.91µs[0m   min=[36m2µs[0m      med=[36m17µs[0m     max=[36m284µs[0m    p(90)=[36m39µs[0m     p(95)=[36m61µs[0m    
+     http_req_tls_handshaking[2m.......:[0m avg=[36m0s[0m        min=[36m0s[0m       med=[36m0s[0m       max=[36m0s[0m       p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+     http_req_waiting[2m...............:[0m avg=[36m69.61ms[0m   min=[36m178µs[0m    med=[36m2.39ms[0m   max=[36m1.75s[0m    p(90)=[36m15.2ms[0m   p(95)=[36m798.31ms[0m
+     http_reqs[2m......................:[0m [36m322[0m    [36;2m9.80715/s[0m
+     iteration_duration[2m.............:[0m avg=[36m1.03s[0m     min=[36m902.41ms[0m med=[36m908.44ms[0m max=[36m3.09s[0m    p(90)=[36m1.12s[0m    p(95)=[36m2.09s[0m   
+     iterations[2m.....................:[0m [36m145[0m    [36;2m4.416263/s[0m
+     meter_list_duration[2m............:[0m avg=[36m47.393103[0m min=[36m1[0m        med=[36m5[0m        max=[36m552[0m      p(90)=[36m211.6[0m    p(95)=[36m352.8[0m   
+     meter_status_duration[2m..........:[0m avg=[36m78.089655[0m min=[36m0[0m        med=[36m1[0m        max=[36m884[0m      p(90)=[36m3[0m        p(95)=[36m847.8[0m   
+     reading_submit_duration[2m........:[0m avg=[36m58.827586[0m min=[36m0[0m        med=[36m1[0m        max=[36m838[0m      p(90)=[36m2.2[0m      p(95)=[36m504[0m     
+     vus[2m............................:[0m [36m5[0m      [36;2mmin=0[0m      [36;2mmax=5[0m
+     vus_max[2m........................:[0m [36m5[0m      [36;2mmin=5[0m      [36;2mmax=5[0m
+running (0m32.8s), 0/5 VUs, 145 complete and 0 interrupted iterations
+default ✓ [ 100% ] 5 VUs  30s
+time="2025-12-20T16:56:49+07:00" level=error msg="thresholds on metrics 'http_req_failed' have been crossed"

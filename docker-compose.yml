@@ -1,0 +1,81 @@
+# GridTokenX API Gateway - Standalone Docker Compose
+# Run: docker-compose up -d
+services:
+  apigateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gridtokenx-apigateway
+    restart: unless-stopped
+    ports:
+      - "4000:8080"
+      - "9090:9090"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - SERVER_HOST=${SERVER_HOST:-0.0.0.0}
+      - SERVER_PORT=${SERVER_PORT:-8080}
+      - METRICS_PORT=${METRICS_PORT:-9090}
+      - DATA_SOURCE=${DATA_SOURCE:-real}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-http://solana:8899}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER:-gridtokenx_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gridtokenx_password}
+      - POSTGRES_DB=${POSTGRES_DB:-gridtokenx}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - ENGINEERING_API_KEY=${ENGINEERING_API_KEY}
+      - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - gridtokenx-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: gridtokenx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gridtokenx_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gridtokenx_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gridtokenx}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U gridtokenx_user -d gridtokenx" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gridtokenx-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: gridtokenx-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - gridtokenx-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+
+networks:
+  gridtokenx-network:
+    driver: bridge

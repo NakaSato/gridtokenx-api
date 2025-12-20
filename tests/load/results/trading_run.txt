@@ -1,0 +1,166 @@
+time="2025-12-20T16:55:29+07:00" level=warning msg="\"cli\" level configuration overrode scenarios configuration entirely"
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: tests/load/trading.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 5 max VUs, 1m0s max duration (incl. graceful stop):
+              * default: 5 looping VUs for 30s (gracefulStop: 30s)
+
+time="2025-12-20T16:55:29+07:00" level=info msg="Setting up test user for http://localhost:4000..." source=console
+time="2025-12-20T16:55:29+07:00" level=warning msg="Initial login failed (401). Creating new user..." source=console
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+time="2025-12-20T16:55:32+07:00" level=info msg="Successfully registered and logged in as trader_1766224529900" source=console
+
+running (0m03.0s), 5/5 VUs, 0 complete and 0 interrupted iterations
+default   [   1% ] 5 VUs  00.3s/30s
+
+running (0m04.0s), 5/5 VUs, 5 complete and 0 interrupted iterations
+default   [   4% ] 5 VUs  01.3s/30s
+
+running (0m05.0s), 5/5 VUs, 10 complete and 0 interrupted iterations
+default   [   8% ] 5 VUs  02.3s/30s
+
+running (0m06.0s), 5/5 VUs, 15 complete and 0 interrupted iterations
+default   [  11% ] 5 VUs  03.3s/30s
+
+running (0m07.0s), 5/5 VUs, 20 complete and 0 interrupted iterations
+default   [  14% ] 5 VUs  04.3s/30s
+
+running (0m08.0s), 5/5 VUs, 25 complete and 0 interrupted iterations
+default   [  18% ] 5 VUs  05.3s/30s
+
+running (0m09.0s), 5/5 VUs, 30 complete and 0 interrupted iterations
+default   [  21% ] 5 VUs  06.3s/30s
+
+running (0m10.0s), 5/5 VUs, 35 complete and 0 interrupted iterations
+default   [  24% ] 5 VUs  07.3s/30s
+
+running (0m11.0s), 5/5 VUs, 40 complete and 0 interrupted iterations
+default   [  28% ] 5 VUs  08.3s/30s
+
+running (0m12.0s), 5/5 VUs, 47 complete and 0 interrupted iterations
+default   [  31% ] 5 VUs  09.3s/30s
+
+running (0m13.0s), 5/5 VUs, 55 complete and 0 interrupted iterations
+default   [  34% ] 5 VUs  10.3s/30s
+
+running (0m14.0s), 5/5 VUs, 60 complete and 0 interrupted iterations
+default   [  38% ] 5 VUs  11.3s/30s
+
+running (0m15.0s), 5/5 VUs, 60 complete and 0 interrupted iterations
+default   [  41% ] 5 VUs  12.3s/30s
+
+running (0m16.0s), 5/5 VUs, 64 complete and 0 interrupted iterations
+default   [  44% ] 5 VUs  13.3s/30s
+
+running (0m17.0s), 5/5 VUs, 65 complete and 0 interrupted iterations
+default   [  48% ] 5 VUs  14.3s/30s
+
+running (0m18.0s), 5/5 VUs, 68 complete and 0 interrupted iterations
+default   [  51% ] 5 VUs  15.3s/30s
+
+running (0m19.0s), 5/5 VUs, 70 complete and 0 interrupted iterations
+default   [  54% ] 5 VUs  16.3s/30s
+
+running (0m20.0s), 5/5 VUs, 72 complete and 0 interrupted iterations
+default   [  58% ] 5 VUs  17.3s/30s
+
+running (0m21.0s), 5/5 VUs, 74 complete and 0 interrupted iterations
+default   [  61% ] 5 VUs  18.3s/30s
+
+running (0m22.0s), 5/5 VUs, 75 complete and 0 interrupted iterations
+default   [  64% ] 5 VUs  19.3s/30s
+
+running (0m23.0s), 5/5 VUs, 77 complete and 0 interrupted iterations
+default   [  68% ] 5 VUs  20.3s/30s
+
+running (0m24.0s), 5/5 VUs, 79 complete and 0 interrupted iterations
+default   [  71% ] 5 VUs  21.3s/30s
+
+running (0m25.0s), 5/5 VUs, 82 complete and 0 interrupted iterations
+default   [  74% ] 5 VUs  22.3s/30s
+
+running (0m26.0s), 5/5 VUs, 87 complete and 0 interrupted iterations
+default   [  78% ] 5 VUs  23.3s/30s
+
+running (0m27.0s), 5/5 VUs, 94 complete and 0 interrupted iterations
+default   [  81% ] 5 VUs  24.3s/30s
+
+running (0m28.0s), 5/5 VUs, 99 complete and 0 interrupted iterations
+default   [  84% ] 5 VUs  25.3s/30s
+
+running (0m29.0s), 5/5 VUs, 104 complete and 0 interrupted iterations
+default   [  88% ] 5 VUs  26.3s/30s
+
+running (0m30.0s), 5/5 VUs, 111 complete and 0 interrupted iterations
+default   [  91% ] 5 VUs  27.3s/30s
+
+running (0m31.0s), 5/5 VUs, 111 complete and 0 interrupted iterations
+default   [  94% ] 5 VUs  28.3s/30s
+
+running (0m32.0s), 5/5 VUs, 111 complete and 0 interrupted iterations
+default   [  98% ] 5 VUs  29.3s/30s
+
+running (0m33.0s), 5/5 VUs, 113 complete and 0 interrupted iterations
+default ↓ [ 100% ] 5 VUs  30s
+
+running (0m34.0s), 2/5 VUs, 116 complete and 0 interrupted iterations
+default ↓ [ 100% ] 5 VUs  30s
+
+running (0m35.0s), 1/5 VUs, 117 complete and 0 interrupted iterations
+default ↓ [ 100% ] 5 VUs  30s
+time="2025-12-20T16:56:05+07:00" level=info msg="\n========== Trading Load Test Summary ==========" source=console
+time="2025-12-20T16:56:05+07:00" level=info msg="Total requests: 279" source=console
+time="2025-12-20T16:56:05+07:00" level=info msg="Orders created: 40" source=console
+time="2025-12-20T16:56:05+07:00" level=info msg="Avg order book latency: 113.36ms" source=console
+time="2025-12-20T16:56:05+07:00" level=info msg="95th percentile: 873.73ms" source=console
+time="2025-12-20T16:56:05+07:00" level=info msg="================================================\n" source=console
+     █ Order Book Read
+
+[32m       ✓ order book status is 200[0m
+
+     █ Trade History
+
+[32m       ✓ trade history status is 200[0m
+
+     █ Create Order
+
+[32m       ✓ order created[0m
+
+     checks[2m.........................:[0m [36m100.00%[0m [36;2m✓ 276[0m      [36;2m✗ 0[0m  
+     data_received[2m..................:[0m [36m899 kB[0m  [36;2m26 kB/s[0m
+     data_sent[2m......................:[0m [36m123 kB[0m  [36;2m3.5 kB/s[0m
+   [32m✓[0m errors[2m.........................:[0m [36m0.00%[0m   [36;2m✓ 0[0m        [36;2m✗ 276[0m
+     group_duration[2m.................:[0m avg=[36m178.02ms[0m   min=[36m3.44ms[0m  med=[36m9.24ms[0m   max=[36m939.14ms[0m p(90)=[36m850.07ms[0m p(95)=[36m873.69ms[0m
+     http_req_blocked[2m...............:[0m avg=[36m13.36µs[0m    min=[36m1µs[0m     med=[36m5µs[0m      max=[36m1.15ms[0m   p(90)=[36m11.2µs[0m   p(95)=[36m18µs[0m    
+     http_req_connecting[2m............:[0m avg=[36m3.38µs[0m     min=[36m0s[0m      med=[36m0s[0m       max=[36m224µs[0m    p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+   [32m✓[0m http_req_duration[2m..............:[0m avg=[36m185.71ms[0m   min=[36m3.33ms[0m  med=[36m9.06ms[0m   max=[36m1.87s[0m    p(90)=[36m850.51ms[0m p(95)=[36m873.73ms[0m
+       { expected_response:true }[2m...:[0m avg=[36m186.34ms[0m   min=[36m3.33ms[0m  med=[36m9.04ms[0m   max=[36m1.87s[0m    p(90)=[36m850.67ms[0m p(95)=[36m873.75ms[0m
+   [32m✓[0m http_req_failed[2m................:[0m [36m0.35%[0m   [36;2m✓ 1[0m        [36;2m✗ 278[0m
+     http_req_receiving[2m.............:[0m avg=[36m57.78µs[0m    min=[36m10µs[0m    med=[36m40µs[0m     max=[36m880µs[0m    p(90)=[36m116µs[0m    p(95)=[36m133.29µs[0m
+     http_req_sending[2m...............:[0m avg=[36m21.78µs[0m    min=[36m4µs[0m     med=[36m16µs[0m     max=[36m165µs[0m    p(90)=[36m40µs[0m     p(95)=[36m59µs[0m    
+     http_req_tls_handshaking[2m.......:[0m avg=[36m0s[0m         min=[36m0s[0m      med=[36m0s[0m       max=[36m0s[0m       p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+     http_req_waiting[2m...............:[0m avg=[36m185.63ms[0m   min=[36m3.27ms[0m  med=[36m8.96ms[0m   max=[36m1.87s[0m    p(90)=[36m850.41ms[0m p(95)=[36m873.71ms[0m
+     http_reqs[2m......................:[0m [36m279[0m     [36;2m7.909246/s[0m
+     iteration_duration[2m.............:[0m avg=[36m1.31s[0m      min=[36m909.1ms[0m med=[36m926.45ms[0m max=[36m3.42s[0m    p(90)=[36m2.3s[0m     p(95)=[36m2.96s[0m   
+     iterations[2m.....................:[0m [36m118[0m     [36;2m3.345129/s[0m
+     order_book_duration[2m............:[0m avg=[36m113.364407[0m min=[36m4[0m       med=[36m8[0m        max=[36m939[0m      p(90)=[36m377[0m      p(95)=[36m552.6[0m   
+     order_create_duration[2m..........:[0m avg=[36m204.875[0m    min=[36m6[0m       med=[36m16[0m       max=[36m880[0m      p(90)=[36m854.2[0m    p(95)=[36m858.25[0m  
+     orders_created[2m.................:[0m [36m40[0m      [36;2m1.133942/s[0m
+     trade_history_duration[2m.........:[0m avg=[36m233.508475[0m min=[36m3[0m       med=[36m9[0m        max=[36m924[0m      p(90)=[36m873.3[0m    p(95)=[36m902[0m     
+     vus[2m............................:[0m [36m1[0m       [36;2mmin=0[0m      [36;2mmax=5[0m
+     vus_max[2m........................:[0m [36m5[0m       [36;2mmin=5[0m      [36;2mmax=5[0m
+running (0m35.3s), 0/5 VUs, 118 complete and 0 interrupted iterations
+default ✓ [ 100% ] 5 VUs  30s

@@ -33,6 +33,20 @@ export const options = {
             maxVUs: 50,
             tags: { test_type: 'trading_load' },
         },
+        // Stress test - high volume trading
+        stress: {
+            executor: 'ramping-vus',
+            startVUs: 0,
+            stages: [
+                { duration: '30s', target: 30 },
+                { duration: '1m', target: 50 },
+                { duration: '30s', target: 75 },
+                { duration: '30s', target: 100 },
+                { duration: '1m', target: 0 },
+            ],
+            startTime: '2m30s',
+            tags: { test_type: 'stress' },
+        },
     },
     thresholds: {
         http_req_duration: ['p(95)<1000'],  // 95% under 1 second

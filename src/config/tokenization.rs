@@ -410,13 +410,13 @@ mod tests {
         let config = TokenizationConfig::default();
 
         // Basic conversion
-        assert_eq!(config.kwh_to_tokens(1.0).unwrap(), 1_000_000_000);
+        assert_eq!(config.kwh_to_tokens(1.0).expect("Conversion failed for 1.0"), 1_000_000_000);
 
         // Zero amount
-        assert_eq!(config.kwh_to_tokens(0.0).unwrap(), 0);
+        assert_eq!(config.kwh_to_tokens(0.0).expect("Conversion failed for 0.0"), 0);
 
         // Fractional amount
-        assert_eq!(config.kwh_to_tokens(0.5).unwrap(), 500_000_000);
+        assert_eq!(config.kwh_to_tokens(0.5).expect("Conversion failed for 0.5"), 500_000_000);
 
         // Negative amount should error
         assert!(matches!(
@@ -473,7 +473,7 @@ mod tests {
         }
 
         // Load config
-        let config = TokenizationConfig::from_env().unwrap();
+        let config = TokenizationConfig::from_env().expect("Failed to load config from env");
 
         // Check values
         assert_eq!(config.kwh_to_token_ratio, 2.5);

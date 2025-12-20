@@ -1,79 +1,63 @@
-# Multi-stage build for Rust API Gateway
-FROM rust:1-slim-bookworm AS chef
+# ============================================
+# GridTokenX API Gateway - Production Dockerfile
+# ============================================
+# Multi-stage build for minimal image size
 
-# Install cargo-chef for dependency caching
-RUN cargo install cargo-chef
+# Stage 1: Build
+FROM rust:1.75-slim-bookworm AS builder
+
 WORKDIR /app
 
-# Planner stage
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-# Builder stage
-FROM chef AS builder
-
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
-    libpq-dev \
-    curl \
-    bzip2 \
-    ca-certificates \
-    libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install spl-token CLI via Cargo (network safe fallback)
-RUN cargo install spl-token-cli
+# Copy manifests first (for better layer caching)
+COPY Cargo.toml Cargo.lock ./
 
-# Build dependencies - this is the caching Docker layer
-ENV CARGO_BUILD_JOBS=2
+# Create dummy src to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release && rm -rf src
 
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+# Copy actual source code
+COPY src ./src
+COPY migrations ./migrations
 
-# Copy source code and build application
-COPY . .
-ENV CARGO_BUILD_JOBS=2
+# Build the actual binary
+RUN touch src/main.rs && cargo build --release
 
-# Enable offline mode for sqlx (prepared queries are in .sqlx directory)
-ENV SQLX_OFFLINE=true
-
-# Build with sqlx offline mode
-RUN cargo build --release --bin api-gateway
-
-# Runtime stage
+# Stage 2: Runtime
 FROM debian:bookworm-slim AS runtime
+
+WORKDIR /app
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    libpq5 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Create non-root user
+RUN useradd -r -s /bin/false appuser
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/api-gateway /usr/local/bin/api-gateway
-# Copy spl-token binary
-COPY --from=builder /usr/local/cargo/bin/spl-token /usr/local/bin/
+COPY --from=builder /app/target/release/api-gateway /app/api-gateway
+COPY --from=builder /app/migrations /app/migrations
 
+# Change ownership
+RUN chown -R appuser:appuser /app
 
-# Create non-root user
-RUN useradd -m -u 1000 apigateway && \
-    chown -R apigateway:apigateway /app
+USER appuser
 
-USER apigateway
-
-# Expose port
-EXPOSE 8080
+# Expose ports
+EXPOSE 8080 9090
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["api-gateway"]
+# Run
+CMD ["/app/api-gateway"]

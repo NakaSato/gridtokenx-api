@@ -88,17 +88,22 @@ pub fn build_router(app_state: AppState) -> Router {
     let legacy_user = user_meter_routes();
     let legacy_meter_info = meter_info_routes();
 
-    health
-        .merge(ws)
-        .merge(swagger)  // Swagger UI at /api/docs
-        // V1 API
-        .nest("/api/v1", v1_api)
-        // Legacy routes (deprecated)
+    // Link legacy routes with deprecation warning
+    let legacy_api = Router::new()
         .nest("/api/meters", legacy_meters)
         .nest("/api/meters", legacy_meter_info)
         .nest("/api/auth", legacy_auth)
         .nest("/api/tokens", legacy_tokens)
         .nest("/api/user", legacy_user)
+        .layer(middleware::from_fn(legacy_warning_middleware));
+
+    health
+        .merge(ws)
+        .merge(swagger)  // Swagger UI at /api/docs
+        // V1 API
+        .nest("/api/v1", v1_api)
+        // Legacy API
+        .merge(legacy_api)
         .layer(
             ServiceBuilder::new()
                 .layer(middleware::from_fn(metrics_middleware))
@@ -108,14 +113,30 @@ pub fn build_router(app_state: AppState) -> Router {
                     axum::http::StatusCode::REQUEST_TIMEOUT,
                     std::time::Duration::from_secs(900),
                 ))
-                .layer(CorsLayer::permissive()),
+                .layer(
+                    CorsLayer::new()
+                        .allow_origin(tower_http::cors::AllowOrigin::predicate(
+                            |origin: &axum::http::HeaderValue, _request_parts: &axum::http::request::Parts| {
+                                let origin_str = origin.to_str().unwrap_or("");
+                                // Allow localhost development and production domain
+                                origin_str.starts_with("http://localhost")
+                                    || origin_str.starts_with("https://gridtokenx.com")
+                            },
+                        ))
+                        .allow_methods(tower_http::cors::Any)
+                        .allow_headers(tower_http::cors::Any)
+                        .allow_credentials(true),
+                ),
         )
         .with_state(app_state)
 }
 
 /// Simple health check endpoint
-async fn health_check() -> &'static str {
-    "OK - Gateway Running (Real Data Mode)"
+async fn health_check(
+    State(app_state): State<AppState>,
+) -> axum::Json<crate::services::health_check::DetailedHealthStatus> {
+    let status = app_state.health_checker.perform_health_check().await;
+    axum::Json(status)
 }
 
 /// WebSocket handler for real-time updates
@@ -126,4 +147,13 @@ async fn websocket_handler(
     ws.on_upgrade(move |socket| async move {
         websocket_service.register_client(socket).await;
     })
+}
+
+/// Middleware to log warnings for deprecated legacy routes
+async fn legacy_warning_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    tracing::warn!("⚠️  Accessing DEPRECATED legacy endpoint: {}", request.uri());
+    next.run(request).await
 }
