@@ -375,6 +375,62 @@ impl BlockchainUtils {
         ))
     }
 
+    /// Update meter reading on-chain via Registry program (oracle authorization required)
+    /// This calls the Registry program's `update_meter_reading` instruction
+    /// which requires the caller to be the registered oracle authority
+    pub fn create_update_meter_reading_instruction(
+        oracle_authority: &Keypair, // Must be the configured oracle authority on Registry
+        meter_id: &str,
+        energy_generated: u64,  // in Wh (watt-hours)
+        energy_consumed: u64,   // in Wh (watt-hours)
+        reading_timestamp: i64, // Unix timestamp
+    ) -> Result<Instruction> {
+        info!(
+            "Creating Registry update_meter_reading instruction for meter: {} (gen: {} Wh, cons: {} Wh)",
+            meter_id, energy_generated, energy_consumed
+        );
+
+        let registry_program_id = Self::registry_program_id()?;
+
+        // Derive PDAs
+        let (registry_pda, _) = Pubkey::find_program_address(&[b"registry"], &registry_program_id);
+        let (meter_account_pda, _) =
+            Pubkey::find_program_address(&[b"meter", meter_id.as_bytes()], &registry_program_id);
+
+        // Build instruction data
+        let mut instruction_data = Vec::new();
+
+        // Discriminator for "update_meter_reading"
+        // Calculated via sha256("global:update_meter_reading")[:8]
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"global:update_meter_reading");
+        let hash = hasher.finalize();
+        instruction_data.extend_from_slice(&hash[0..8]);
+
+        // Arguments (must match Anchor instruction signature)
+        // update_meter_reading(energy_generated: u64, energy_consumed: u64, reading_timestamp: i64)
+        instruction_data.extend_from_slice(&energy_generated.to_le_bytes());
+        instruction_data.extend_from_slice(&energy_consumed.to_le_bytes());
+        instruction_data.extend_from_slice(&reading_timestamp.to_le_bytes());
+
+        // Accounts - matching UpdateMeterReading context in Registry program:
+        // 0. registry: Account<Registry>
+        // 1. meter_account: Account<MeterAccount> (mut)
+        // 2. oracle_authority: Signer
+        let accounts = vec![
+            solana_sdk::instruction::AccountMeta::new_readonly(registry_pda, false),
+            solana_sdk::instruction::AccountMeta::new(meter_account_pda, false),
+            solana_sdk::instruction::AccountMeta::new_readonly(oracle_authority.pubkey(), true),
+        ];
+
+        Ok(Instruction::new_with_bytes(
+            registry_program_id,
+            &instruction_data,
+            accounts,
+        ))
+    }
+
     /// Burn energy tokens (for energy consumption)
     pub fn create_burn_instruction(
         authority: &Keypair,
@@ -465,7 +521,7 @@ impl BlockchainUtils {
     /// Get Energy Token program ID
     fn energy_token_program_id() -> Result<Pubkey> {
         let program_id = std::env::var("ENERGY_TOKEN_PROGRAM_ID")
-            .unwrap_or_else(|_| "Ct8j89GLmk4XEqGsUbB6kigeZjDnhf5xfmAT1MZhvxSj".to_string());
+            .unwrap_or_else(|_| "AZBstnPmUeRJnwv55128awdfi2tmCFzcK4W6NPXbTkWA".to_string());
 
         program_id
             .parse()

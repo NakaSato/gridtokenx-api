@@ -19,6 +19,7 @@ pub mod types;
 // Handler modules
 pub mod login;
 pub mod registration;
+pub mod password_reset;
 pub mod profile;
 pub mod meters;
 pub mod wallets;
@@ -40,19 +41,25 @@ pub use routes::{
 // Re-export handler functions
 pub use login::{login, verify_email};
 pub use registration::{register, resend_verification};
+pub use password_reset::{forgot_password, reset_password, change_password};
 pub use profile::profile;
 pub use meters::{
     get_my_meters, register_meter, get_registered_meters, 
     get_registered_meters_filtered, update_meter_status, verify_meter, create_reading,
 };
 pub use wallets::token_balance;
-pub use status::{system_status, meter_status};
+pub use status::{system_status, meter_status, readiness_probe, liveness_probe};
 
 // Re-export types
 pub use types::{
     LoginRequest, AuthResponse, UserResponse,
     RegistrationRequest, RegistrationResponse, 
+    ForgotPasswordRequest, ResetPasswordRequest,
     MeterResponse, RegisterMeterRequest, RegisterMeterResponse,
     TokenBalanceResponse, VerifyEmailResponse, VerifyMeterRequest,
-    MeterFilterParams, UpdateMeterStatusRequest, CreateReadingRequest, CreateReadingResponse, StatusResponse,
+    MeterFilterParams, UpdateMeterStatusRequest, CreateReadingRequest, CreateReadingResponse,
+};
+pub use status::{
+    HealthResponse, ServiceStatus, ServiceHealth,
+    MeterStatusResponse, MeterCounts, ReadinessResponse, LivenessResponse,
 };

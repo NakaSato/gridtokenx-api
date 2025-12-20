@@ -5,9 +5,11 @@
 use axum::{routing::get, Router, extract::{State, WebSocketUpgrade}, response::IntoResponse, middleware};
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub mod dev;
-
+pub mod public;
 
 use crate::app_state::AppState;
 use crate::handlers::{
@@ -19,6 +21,25 @@ use crate::handlers::{
 };
 use crate::services::WebSocketService;
 use crate::auth::middleware::auth_middleware;
+use crate::middleware::{metrics_middleware, active_requests_middleware};
+
+/// OpenAPI documentation for GridTokenX API
+#[derive(OpenApi)]
+#[openapi(
+    info(
+        title = "GridTokenX API",
+        version = "1.0.0",
+        description = "GridTokenX Energy Trading Platform API"
+    ),
+    tags(
+        (name = "auth", description = "Authentication endpoints"),
+        (name = "users", description = "User management"),
+        (name = "trading", description = "P2P Energy Trading"),
+        (name = "meters", description = "Smart Meter management"),
+        (name = "dev", description = "Developer tools")
+    )
+)]
+struct ApiDoc;
 
 /// Build the application router with both v1 and legacy routes.
 pub fn build_router(app_state: AppState) -> Router {
@@ -31,10 +52,20 @@ pub fn build_router(app_state: AppState) -> Router {
     let ws = Router::new()
         .route("/ws", get(websocket_handler));
 
+    // Swagger UI
+    let swagger = SwaggerUi::new("/api/docs")
+        .url("/api/docs/openapi.json", ApiDoc::openapi());
+
     // =========================================================================
     // V1 RESTful API Routes (New)
     // =========================================================================
     let trading_routes = v1_trading_routes()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
+    let futures_routes = crate::handlers::futures::routes()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
+    let analytics_routes = crate::handlers::analytics::routes()
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
     let v1_api = Router::new()
@@ -44,6 +75,8 @@ pub fn build_router(app_state: AppState) -> Router {
         .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance
         .nest("/status", v1_status_routes())   // GET /api/v1/status
         .nest("/trading", trading_routes)      // POST /api/v1/trading/orders
+        .nest("/futures", futures_routes)      // /api/v1/futures
+        .nest("/analytics", analytics_routes)  // /api/v1/analytics
         .nest("/dev", dev::dev_routes());      // POST /api/v1/dev/faucet
 
     // =========================================================================
@@ -57,6 +90,7 @@ pub fn build_router(app_state: AppState) -> Router {
 
     health
         .merge(ws)
+        .merge(swagger)  // Swagger UI at /api/docs
         // V1 API
         .nest("/api/v1", v1_api)
         // Legacy routes (deprecated)
@@ -67,6 +101,8 @@ pub fn build_router(app_state: AppState) -> Router {
         .nest("/api/user", legacy_user)
         .layer(
             ServiceBuilder::new()
+                .layer(middleware::from_fn(metrics_middleware))
+                .layer(middleware::from_fn(active_requests_middleware))
                 .layer(TraceLayer::new_for_http())
                 .layer(TimeoutLayer::with_status_code(
                     axum::http::StatusCode::REQUEST_TIMEOUT,

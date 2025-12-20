@@ -153,11 +153,6 @@ pub async fn get_order_book(
 ) -> Result<Json<TradingOrdersResponse>> {
     tracing::info!("Fetching public order book");
 
-    // Default to Active status for order book if not specified
-    if params.status.is_none() {
-        params.status = Some(crate::database::schema::types::OrderStatus::Active);
-    }
-
     params.validate_params()?;
 
     let limit = params.limit();
@@ -165,13 +160,17 @@ pub async fn get_order_book(
     let sort_field = params.get_sort_field();
     let sort_direction = params.sort_direction();
 
-    // Build dynamic query
+    // Build dynamic query - include Pending and Active orders for matching
+    // If a specific status is requested, use that; otherwise show both pending and active
     let mut where_conditions = vec!["expires_at > NOW()".to_string()];
     let mut bind_count = 1;
 
-    if params.status.is_some() {
+    if let Some(_status) = &params.status {
         where_conditions.push(format!("status = ${}", bind_count));
         bind_count += 1;
+    } else {
+        // Default: show both pending and active orders for order book
+        where_conditions.push("(status = 'pending' OR status = 'active')".to_string());
     }
 
     if params.side.is_some() {
@@ -255,4 +254,174 @@ pub async fn get_order_book(
         data: orders,
         pagination,
     }))
+}
+
+/// Get user's trade history (matches where they were buyer or seller)
+/// GET /api/v1/trading/trades
+#[utoipa::path(
+    get,
+    path = "/api/v1/trading/trades",
+    tag = "trading",
+    params(
+        ("limit" = Option<i32>, Query, description = "Maximum number of trades to return (default: 20)")
+    ),
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "User's trade history"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_my_trades(
+    State(_state): State<AppState>,
+    user: AuthenticatedUser,
+    Query(params): Query<TradeHistoryParams>,
+) -> Result<Json<TradeHistoryResponse>> {
+    tracing::info!("Fetching trade history for user: {}", user.0.sub);
+
+    let limit = params.limit.unwrap_or(20).min(100);
+
+    // Query order_matches where user was either buyer or seller
+    let trades = sqlx::query_as::<_, TradeRecord>(
+        r#"
+        SELECT 
+            om.id,
+            om.matched_amount as quantity,
+            om.match_price as price,
+            (om.matched_amount * om.match_price) as total_value,
+            CASE 
+                WHEN buy_order.user_id = $1 THEN 'buyer'
+                ELSE 'seller'
+            END as role,
+            CASE 
+                WHEN buy_order.user_id = $1 THEN sell_order.user_id
+                ELSE buy_order.user_id
+            END as counterparty_id,
+            om.match_time as executed_at,
+            om.status
+        FROM order_matches om
+        JOIN trading_orders buy_order ON om.buy_order_id = buy_order.id
+        JOIN trading_orders sell_order ON om.sell_order_id = sell_order.id
+        WHERE buy_order.user_id = $1 OR sell_order.user_id = $1
+        ORDER BY om.match_time DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(user.0.sub)
+    .bind(limit)
+    .fetch_all(&_state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch trade history: {}", e);
+        ApiError::Database(e)
+    })?;
+
+    Ok(Json(TradeHistoryResponse { trades }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct TradeHistoryParams {
+    pub limit: Option<i32>,
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct TradeRecord {
+    pub id: uuid::Uuid,
+    pub quantity: rust_decimal::Decimal,
+    pub price: rust_decimal::Decimal,
+    pub total_value: rust_decimal::Decimal,
+    pub role: String,
+    pub counterparty_id: uuid::Uuid,
+    pub executed_at: chrono::DateTime<chrono::Utc>,
+    pub status: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct TradeHistoryResponse {
+    pub trades: Vec<TradeRecord>,
+}
+
+/// Get user's GRID token balance
+/// GET /api/v1/trading/balance
+#[utoipa::path(
+    get,
+    path = "/api/v1/trading/balance",
+    tag = "trading",
+    security(("bearer_auth" = [])),
+    responses(
+        (status = 200, description = "User's token balance"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    )
+)]
+pub async fn get_token_balance(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<TokenBalanceResponse>> {
+    tracing::info!("Fetching token balance for user: {}", user.0.sub);
+
+    // Get user's wallet address from database
+    let wallet_result = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT wallet_address FROM users WHERE id = $1"
+    )
+    .bind(user.0.sub)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch user wallet: {}", e);
+        ApiError::Database(e)
+    })?;
+
+    let wallet_address = match wallet_result {
+        Some(addr) if !addr.is_empty() => addr,
+        _ => {
+            return Ok(Json(TokenBalanceResponse {
+                wallet_address: None,
+                token_balance: 0.0,
+                raw_balance: 0,
+                mint: state.config.energy_token_mint.clone(),
+            }));
+        }
+    };
+
+    // Parse wallet as Pubkey
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet_address)
+        .map_err(|e| {
+            tracing::error!("Invalid wallet address: {}", e);
+            ApiError::BadRequest(format!("Invalid wallet address: {}", e))
+        })?;
+
+    // Parse mint
+    let mint_pubkey = solana_sdk::pubkey::Pubkey::from_str(&state.config.energy_token_mint)
+        .map_err(|e| {
+            tracing::error!("Invalid mint address: {}", e);
+            ApiError::Internal(format!("Invalid mint address: {}", e))
+        })?;
+
+    // Get balance from blockchain
+    let raw_balance = state
+        .blockchain_service
+        .get_token_balance(&wallet_pubkey, &mint_pubkey)
+        .await
+        .unwrap_or(0);
+
+    // Convert from raw (9 decimals) to human-readable
+    let token_balance = raw_balance as f64 / 1_000_000_000.0;
+
+    Ok(Json(TokenBalanceResponse {
+        wallet_address: Some(wallet_address),
+        token_balance,
+        raw_balance,
+        mint: state.config.energy_token_mint.clone(),
+    }))
+}
+
+use std::str::FromStr;
+
+#[derive(Debug, serde::Serialize)]
+pub struct TokenBalanceResponse {
+    pub wallet_address: Option<String>,
+    pub token_balance: f64,
+    pub raw_balance: u64,
+    pub mint: String,
 }

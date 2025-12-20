@@ -261,7 +261,16 @@ impl MarketClearingService {
 
                         // Save match to database
                         self.save_order_match(&order_match).await?;
-                        matches.push(order_match);
+                        matches.push(order_match.clone());
+
+                        info!(
+                            "🤝 MATCHED: BuyOrder({}) vs SellOrder({}) | Amount: {} kWh | Price: {} GRIDX | MatchID: {}",
+                            order_match.buy_order_id,
+                            order_match.sell_order_id,
+                            order_match.matched_amount,
+                            order_match.match_price,
+                            order_match.id
+                        );
 
                         // Update order amounts
                         buy_order.energy_amount -= match_amount_clone.clone();
@@ -270,14 +279,6 @@ impl MarketClearingService {
                         // Update totals
                         total_volume += match_amount_clone.clone();
                         total_match_count += 1;
-
-                        info!(
-                            "Matched orders: Buy {} vs Sell {} at {} for {} kWh",
-                            buy_order.order_id,
-                            sell_order.order_id,
-                            match_price_clone,
-                            match_amount_clone
-                        );
 
                         // Remove fully filled orders
                         info!(
@@ -369,10 +370,11 @@ impl MarketClearingService {
         }
 
         info!(
-            "Order matching completed for epoch: {} - {} matches, {} kWh",
+            "🏆 MATCHING COMPLETE [Epoch {}]: matched_count={}, total_volume={} kWh, clearing_price={} GRIDX",
             epoch_id,
             matches.len(),
-            total_volume
+            total_volume,
+            matches.first().map(|m| m.match_price).unwrap_or(Decimal::ZERO)
         );
 
         Ok(matches)

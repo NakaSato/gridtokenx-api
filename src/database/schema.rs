@@ -18,6 +18,7 @@ pub mod types {
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, sqlx::Type, PartialEq, ToSchema)]
     #[sqlx(type_name = "order_type", rename_all = "lowercase")]
+    #[serde(rename_all = "lowercase")]
     pub enum OrderType {
         Limit,
         Market,
@@ -25,6 +26,7 @@ pub mod types {
 
     #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, sqlx::Type, ToSchema)]
     #[sqlx(type_name = "order_side", rename_all = "lowercase")]
+    #[serde(rename_all = "lowercase")]
     pub enum OrderSide {
         Buy,
         Sell,

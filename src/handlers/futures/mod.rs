@@ -1,4 +1,8 @@
-use axum::{extract::{State, Path, Query}, Json};
+use axum::{
+    extract::{State, Path, Query},
+    routing::{get, post},
+    Json, Router
+};
 use uuid::Uuid;
 use crate::AppState;
 use crate::error::ApiError;
@@ -7,6 +11,17 @@ use serde::Deserialize;
 use rust_decimal::Decimal;
 use crate::handlers::ApiResponse;
 use crate::auth::middleware::AuthenticatedUser;
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/products", get(get_products))
+        .route("/orders", post(create_order))
+        .route("/orders/my", get(get_my_orders))
+        .route("/positions", get(get_positions))
+        .route("/positions/{id}/close", post(close_position))
+        .route("/candles", get(get_candles))
+        .route("/orderbook", get(get_order_book))
+}
 
 #[derive(Deserialize)]
 pub struct CreateFuturesOrderRequest {
@@ -31,7 +46,7 @@ pub async fn create_order(
     Json(req): Json<CreateFuturesOrderRequest>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let order_id = state.futures_service.create_order(
-        user.0,
+        user.0.sub,
         req.product_id,
         req.side,
         req.order_type,
@@ -47,7 +62,7 @@ pub async fn get_positions(
     user: AuthenticatedUser,
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<FuturesPosition>>>, ApiError> {
-    let positions = state.futures_service.get_positions(user.0).await?;
+    let positions = state.futures_service.get_positions(user.0.sub).await?;
     Ok(Json(ApiResponse::success(positions)))
 }
 
@@ -82,7 +97,7 @@ pub async fn get_my_orders(
     user: AuthenticatedUser,
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<crate::services::futures::FuturesOrder>>>, ApiError> {
-    let orders = state.futures_service.get_user_orders(user.0).await?;
+    let orders = state.futures_service.get_user_orders(user.0.sub).await?;
     Ok(Json(ApiResponse::success(orders)))
 }
 
@@ -91,6 +106,6 @@ pub async fn close_position(
     State(state): State<AppState>,
     Path(position_id): Path<Uuid>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let order_id = state.futures_service.close_position(user.0, position_id).await?;
+    let order_id = state.futures_service.close_position(user.0.sub, position_id).await?;
     Ok(Json(ApiResponse::success(serde_json::json!({ "order_id": order_id }))))
 }

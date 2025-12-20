@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use uuid::Uuid;
+use chrono::Utc;
 use rust_decimal::Decimal;
-use chrono::{Utc, Duration};
+use uuid::Uuid;
 use crate::error::{ApiError, Result};
-use crate::AppState;
+// Removed AppState
 
 #[derive(Debug, Clone)]
 pub struct FuturesService {
+    #[allow(dead_code)]
     db: sqlx::PgPool,
 }
 
@@ -136,9 +136,9 @@ impl FuturesService {
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
 pub struct FuturesProduct {
     pub id: Uuid,
-    pub symbol: String,
-    pub base_asset: String,
-    pub quote_asset: String,
+    pub symbol: Option<String>,
+    pub base_asset: Option<String>,
+    pub quote_asset: Option<String>,
     pub contract_size: Decimal,
     pub expiration_date: chrono::DateTime<Utc>,
     pub current_price: Decimal,
@@ -152,7 +152,7 @@ pub struct FuturesPosition {
     pub id: Uuid,
     pub user_id: Uuid,
     pub product_id: Uuid,
-    pub side: String, // 'long' or 'short' - Postgres enum mapped to string
+    pub side: Option<String>, // 'long' or 'short' - Postgres enum mapped to string
     pub quantity: Decimal,
     pub entry_price: Decimal,
     pub current_price: Decimal,
@@ -163,7 +163,7 @@ pub struct FuturesPosition {
     pub created_at: Option<chrono::DateTime<Utc>>,
     pub updated_at: Option<chrono::DateTime<Utc>>,
     // Joined fields
-    pub product_symbol: String,
+    pub product_symbol: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -194,17 +194,17 @@ pub struct FuturesOrder {
     pub id: Uuid,
     pub user_id: Uuid,
     pub product_id: Uuid,
-    pub side: String, // 'long', 'short'
-    pub order_type: String, // 'market', 'limit'
+    pub side: Option<String>, // 'long', 'short'
+    pub order_type: Option<String>, // 'market', 'limit'
     pub quantity: Decimal,
     pub price: Decimal,
     pub leverage: i32,
-    pub status: String,
-    pub filled_quantity: Decimal,
+    pub status: Option<String>,
+    pub filled_quantity: Option<Decimal>,
     pub average_fill_price: Option<Decimal>,
     pub created_at: Option<chrono::DateTime<Utc>>,
     pub updated_at: Option<chrono::DateTime<Utc>>,
-    pub product_symbol: String,
+    pub product_symbol: Option<String>,
 }
 
 impl FuturesService {
@@ -224,7 +224,7 @@ impl FuturesService {
         // The previous replace added get_candles.
         // I will target the implementation of get_candles closing brace and add new methods.
         
-        let mut candles = Vec::new();
+        let candles = Vec::new();
         // ... (lines 178-212 in my mental model, or previous step output) ...
         // simulating the end of get_candles
         

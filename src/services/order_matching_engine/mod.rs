@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::{
     database::schema::types::OrderStatus,
     services::{market_clearing::TradeMatch, SettlementService, WebSocketService},
+    middleware::metrics::{track_order_matched, track_trading_operation},
 };
 
 /// Background service that automatically matches orders with offers
@@ -115,8 +116,6 @@ impl OrderMatchingEngine {
 
     /// Run one matching cycle
     async fn match_orders_cycle(&self) -> Result<usize> {
-        debug!("Running order matching cycle...");
-
         // Get all pending buy orders
         let buy_orders = sqlx::query(
             r#"
@@ -198,16 +197,23 @@ impl OrderMatchingEngine {
 
                 // Check if sell order is compatible
                 if sell_price_per_kwh > buy_price_per_kwh {
+                    debug!("Skipping match: Sell price {} > Buy price {}", sell_price_per_kwh, buy_price_per_kwh);
                     continue; // Sell price too high
                 }
 
-                // Skip matching if either order has no epoch_id or if epochs don't match
+                // Relaxed Epoch Check for Continuous Trading
+                // We allow matching across epochs. We'll use the Buy Order's epoch (likely the newer one) 
+                // as the transaction epoch.
                 if let (Some(buy_epoch), Some(sell_epoch)) = (epoch_id, sell_epoch_id) {
                     if sell_epoch != buy_epoch {
-                        continue; // Different epochs
+                        debug!("Cross-epoch match: Buy: {}, Sell: {} (Proceeding)", buy_epoch, sell_epoch);
                     }
                 } else {
-                    continue; // One or both orders have no epoch_id
+                     // If one is missing, we still proceed if we have at least one to track the match
+                     if epoch_id.is_none() && sell_epoch_id.is_none() {
+                        debug!("Skipping match: Both orders missing epoch ID");
+                        continue;
+                     }
                 }
 
                 // Calculate remaining amount available to sell
@@ -254,6 +260,10 @@ impl OrderMatchingEngine {
                             match_id, match_amount, sell_order_id, buy_order_id, match_price
                         );
                         matches_created += 1;
+
+                        // Track metrics
+                        track_order_matched("p2p", match_amount.to_f64().unwrap_or(0.0));
+                        track_trading_operation("match", true);
 
                         // Trigger settlement creation
                         self.trigger_settlement(

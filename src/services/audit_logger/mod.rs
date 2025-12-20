@@ -26,10 +26,18 @@ impl AuditLogger {
         let ip_address = ip_address_str
             .as_deref()
             .and_then(|s| s.parse::<IpNetwork>().ok());
-        let event_data = serde_json::to_value(&event).unwrap_or_else(|e| {
-            tracing::error!("Failed to serialize audit event: {}", e);
-            serde_json::json!({"error": "serialization_failed", "event_type": event_type})
-        });
+        let event_data = match serde_json::to_value(&event) {
+            Ok(data) => data,
+            Err(e) => {
+                tracing::error!("Failed to serialize audit event: {}. Event: {:?}", e, event);
+                serde_json::json!({
+                    "error": "serialization_failed",
+                    "event_type": event_type,
+                    "raw_debug": format!("{:?}", event),
+                    "message": e.to_string()
+                })
+            }
+        };
         let created_at = Utc::now();
 
         // Use user_activities table instead of audit_logs which might be missing
@@ -127,6 +135,26 @@ impl AuditLogger {
             SELECT id, activity_type as event_type, user_id, ip_address, metadata as event_data, created_at
             FROM user_activities
             WHERE activity_type IN ('unauthorized_access', 'login_failed', 'rate_limit_exceeded')
+            ORDER BY created_at DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await?;
+
+        Ok(records)
+    }
+
+    /// Get all recent activity events (Admin only)
+    pub async fn get_all_activities(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<AuditEventRecord>, sqlx::Error> {
+        let records = sqlx::query_as::<_, AuditEventRecord>(
+            r#"
+            SELECT id, activity_type as event_type, user_id, ip_address, metadata as event_data, created_at
+            FROM user_activities
             ORDER BY created_at DESC
             LIMIT $1
             "#,

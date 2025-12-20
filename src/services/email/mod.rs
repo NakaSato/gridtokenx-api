@@ -127,6 +127,42 @@ impl EmailService {
         Ok(())
     }
 
+    /// Send password reset email
+    pub async fn send_password_reset_email(
+        &self,
+        to_email: &str,
+        token: &str,
+        username: &str,
+    ) -> Result<()> {
+        if !self.enabled {
+            info!(
+                "Email service disabled, skipping password reset email to {}",
+                to_email
+            );
+            return Ok(());
+        }
+
+        // Build reset URL
+        let reset_url = format!("{}/reset-password?token={}", self.base_url, token);
+
+        // Generate HTML and text content
+        let html_body = EmailTemplates::password_reset_email(username, &reset_url);
+        let text_body = EmailTemplates::password_reset_email_text(username, &reset_url);
+
+        // Build and send email
+        self.send_email(
+            to_email,
+            "Reset Your Password - GridTokenX Platform",
+            &html_body,
+            &text_body,
+        )
+        .await
+        .context("Failed to send password reset email")?;
+
+        info!("Password reset email sent to {}", to_email);
+        Ok(())
+    }
+
     /// Internal method to send email with HTML and text parts
     async fn send_email(
         &self,

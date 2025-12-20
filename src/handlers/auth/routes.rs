@@ -11,6 +11,7 @@ use crate::AppState;
 use super::{
     login::{login, verify_email},
     registration::{register, resend_verification},
+    password_reset::{forgot_password, reset_password, change_password},
     profile::profile,
     meters::{
         get_my_meters, register_meter, get_registered_meters, 
@@ -18,18 +19,21 @@ use super::{
         get_my_readings,
     },
     wallets::token_balance,
-    status::{system_status, meter_status},
+    status::{system_status, meter_status, readiness_probe, liveness_probe},
 };
 
 // ============================================================================
 // V1 RESTful API Routes (New)
 // ============================================================================
 
-/// Build V1 auth routes: POST /api/v1/auth/token, GET /api/v1/auth/verify
+/// Build V1 auth routes: POST /api/v1/auth/token, GET /api/v1/auth/verify, password reset
 pub fn v1_auth_routes() -> Router<AppState> {
     Router::new()
         .route("/token", post(login))  // POST /api/v1/auth/token
         .route("/verify", get(verify_email))  // GET /api/v1/auth/verify
+        .route("/forgot-password", post(forgot_password))  // POST /api/v1/auth/forgot-password
+        .route("/reset-password", post(reset_password))  // POST /api/v1/auth/reset-password
+        .route("/change-password", post(change_password))  // POST /api/v1/auth/change-password
 }
 
 /// Build V1 users routes: POST /api/v1/users, GET /api/v1/users/me
@@ -61,6 +65,8 @@ pub fn v1_status_routes() -> Router<AppState> {
     Router::new()
         .route("/", get(system_status))  // GET /api/v1/status
         .route("/meters", get(meter_status))  // GET /api/v1/status/meters
+        .route("/ready", get(readiness_probe))  // GET /api/v1/status/ready
+        .route("/live", get(liveness_probe))  // GET /api/v1/status/live
 }
 
 // ============================================================================

@@ -48,11 +48,11 @@ pub struct SolanaProgramsConfig {
 impl Default for SolanaProgramsConfig {
     fn default() -> Self {
         Self {
-            registry_program_id: "GTX1111111111111111111111111111111111111111".to_string(),
-            oracle_program_id: "GTX2222222222222222222222222222222222222222".to_string(),
-            governance_program_id: "GTX3333333333333333333333333333333333333333".to_string(),
-            energy_token_program_id: "GTX4444444444444444444444444444444444444444".to_string(),
-            trading_program_id: "GTX5555555555555555555555555555555555555555".to_string(),
+            registry_program_id: "GRX1111111111111111111111111111111111111111".to_string(),
+            oracle_program_id: "GRX2222222222222222222222222222222222222222".to_string(),
+            governance_program_id: "GRX3333333333333333333333333333333333333333".to_string(),
+            energy_token_program_id: "GRX4444444444444444444444444444444444444444".to_string(),
+            trading_program_id: "GRX5555555555555555555555555555555555555555".to_string(),
         }
     }
 }

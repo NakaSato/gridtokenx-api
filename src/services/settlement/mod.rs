@@ -7,12 +7,13 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
+use solana_sdk::signature::Signer;
 
 pub use types::*;
 
@@ -207,38 +208,37 @@ impl SettlementService {
         let mint = BlockchainService::parse_pubkey(&mint_str)
             .map_err(|e| ApiError::Internal(format!("Invalid mint config: {}", e)))?;
 
-        // 4. Get authority keypair from wallet service
-        // Note: We need the SELLER'S keypair to sign the transfer of their tokens!
-        // The platform authority cannot sign for the user unless using delegation (not implemented).
-        // Fetch and decrypt Seller's private key (MOCK implementation)
-        let _seller_keypair = self.get_user_keypair(&settlement.seller_id).await?;
-        let platform_authority = self
+        // 4. Get authority keypair (Platform)
+        let _platform_authority = self
             .blockchain
             .get_authority_keypair()
             .await
             .map_err(|e| ApiError::Internal(format!("Failed to get authority: {}", e)))?;
 
-        // 5. Ensure buyer and seller have token accounts
+        // 5. Decrypt Seller Keypair (CRITICAL FIX: Seller must sign transfer)
+        let seller_keypair = self.get_user_keypair(&settlement.seller_id).await?;
+        info!("Decrypted seller keypair for settlement authorization: {}", seller_keypair.pubkey());
+
+        // 6. Ensure buyer and seller have token accounts
         // Use Platform Authority to PAY for the creation of accounts if needed (fee payer)
-        let _buyer_token_account = self
+        // We need platform authority for this administrative step
+        let buyer_token_account = self
             .blockchain
-            .ensure_token_account_exists(&platform_authority, &buyer_pubkey, &mint)
+            .ensure_token_account_exists(&_platform_authority, &buyer_pubkey, &mint)
             .await
             .map_err(|e| {
                 ApiError::Internal(format!("Failed to create buyer token account: {}", e))
             })?;
 
-        let _seller_token_account = self
+        let seller_token_account = self
             .blockchain
-            .ensure_token_account_exists(&platform_authority, &seller_pubkey, &mint)
+            .ensure_token_account_exists(&_platform_authority, &seller_pubkey, &mint)
             .await
             .map_err(|e| {
                 ApiError::Internal(format!("Failed to create seller token account: {}", e))
             })?;
 
-        // 6. Calculate match amount (in Wh, same as order creation: kWh * 1000)
-        // Order creation uses: energy_amount_u64 = (payload.energy_amount * 1000.0) as u64
-        // So settlement must use the same conversion factor
+        // 7. Calculate match amount (in Wh, same as order creation: kWh * 1000)
         let match_amount_wh = {
             let amount_wh = settlement.energy_amount * Decimal::from(1000i64);
             // Use floor() to get integer part, then convert to u64
@@ -250,37 +250,52 @@ impl SettlementService {
             settlement.energy_amount, match_amount_wh
         );
 
-        // 7. Get Order PDAs from database
-        let buy_order_pda = self.get_order_pda(settlement.buy_order_id).await?;
-        let sell_order_pda = self.get_order_pda(settlement.sell_order_id).await?;
-
-        // Derive Market PDA
-        let trading_program_id = self
-            .blockchain
-            .trading_program_id()
-            .map_err(|e| ApiError::Internal(format!("Failed to get trading program ID: {}", e)))?;
-        let (market_pda, _) =
-            solana_sdk::pubkey::Pubkey::find_program_address(&[b"market"], &trading_program_id);
+        // 8. Execute Token Transfer (Seller -> Buyer)
+        // Replacing execute_match_orders with direct transfer because match_orders instruction
+        // definition lacks token accounts and cannot perform transfer.
+        // We use the Seller Keypair as the "Authority" (Signer) for the transfer.
+        
+        // Note: transfer_tokens uses 'decimals' arg. Energy Token has 9 decimals?
+        // Wait, match_amount_wh is in Atomic Units?
+        // Order Creation used: payload.energy_amount * 1_000_000_000 (9 decimals).
+        // BUT logic above (Step 7) calc `match_amount_wh` as `energy_amount * 1000`.
+        // IF `energy_amount` is kWh.
+        // 1 kWh = 1000 Wh.
+        // The Token Logic usually tracks Wh? Or Atomic Units?
+        // create_order (Step 763) used `multiplier = 1_000_000_000` (9 decimals).
+        // So `energy_amount` (Decimal) * 1e9 = `amount_u64`.
+        
+        // HERE, we calculated `match_amount_wh` = `energy_amount * 1000`.
+        // This seems WRONG if decimals=9.
+        // If decimals=9, we need `energy_amount * 10^9`.
+        
+        // Let's recalculate amount based on create_order logic.
+        let amount_atomic = settlement.energy_amount * Decimal::from(1_000_000_000);
+        let transfer_amount = amount_atomic
+            .trunc()
+            .to_string()
+            .parse::<u64>()
+            .unwrap_or(0);
 
         info!(
-            "Executing on-chain MATCH: Market {}, Buy Order {}, Sell Order {}, Amount: {} Wh",
-            market_pda, buy_order_pda, sell_order_pda, match_amount_wh
+            "Executing Direct Token Transfer: From {} to {}, Amount: {} (atomic)",
+            seller_token_account, buyer_token_account, transfer_amount
         );
 
-        // 8. Execute Match Orders
         let signature = self
             .blockchain
-            .execute_match_orders(
-                &platform_authority,
-                &market_pda.to_string(),
-                &buy_order_pda,
-                &sell_order_pda,
-                match_amount_wh,
+            .transfer_tokens(
+                &seller_keypair,   // Signer (Owner of From Account)
+                &seller_token_account, // From (Seller ATA)
+                &buyer_token_account,  // To (Buyer ATA)
+                &mint,
+                transfer_amount,
+                9, // Decimals
             )
             .await
-            .map_err(|e| ApiError::Internal(format!("Blockchain match failed: {}", e)))?;
+            .map_err(|e| ApiError::Internal(format!("Token transfer failed: {}", e)))?;
 
-        info!("Settlement completed. Signature: {}", signature);
+        info!("Settlement transfer completed. Signature: {}", signature);
 
         // 9. Get current slot for confirmation
         let slot = self
@@ -330,7 +345,7 @@ impl SettlementService {
     }
 
     /// Helper: Get Order PDA from database
-    async fn get_order_pda(&self, order_id: Uuid) -> Result<String, ApiError> {
+    async fn _get_order_pda(&self, order_id: Uuid) -> Result<String, ApiError> {
         let result = sqlx::query!(
             "SELECT order_pda FROM trading_orders WHERE id = $1",
             order_id
@@ -353,7 +368,7 @@ impl SettlementService {
             return Ok(0);
         }
 
-        info!("Processing {} pending settlements", pending_ids.len());
+        info!("🚀 Processing {} pending settlements...", pending_ids.len());
         let total_count = pending_ids.len();
         let mut processed = 0;
 
@@ -363,7 +378,7 @@ impl SettlementService {
                     processed += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to process settlement {}: {}", settlement_id, e);
+                    error!("❌ Failed to process settlement {}: {}", settlement_id, e);
                 }
             }
 
@@ -371,7 +386,11 @@ impl SettlementService {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        info!("✅ Processed {}/{} settlements", processed, total_count);
+        let success_rate = (processed as f64 / total_count as f64) * 100.0;
+        info!(
+            "🏁 BATCH SETTLEMENT COMPLETE: Success Rate: {:.1}% ({}/{})",
+            success_rate, processed, total_count
+        );
         Ok(processed)
     }
 

@@ -16,6 +16,9 @@ pub mod audit_logger;
 pub mod market_clearing;
 pub mod settlement;
 pub mod order_matching_engine;
+pub mod futures;
+// pub mod dashboard; // Disabled due to dependencies
+// pub mod analytics;
 
 // Re-exports
 pub use auth::AuthService;
@@ -30,3 +33,4 @@ pub use audit_logger::{AuditLogger, AuditEvent};
 pub use market_clearing::MarketClearingService;
 pub use settlement::SettlementService;
 pub use order_matching_engine::OrderMatchingEngine;
+pub use futures::FuturesService;

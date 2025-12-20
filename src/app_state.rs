@@ -41,6 +41,7 @@ pub struct AppState {
     pub market_clearing: services::MarketClearingService,
     pub settlement: services::SettlementService,
     pub market_clearing_engine: services::OrderMatchingEngine,
+    pub futures_service: services::FuturesService,
     
 }
 

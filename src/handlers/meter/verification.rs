@@ -1,7 +1,7 @@
 use axum::{extract::State, http::HeaderMap, Json};
 use sqlx::types::ipnetwork::IpNetwork;
 use std::net::IpAddr;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use crate::{
     auth::middleware::AuthenticatedUser,
     error::ApiError,
@@ -57,6 +57,17 @@ fn extract_user_agent(headers: &HeaderMap) -> Option<String> {
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
+}
+
+/// Map meter type string to on-chain enum value
+fn meter_type_to_onchain(meter_type: &str) -> u8 {
+    match meter_type {
+        "solar" => 0,       // MeterType::Solar
+        "residential" => 3, // MeterType::Grid (residential uses grid)
+        "commercial" => 3,  // MeterType::Grid
+        "industrial" => 3,  // MeterType::Grid
+        _ => 3,             // Default to Grid
+    }
 }
 
 // ============================================================================
@@ -130,10 +141,10 @@ pub async fn verify_meter_handler(
         }
     }
 
-    // Call verification service
+    // Call verification service (database)
     let response = state
         .meter_verification_service
-        .verify_meter(user.sub, request, ip_address, user_agent)
+        .verify_meter(user.sub.clone(), request.clone(), ip_address, user_agent)
         .await
         .map_err(|e| {
             error!("Meter verification failed: {}", e);
@@ -148,9 +159,46 @@ pub async fn verify_meter_handler(
         })?;
 
     info!(
-        "Meter {} verified successfully for user {}",
+        "Meter {} verified successfully in database for user {}",
         response.meter_id, user.sub
     );
+
+    // Register meter on-chain via Registry program
+    // Note: This requires the user to have been registered on-chain first
+    match state.wallet_service.get_authority_keypair().await {
+        Ok(authority_keypair) => {
+            let meter_type_onchain = meter_type_to_onchain(&request.meter_type);
+            
+            let register_result = state
+                .blockchain_service
+                .register_meter_on_chain(
+                    &authority_keypair,
+                    &request.meter_serial,
+                    meter_type_onchain,
+                )
+                .await;
+
+            match register_result {
+                Ok(signature) => {
+                    info!(
+                        "📝 Meter {} registered on-chain: {}",
+                        request.meter_serial, signature
+                    );
+                }
+                Err(e) => {
+                    // Log but don't fail - meter is verified in DB
+                    // On-chain registration may fail if user not registered on-chain
+                    warn!(
+                        "⚠️ On-chain meter registration failed (continuing): {}",
+                        e
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            warn!("⚠️ Authority keypair not available for on-chain registration: {}", e);
+        }
+    }
 
     Ok(Json(response))
 }

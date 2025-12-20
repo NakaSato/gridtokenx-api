@@ -14,16 +14,23 @@ pub struct HealthChecker {
     redis_client: redis::Client,
     blockchain_url: String,
     last_check: Arc<RwLock<Option<DetailedHealthStatus>>>,
+    email_service_enabled: bool,
 }
 
 impl HealthChecker {
-    pub fn new(db_pool: sqlx::PgPool, redis_client: redis::Client, blockchain_url: String) -> Self {
+    pub fn new(
+        db_pool: sqlx::PgPool,
+        redis_client: redis::Client,
+        blockchain_url: String,
+        email_service_enabled: bool,
+    ) -> Self {
         Self {
             start_time: Arc::new(Instant::now()),
             db_pool,
             redis_client,
             blockchain_url,
             last_check: Arc::new(RwLock::new(None)),
+            email_service_enabled,
         }
     }
 
@@ -154,6 +161,29 @@ impl HealthChecker {
         }
     }
 
+    /// Check email service health
+    fn check_email(&self) -> DependencyHealth {
+        if self.email_service_enabled {
+            DependencyHealth {
+                name: "Email Service".to_string(),
+                status: HealthCheckStatus::Healthy,
+                response_time_ms: None,
+                last_check: Utc::now(),
+                error_message: None,
+                details: Some("Email service is configured and enabled".to_string()),
+            }
+        } else {
+            DependencyHealth {
+                name: "Email Service".to_string(),
+                status: HealthCheckStatus::Degraded, // Or another status if totally disabled is "normal"
+                response_time_ms: None,
+                last_check: Utc::now(),
+                error_message: Some("Email service is NOT configured".to_string()),
+                details: None,
+            }
+        }
+    }
+
     /// Get system metrics (basic implementation)
     fn get_system_metrics(&self) -> SystemMetrics {
         SystemMetrics {
@@ -175,7 +205,8 @@ impl HealthChecker {
             self.check_blockchain()
         );
 
-        let dependencies = vec![db_health, redis_health, blockchain_health];
+        let email_health = self.check_email();
+        let dependencies = vec![db_health, redis_health, blockchain_health, email_health];
 
         // Determine overall status
         let overall_status = if dependencies

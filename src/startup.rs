@@ -74,6 +74,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         db_pool.clone(),
         redis_client.clone(),
         config.solana_rpc_url.clone(),
+        email_service.is_some(),
     );
     info!("✅ Health checker initialized");
 
@@ -102,6 +103,10 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         .with_settlement(settlement.clone());
     info!("✅ Order matching engine initialized");
 
+    // Initialize futures service
+    let futures_service = services::FuturesService::new(db_pool.clone());
+    info!("✅ Futures service initialized");
+
     // Create minimal application state
     let app_state = AppState {
         db: db_pool,
@@ -120,6 +125,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         market_clearing,
         settlement,
         market_clearing_engine,
+        futures_service,
     };
 
     info!("✅ AppState created successfully with P2P services");

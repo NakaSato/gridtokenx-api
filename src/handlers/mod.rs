@@ -13,7 +13,10 @@ pub mod auth;
 pub mod blockchain;
 pub mod meter;
 pub mod dev;
-pub mod trading; // Added trading
+pub mod trading;
+pub mod futures; // Added trading
+// pub mod dashboard; // Disabled due to dependencies
+pub mod analytics;
 pub mod websocket;
 
 // Shared utilities

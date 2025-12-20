@@ -12,7 +12,7 @@ use sqlx::PgPool;
 pub struct AuthService {
     db: PgPool,
     config: Config,
-    email_service: Option<EmailService>,
+    _email_service: Option<EmailService>,
     jwt_service: JwtService,
 }
 
@@ -26,7 +26,7 @@ impl AuthService {
         Self {
             db,
             config,
-            email_service,
+            _email_service: email_service,
             jwt_service,
         }
     }

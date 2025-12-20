@@ -67,7 +67,7 @@ pub fn protected_routes(app_state: AppState) -> Router<AppState> {
         // ERC routes
         // .nest("/api/erc", erc_routes())
         // Futures routes
-        // .nest("/api/futures", futures_routes())
+        .nest("/api/futures", futures_routes())
         // P2P routes
         // .nest("/api/p2p", p2p_routes())
         // Swap routes
@@ -337,7 +337,6 @@ fn erc_routes() -> Router<AppState> {
 }
 */
 
-/*
 /// Futures routes
 fn futures_routes() -> Router<AppState> {
     Router::new()

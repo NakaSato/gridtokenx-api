@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use std::net::SocketAddr;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 
 use api_gateway::{

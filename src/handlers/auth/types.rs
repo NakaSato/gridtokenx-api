@@ -95,6 +95,26 @@ pub struct ResendVerificationRequest {
     pub email: String,
 }
 
+/// Forgot Password Request
+#[derive(Debug, Deserialize)]
+pub struct ForgotPasswordRequest {
+    pub email: String,
+}
+
+/// Reset Password Request
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    pub new_password: String,
+}
+
+/// Change Password Request (for authenticated users)
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 // ============================================================================
 // Meter Types
 // ============================================================================

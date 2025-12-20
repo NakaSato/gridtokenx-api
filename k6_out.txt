@@ -1,0 +1,89 @@
+time="2025-12-20T13:11:59+07:00" level=warning msg="\"cli\" level configuration overrode scenarios configuration entirely"
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: tests/load/trading.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1 max VUs, 35s max duration (incl. graceful stop):
+              * default: 1 looping VUs for 5s (gracefulStop: 30s)
+
+time="2025-12-20T13:11:59+07:00" level=info msg="Setting up test user for http://localhost:4000..." source=console
+time="2025-12-20T13:11:59+07:00" level=warning msg="Initial login failed (401). Creating new user..." source=console
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+
+Run       [ 100% ] setup()
+default   [   0% ]
+time="2025-12-20T13:12:03+07:00" level=info msg="Successfully registered and logged in as trader_1766211119609" source=console
+
+running (04.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+default   [   8% ] 1 VUs  0.4s/5s
+
+running (05.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+default   [  28% ] 1 VUs  1.4s/5s
+
+running (06.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+default   [  48% ] 1 VUs  2.4s/5s
+
+running (07.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+default   [  68% ] 1 VUs  3.4s/5s
+
+running (08.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+default   [  88% ] 1 VUs  4.4s/5s
+
+running (09.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+default ↓ [ 100% ] 1 VUs  5s
+time="2025-12-20T13:12:08+07:00" level=info msg="\n========== Trading Load Test Summary ==========" source=console
+time="2025-12-20T13:12:08+07:00" level=info msg="Total requests: 18" source=console
+time="2025-12-20T13:12:08+07:00" level=info msg="Orders created: 3" source=console
+time="2025-12-20T13:12:08+07:00" level=info msg="Avg order book latency: 7.17ms" source=console
+time="2025-12-20T13:12:08+07:00" level=info msg="95th percentile: 1332.71ms" source=console
+time="2025-12-20T13:12:08+07:00" level=info msg="================================================\n" source=console
+     █ Order Book Read
+
+[32m       ✓ order book status is 200[0m
+
+     █ Trade History
+
+[32m       ✓ trade history status is 200[0m
+
+     █ Create Order
+
+[32m       ✓ order created[0m
+
+     checks[2m.........................:[0m [36m100.00%[0m [36;2m✓ 15[0m       [36;2m✗ 0[0m  
+     data_received[2m..................:[0m [36m13 kB[0m   [36;2m1.4 kB/s[0m
+     data_sent[2m......................:[0m [36m7.4 kB[0m  [36;2m807 B/s[0m
+   [32m✓[0m errors[2m.........................:[0m [36m0.00%[0m   [36;2m✓ 0[0m        [36;2m✗ 15[0m 
+     group_duration[2m.................:[0m avg=[36m9.28ms[0m   min=[36m3.74ms[0m   med=[36m7.27ms[0m   max=[36m23.68ms[0m  p(90)=[36m18.39ms[0m  p(95)=[36m20.76ms[0m 
+     http_req_blocked[2m...............:[0m avg=[36m67.16µs[0m  min=[36m3µs[0m      med=[36m4µs[0m      max=[36m928µs[0m    p(90)=[36m69.8µs[0m   p(95)=[36m327.04µs[0m
+     http_req_connecting[2m............:[0m avg=[36m19.94µs[0m  min=[36m0s[0m       med=[36m0s[0m       max=[36m186µs[0m    p(90)=[36m51.9µs[0m   p(95)=[36m174.94µs[0m
+   [31m✗[0m http_req_duration[2m..............:[0m avg=[36m208.08ms[0m min=[36m3.63ms[0m   med=[36m8.01ms[0m   max=[36m2.46s[0m    p(90)=[36m355.54ms[0m p(95)=[36m1.33s[0m   
+       { expected_response:true }[2m...:[0m avg=[36m219.71ms[0m min=[36m3.63ms[0m   med=[36m7.76ms[0m   max=[36m2.46s[0m    p(90)=[36m466.56ms[0m p(95)=[36m1.39s[0m   
+   [31m✗[0m http_req_failed[2m................:[0m [36m5.55%[0m   [36;2m✓ 1[0m        [36;2m✗ 17[0m 
+     http_req_receiving[2m.............:[0m avg=[36m48.22µs[0m  min=[36m29µs[0m     med=[36m39.5µs[0m   max=[36m129µs[0m    p(90)=[36m74.2µs[0m   p(95)=[36m96.69µs[0m 
+     http_req_sending[2m...............:[0m avg=[36m36.5µs[0m   min=[36m11µs[0m     med=[36m16.5µs[0m   max=[36m371µs[0m    p(90)=[36m25.5µs[0m   p(95)=[36m80.29µs[0m 
+     http_req_tls_handshaking[2m.......:[0m avg=[36m0s[0m       min=[36m0s[0m       med=[36m0s[0m       max=[36m0s[0m       p(90)=[36m0s[0m       p(95)=[36m0s[0m      
+     http_req_waiting[2m...............:[0m avg=[36m207.99ms[0m min=[36m3.58ms[0m   med=[36m7.92ms[0m   max=[36m2.46s[0m    p(90)=[36m355.44ms[0m p(95)=[36m1.33s[0m   
+     http_reqs[2m......................:[0m [36m18[0m      [36;2m1.963254/s[0m
+     iteration_duration[2m.............:[0m avg=[36m925.65ms[0m min=[36m910.69ms[0m med=[36m926.51ms[0m max=[36m938.67ms[0m p(90)=[36m937.14ms[0m p(95)=[36m937.9ms[0m 
+     iterations[2m.....................:[0m [36m6[0m       [36;2m0.654418/s[0m
+     order_book_duration[2m............:[0m avg=[36m7.166667[0m min=[36m5[0m        med=[36m7.5[0m      max=[36m10[0m       p(90)=[36m9[0m        p(95)=[36m9.5[0m     
+     order_create_duration[2m..........:[0m avg=[36m20[0m       min=[36m16[0m       med=[36m20[0m       max=[36m24[0m       p(90)=[36m23.2[0m     p(95)=[36m23.6[0m    
+     orders_created[2m.................:[0m [36m3[0m       [36;2m0.327209/s[0m
+     trade_history_duration[2m.........:[0m avg=[36m6[0m        min=[36m4[0m        med=[36m6[0m        max=[36m9[0m        p(90)=[36m7.5[0m      p(95)=[36m8.25[0m    
+     vus[2m............................:[0m [36m1[0m       [36;2mmin=0[0m      [36;2mmax=1[0m
+     vus_max[2m........................:[0m [36m1[0m       [36;2mmin=1[0m      [36;2mmax=1[0m
+running (09.2s), 0/1 VUs, 6 complete and 0 interrupted iterations
+default ✓ [ 100% ] 1 VUs  5s
+time="2025-12-20T13:12:09+07:00" level=error msg="thresholds on metrics 'http_req_duration, http_req_failed' have been crossed"

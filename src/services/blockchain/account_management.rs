@@ -2,7 +2,7 @@ use crate::services::blockchain::transactions::TransactionHandler;
 use crate::services::blockchain::utils::BlockchainUtils;
 use anyhow::{anyhow, Result};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signature, Signer};
+use solana_sdk::signature::{Keypair, Signature};
 use std::str::FromStr;
 use tracing::info;
 
@@ -85,16 +85,24 @@ impl AccountManager {
         let transaction = tx.transaction.transaction;
         match transaction {
             solana_transaction_status::EncodedTransaction::Json(ui_tx) => match ui_tx.message {
-                solana_transaction_status::UiMessage::Parsed(msg) => Ok(msg
-                    .account_keys
-                    .iter()
-                    .map(|k| Pubkey::from_str(&k.pubkey).unwrap())
-                    .collect()),
-                solana_transaction_status::UiMessage::Raw(msg) => Ok(msg
-                    .account_keys
-                    .iter()
-                    .map(|k| Pubkey::from_str(k).unwrap())
-                    .collect()),
+                solana_transaction_status::UiMessage::Parsed(msg) => {
+                    let mut keys = Vec::new();
+                    for k in &msg.account_keys {
+                        let pubkey = Pubkey::from_str(&k.pubkey)
+                            .map_err(|e| anyhow!("Invalid pubkey in transaction: {}", e))?;
+                        keys.push(pubkey);
+                    }
+                    Ok(keys)
+                }
+                solana_transaction_status::UiMessage::Raw(msg) => {
+                    let mut keys = Vec::new();
+                    for k in &msg.account_keys {
+                        let pubkey = Pubkey::from_str(k)
+                            .map_err(|e| anyhow!("Invalid pubkey in transaction: {}", e))?;
+                        keys.push(pubkey);
+                    }
+                    Ok(keys)
+                }
             },
             _ => Err(anyhow!("Unsupported transaction encoding")),
         }

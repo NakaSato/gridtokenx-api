@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use tracing::info;
+use tracing::{info, error};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -166,6 +166,20 @@ pub async fn register_meter(
         Ok(_) => {
             info!("✅ Meter {} registered for user {}", request.serial_number, user_id);
             
+            // Sync to meter_registry for FK constraints
+            let _ = sqlx::query(
+                "INSERT INTO meter_registry (id, user_id, meter_serial, meter_type, location_address, meter_key_hash, verification_method, verification_status)
+                 VALUES ($1, $2, $3, $4, $5, 'mock_hash', 'serial', 'pending')"
+            )
+            .bind(meter_id)
+            .bind(user_id)
+            .bind(&request.serial_number)
+            .bind(&meter_type)
+            .bind(&location)
+            .execute(&state.db)
+            .await
+            .map_err(|e| error!("Failed to sync meter_registry: {}", e));
+
             // Get user wallet for response
             let wallet = sqlx::query_as::<_, (Option<String>,)>(
                 "SELECT wallet_address FROM users WHERE id = $1"
@@ -513,7 +527,7 @@ pub async fn get_my_readings(
             "SELECT 
                 id, 
                 meter_serial, 
-                kwh_amount as kwh, 
+                kwh_amount::FLOAT8 as kwh, 
                 reading_timestamp as timestamp, 
                 created_at as submitted_at, 
                 minted, 

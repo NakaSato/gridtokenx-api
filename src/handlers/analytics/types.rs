@@ -1,4 +1,4 @@
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -112,6 +112,18 @@ pub struct OverallUserStats {
     pub total_volume_kwh: f64,
     pub net_revenue_usd: f64, // revenue - spending
     pub favorite_energy_source: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UserWealthHistory {
+    pub timeframe: String,
+    pub history: Vec<WealthPoint>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WealthPoint {
+    pub timestamp: DateTime<Utc>,
+    pub balance_usd: f64,
 }
 
 // ==================== HELPER FUNCTIONS ====================
