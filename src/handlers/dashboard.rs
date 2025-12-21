@@ -1,6 +1,11 @@
 use crate::error::{ApiError, Result};
 use crate::services::dashboard::{DashboardMetrics, DashboardService};
-use axum::{extract::State, Json};
+use axum::{extract::State, routing::get, Json, Router};
+
+/// Routes for dashboard metrics
+pub fn v1_dashboard_routes() -> Router<crate::AppState> {
+    Router::new().route("/metrics", get(get_dashboard_metrics))
+}
 
 /// Get dashboard metrics
 #[utoipa::path(

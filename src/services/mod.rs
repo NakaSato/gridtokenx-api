@@ -17,8 +17,11 @@ pub mod market_clearing;
 pub mod settlement;
 pub mod order_matching_engine;
 pub mod futures;
-// pub mod dashboard; // Disabled due to dependencies
-// pub mod analytics;
+pub mod dashboard;
+pub mod event_processor;
+pub mod transaction;
+pub mod validation;
+pub mod webhook;
 
 // Re-exports
 pub use auth::AuthService;
@@ -34,3 +37,6 @@ pub use market_clearing::MarketClearingService;
 pub use settlement::SettlementService;
 pub use order_matching_engine::OrderMatchingEngine;
 pub use futures::FuturesService;
+pub use dashboard::DashboardService;
+pub use event_processor::EventProcessorService;
+pub use webhook::WebhookService;

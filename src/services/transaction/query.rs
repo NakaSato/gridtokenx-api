@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::models::transaction::{
     BlockchainOperation, TransactionFilters, TransactionResponse, TransactionStats,
-    TransactionStatus,
+    TransactionStatus, TransactionType,
 };
 
 /// Service for querying transaction data
@@ -245,7 +245,7 @@ impl TransactionQueryService {
             .into_iter()
             .map(|row| {
                 Ok(BlockchainOperation {
-                    operation_type: row.try_get("operation_type")?,
+                    operation_type: row.try_get::<String, _>("operation_type")?.parse().unwrap_or(TransactionType::Swap),
                     operation_id: row.try_get("operation_id")?,
                     user_id: row.try_get("user_id")?,
                     signature: row.try_get("signature")?,
@@ -372,7 +372,7 @@ impl TransactionQueryService {
         .map_err(ApiError::Database)?;
 
         Ok(BlockchainOperation {
-            operation_type: row.get("operation_type"),
+            operation_type: row.get::<String, _>("operation_type").parse().unwrap_or(TransactionType::Swap),
             operation_id: row.get("operation_id"),
             user_id: row.get("user_id"),
             signature: row.get("signature"),

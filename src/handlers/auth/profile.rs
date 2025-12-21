@@ -14,6 +14,18 @@ use crate::AppState;
 use super::types::{UserResponse, UserRow};
 
 /// Profile Handler - fetches user from database by token
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me",
+    responses(
+        (status = 200, description = "User profile", body = UserResponse),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("jwt_token" = [])
+    ),
+    tag = "users"
+)]
 pub async fn profile(
     State(state): State<AppState>,
     headers: HeaderMap,

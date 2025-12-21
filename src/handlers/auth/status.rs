@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use utoipa::ToSchema;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -20,7 +21,7 @@ fn get_uptime_seconds() -> u64 {
 }
 
 /// Comprehensive health check response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
@@ -30,7 +31,7 @@ pub struct HealthResponse {
 }
 
 /// Status of individual services
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceStatus {
     pub database: ServiceHealth,
     pub email: ServiceHealth,
@@ -38,7 +39,7 @@ pub struct ServiceStatus {
 }
 
 /// Individual service health
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceHealth {
     pub status: String,
     pub latency_ms: Option<u64>,
@@ -46,7 +47,7 @@ pub struct ServiceHealth {
 }
 
 /// Simple status response for backward compatibility
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct StatusResponse {
     pub status: String,
     pub version: String,
@@ -54,7 +55,14 @@ pub struct StatusResponse {
 }
 
 /// Get comprehensive system health
-/// GET /api/v1/status
+#[utoipa::path(
+    get,
+    path = "/api/v1/status",
+    responses(
+        (status = 200, description = "System health data", body = HealthResponse),
+    ),
+    tag = "status"
+)]
 pub async fn system_status(
     State(state): State<AppState>,
 ) -> Json<HealthResponse> {
@@ -136,7 +144,14 @@ pub async fn system_status(
 // Removing them to avoid confusion
 
 /// Get meter service status
-/// GET /api/v1/status/meters
+#[utoipa::path(
+    get,
+    path = "/api/v1/status/meters",
+    responses(
+        (status = 200, description = "Meter service status", body = MeterStatusResponse),
+    ),
+    tag = "status"
+)]
 pub async fn meter_status(
     State(state): State<AppState>,
 ) -> Json<MeterStatusResponse> {
@@ -165,14 +180,14 @@ pub async fn meter_status(
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct MeterStatusResponse {
     pub status: String,
     pub database_latency_ms: Option<u64>,
     pub meter_counts: MeterCounts,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct MeterCounts {
     pub total: i64,
     pub pending: i64,
@@ -209,7 +224,14 @@ async fn get_meter_counts(state: &AppState) -> MeterCounts {
 }
 
 /// Simple readiness probe for kubernetes/docker
-/// GET /api/v1/status/ready
+#[utoipa::path(
+    get,
+    path = "/api/v1/status/ready",
+    responses(
+        (status = 200, description = "Readiness probe result", body = ReadinessResponse),
+    ),
+    tag = "status"
+)]
 pub async fn readiness_probe(
     State(state): State<AppState>,
 ) -> Json<ReadinessResponse> {
@@ -235,20 +257,27 @@ pub async fn readiness_probe(
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ReadinessResponse {
     pub ready: bool,
     pub checks: Vec<CheckResult>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CheckResult {
     pub name: String,
     pub passed: bool,
 }
 
 /// Simple liveness probe for kubernetes/docker
-/// GET /api/v1/status/live
+#[utoipa::path(
+    get,
+    path = "/api/v1/status/live",
+    responses(
+        (status = 200, description = "Liveness probe result", body = LivenessResponse),
+    ),
+    tag = "status"
+)]
 pub async fn liveness_probe() -> Json<LivenessResponse> {
     Json(LivenessResponse {
         alive: true,
@@ -256,7 +285,7 @@ pub async fn liveness_probe() -> Json<LivenessResponse> {
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LivenessResponse {
     pub alive: bool,
     pub uptime_seconds: u64,

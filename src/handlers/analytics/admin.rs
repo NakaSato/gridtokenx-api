@@ -1,11 +1,14 @@
 use axum::{extract::State, Json};
 use serde::Serialize;
+use utoipa::ToSchema;
 use tracing::info;
 use crate::AppState;
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::Result;
+use crate::services::audit_logger::AuditEventRecord;
+use crate::services::health_check::DetailedHealthStatus;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AdminStatsResponse {
     pub total_users: i64,
     pub total_meters: i64,
@@ -16,6 +19,16 @@ pub struct AdminStatsResponse {
 }
 
 /// Get global platform statistics (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/admin/stats",
+    responses(
+        (status = 200, description = "Admin statistics retrieved", body = AdminStatsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin only")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_admin_stats(
     State(state): State<AppState>,
     _user: AuthenticatedUser,
@@ -63,6 +76,16 @@ pub async fn get_admin_stats(
 }
 
 /// Get latest platform activity (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/admin/activity",
+    responses(
+        (status = 200, description = "Admin activity logs retrieved", body = Vec<AuditEventRecord>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin only")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_admin_activity(
     State(state): State<AppState>,
     _user: AuthenticatedUser,
@@ -76,6 +99,16 @@ pub async fn get_admin_activity(
 }
 
 /// Get detailed system health (Admin only)
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/admin/health",
+    responses(
+        (status = 200, description = "Detailed system health retrieved", body = DetailedHealthStatus),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - Admin only")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn get_system_health(
     State(state): State<AppState>,
     _user: AuthenticatedUser,

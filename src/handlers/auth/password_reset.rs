@@ -14,10 +14,20 @@ use crate::AppState;
 use crate::auth::password::PasswordService;
 use super::types::{
     ForgotPasswordRequest, ResetPasswordRequest, VerifyEmailResponse,
+    ChangePasswordRequest,
 };
 
 /// Forgot Password Handler - generates reset token and sends email
 /// POST /api/v1/auth/forgot-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    request_body = ForgotPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset email sent (if email exists)", body = VerifyEmailResponse),
+    ),
+    tag = "auth"
+)]
 pub async fn forgot_password(
     State(state): State<AppState>,
     Json(request): Json<ForgotPasswordRequest>,
@@ -104,6 +114,16 @@ pub async fn forgot_password(
 
 /// Reset Password Handler - validates token and updates password
 /// POST /api/v1/auth/reset-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    request_body = ResetPasswordRequest,
+    responses(
+        (status = 200, description = "Password reset successful", body = VerifyEmailResponse),
+        (status = 400, description = "Invalid token or password too short")
+    ),
+    tag = "auth"
+)]
 pub async fn reset_password(
     State(state): State<AppState>,
     Json(request): Json<ResetPasswordRequest>,
@@ -207,6 +227,20 @@ pub async fn reset_password(
 
 /// Change Password Handler - for authenticated users to change their password
 /// POST /api/v1/auth/change-password
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/change-password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, description = "Password changed successfully", body = VerifyEmailResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Incorrect current password")
+    ),
+    security(
+        ("jwt_token" = [])
+    ),
+    tag = "auth"
+)]
 pub async fn change_password(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,

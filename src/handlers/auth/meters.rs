@@ -18,6 +18,18 @@ use super::types::{
 };
 
 /// Get user's registered meters from database
+#[utoipa::path(
+    get,
+    path = "/api/v1/meters",
+    responses(
+        (status = 200, description = "List of user meters", body = Vec<MeterResponse>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("jwt_token" = [])
+    ),
+    tag = "meters"
+)]
 pub async fn get_my_meters(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -64,6 +76,14 @@ pub async fn get_my_meters(
 }
 
 /// Get all registered meters (for simulator)
+#[utoipa::path(
+    get,
+    path = "/api/v1/meters/all",
+    responses(
+        (status = 200, description = "All registered meters", body = Vec<MeterResponse>),
+    ),
+    tag = "meters"
+)]
 pub async fn get_registered_meters(
     State(state): State<AppState>,
 ) -> Json<Vec<MeterResponse>> {
@@ -101,7 +121,21 @@ pub async fn get_registered_meters(
     }
 }
 
-/// Register a new meter to user account (Step 5: Add serial_id to account)
+/// Register a new meter to user account
+#[utoipa::path(
+    post,
+    path = "/api/v1/meters",
+    request_body = RegisterMeterRequest,
+    responses(
+        (status = 200, description = "Meter registered", body = RegisterMeterResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Meter already exists")
+    ),
+    security(
+        ("jwt_token" = [])
+    ),
+    tag = "meters"
+)]
 pub async fn register_meter(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -217,8 +251,17 @@ pub async fn register_meter(
     }
 }
 
-/// Verify a meter (mark as verified after smartmeter confirms)
-/// Requires meter owner to have verified email first
+/// Verify a meter (mark as verified)
+#[utoipa::path(
+    post,
+    path = "/api/v1/meters/verify",
+    request_body = VerifyMeterRequest,
+    responses(
+        (status = 200, description = "Meter verified", body = RegisterMeterResponse),
+        (status = 400, description = "Verification failed")
+    ),
+    tag = "meters"
+)]
 pub async fn verify_meter(
     State(state): State<AppState>,
     Json(request): Json<VerifyMeterRequest>,
@@ -292,7 +335,15 @@ pub async fn verify_meter(
 
 
 /// Get meters with optional status filter
-/// GET /api/v1/meters?status=verified
+#[utoipa::path(
+    get,
+    path = "/api/v1/meters/filter",
+    params(MeterFilterParams),
+    responses(
+        (status = 200, description = "Filtered meters", body = Vec<MeterResponse>),
+    ),
+    tag = "meters"
+)]
 pub async fn get_registered_meters_filtered(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<MeterFilterParams>,
@@ -340,7 +391,19 @@ pub async fn get_registered_meters_filtered(
 }
 
 /// Update meter status via PATCH
-/// PATCH /api/v1/meters/{serial}
+#[utoipa::path(
+    patch,
+    path = "/api/v1/meters/{serial}",
+    request_body = UpdateMeterStatusRequest,
+    params(
+        ("serial" = String, Path, description = "Meter Serial Number")
+    ),
+    responses(
+        (status = 200, description = "Status updated", body = RegisterMeterResponse),
+        (status = 404, description = "Meter not found")
+    ),
+    tag = "meters"
+)]
 pub async fn update_meter_status(
     State(state): State<AppState>,
     axum::extract::Path(serial): axum::extract::Path<String>,
@@ -377,7 +440,19 @@ pub async fn update_meter_status(
 }
 
 /// Create a new reading for a meter
-/// POST /api/v1/meters/{serial}/readings
+#[utoipa::path(
+    post,
+    path = "/api/v1/meters/{serial}/readings",
+    request_body = CreateReadingRequest,
+    params(
+        ("serial" = String, Path, description = "Meter Serial Number")
+    ),
+    responses(
+        (status = 200, description = "Reading created", body = CreateReadingResponse),
+        (status = 404, description = "Meter not found")
+    ),
+    tag = "meters"
+)]
 pub async fn create_reading(
     State(state): State<AppState>,
     axum::extract::Path(serial): axum::extract::Path<String>,
@@ -502,7 +577,19 @@ pub async fn create_reading(
 }
 
 /// Get meter readings for the authenticated user
-/// GET /api/v1/meters/readings
+#[utoipa::path(
+    get,
+    path = "/api/v1/meters/readings",
+    params(ReadingFilterParams),
+    responses(
+        (status = 200, description = "List of readings", body = Vec<MeterReadingResponse>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("jwt_token" = [])
+    ),
+    tag = "meters"
+)]
 pub async fn get_my_readings(
     State(state): State<AppState>,
     headers: HeaderMap,

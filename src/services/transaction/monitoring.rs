@@ -70,14 +70,14 @@ impl TransactionMonitorService {
             .into_iter()
             .map(|row| {
                 Ok(BlockchainOperation {
-                    operation_type: row.try_get("operation_type")?,
+                    operation_type: row.try_get::<String, _>("operation_type")?.parse().unwrap_or(TransactionType::Swap),
                     operation_id: row.try_get("operation_id")?,
                     user_id: row.try_get("user_id")?,
                     signature: row.try_get("signature")?,
                     tx_type: row.try_get("tx_type")?,
                     status: row
                         .try_get::<Option<String>, _>("operation_status")?
-                        .and_then(|s| s.parse().ok())
+                        .and_then(|status_str| status_str.parse().ok())
                         .unwrap_or(TransactionStatus::Pending),
                     operation_status: row.try_get("operation_status")?,
                     attempts: row.try_get::<Option<i32>, _>("attempts")?.unwrap_or(0),

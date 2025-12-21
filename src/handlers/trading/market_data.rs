@@ -6,7 +6,7 @@ use crate::error::{ApiError, Result};
 use crate::models::trading::{MarketData, OrderBook};
 use crate::AppState;
 
-use super::types::{MarketStats, TradingStats};
+use super::types::{MarketStats, TradingStats, OrderBookResponse};
 
 /// Get current market data
 /// GET /api/trading/market
@@ -89,10 +89,10 @@ pub async fn get_trading_stats(
     tag = "trading",
     security(("bearer_auth" = [])),
     responses(
-        (status = 200, description = "Order book data"),
+        (status = 200, description = "Order book data", body = OrderBookResponse),
     )
 )]
-pub async fn get_orderbook(State(state): State<AppState>) -> Result<Json<serde_json::Value>> {
+pub async fn get_orderbook(State(state): State<AppState>) -> Result<Json<super::types::OrderBookResponse>> {
     use rust_decimal::Decimal;
     use sqlx::Row;
 
@@ -126,37 +126,37 @@ pub async fn get_orderbook(State(state): State<AppState>) -> Result<Json<serde_j
     .await
     .map_err(|e| ApiError::Database(e))?;
 
-    let buys: Vec<serde_json::Value> = buy_orders
+    let buys: Vec<super::types::OrderBookEntry> = buy_orders
         .iter()
         .map(|row| {
             let energy_amount: Decimal = row.get("energy_amount");
             let price_per_kwh: Decimal = row.get("price_per_kwh");
-            serde_json::json!({
-                "energy_amount": energy_amount.to_string().parse::<f64>().unwrap_or(0.0),
-                "price_per_kwh": price_per_kwh.to_string().parse::<f64>().unwrap_or(0.0),
-                "username": row.get::<Option<String>, _>("username")
-            })
+            super::types::OrderBookEntry {
+                energy_amount: energy_amount.to_string().parse::<f64>().unwrap_or(0.0),
+                price_per_kwh: price_per_kwh.to_string().parse::<f64>().unwrap_or(0.0),
+                username: row.get::<Option<String>, _>("username")
+            }
         })
         .collect::<Vec<_>>();
 
-    let sells: Vec<serde_json::Value> = sell_orders
+    let sells: Vec<super::types::OrderBookEntry> = sell_orders
         .iter()
         .map(|row| {
             let energy_amount: Decimal = row.get("energy_amount");
             let price_per_kwh: Decimal = row.get("price_per_kwh");
-            serde_json::json!({
-                "energy_amount": energy_amount.to_string().parse::<f64>().unwrap_or(0.0),
-                "price_per_kwh": price_per_kwh.to_string().parse::<f64>().unwrap_or(0.0),
-                "username": row.get::<Option<String>, _>("username")
-            })
+            super::types::OrderBookEntry {
+                energy_amount: energy_amount.to_string().parse::<f64>().unwrap_or(0.0),
+                price_per_kwh: price_per_kwh.to_string().parse::<f64>().unwrap_or(0.0),
+                username: row.get::<Option<String>, _>("username")
+            }
         })
         .collect::<Vec<_>>();
 
-    Ok(Json(serde_json::json!({
-        "buy_orders": buys,
-        "sell_orders": sells,
-        "timestamp": Utc::now()
-    })))
+    Ok(Json(super::types::OrderBookResponse {
+        buy_orders: buys,
+        sell_orders: sells,
+        timestamp: Utc::now(),
+    }))
 }
 
 /// Get market statistics

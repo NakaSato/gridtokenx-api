@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::models::transaction::{
     BlockchainOperation, TransactionMonitoringConfig, TransactionRetryRequest,
-    TransactionRetryResponse, TransactionStatus,
+    TransactionRetryResponse, TransactionStatus, TransactionType,
 };
 use crate::services::settlement::SettlementService;
 use crate::services::transaction::query::TransactionQueryService;
@@ -74,7 +74,7 @@ impl TransactionRecoveryService {
             .into_iter()
             .map(|row| {
                 Ok(BlockchainOperation {
-                    operation_type: row.try_get("operation_type")?,
+                    operation_type: row.try_get::<String, _>("operation_type")?.parse().unwrap_or(TransactionType::Swap),
                     operation_id: row.try_get("operation_id")?,
                     user_id: row.try_get("user_id")?,
                     signature: row.try_get("signature")?,
@@ -150,11 +150,13 @@ impl TransactionRecoveryService {
             Ok(op) => op,
             Err(e) => {
                 return Ok(TransactionRetryResponse {
+                    operation_id: request.operation_id,
                     success: false,
                     attempts: 0,
                     last_error: Some(format!("Failed to get transaction: {}", e)),
                     signature: None,
                     status: TransactionStatus::Failed,
+                    new_attempts: 0,
                 });
             }
         };
@@ -169,11 +171,13 @@ impl TransactionRecoveryService {
         if let Some(ref requested_type) = request.operation_type {
             if op_type.as_str() != requested_type {
                 return Ok(TransactionRetryResponse {
+                    operation_id: request.operation_id,
                     success: false,
                     attempts: op_attempts,
                     last_error: Some("Operation type mismatch".to_string()),
                     signature: op_sig.clone(),
                     status: op_status,
+                    new_attempts: op_attempts,
                 });
             }
         }
@@ -184,11 +188,13 @@ impl TransactionRecoveryService {
             .unwrap_or(self.config.max_retry_attempts);
         if op_attempts >= max_attempts {
             return Ok(TransactionRetryResponse {
+                operation_id: request.operation_id,
                 success: false,
                 attempts: op_attempts,
                 last_error: Some("Maximum retry attempts exceeded".to_string()),
                 signature: op_sig,
                 status: op_status,
+                new_attempts: op_attempts,
             });
         }
 
@@ -204,6 +210,7 @@ impl TransactionRecoveryService {
             // Add retry logic for other operation types as needed
             _ => {
                 return Ok(TransactionRetryResponse {
+                    operation_id: op_id,
                     success: false,
                     attempts: op_attempts,
                     last_error: Some(format!(
@@ -212,6 +219,7 @@ impl TransactionRecoveryService {
                     )),
                     signature: op_sig.clone(),
                     status: op_status,
+                    new_attempts: op_attempts,
                 });
             }
         }
@@ -229,11 +237,13 @@ impl TransactionRecoveryService {
         let updated_status = updated_operation.status.clone();
 
         Ok(TransactionRetryResponse {
+            operation_id: operation.operation_id,
             success: true,
             attempts: updated_attempts,
             last_error: updated_last_error,
             signature: updated_sig,
             status: updated_status,
+            new_attempts: updated_attempts,
         })
     }
 

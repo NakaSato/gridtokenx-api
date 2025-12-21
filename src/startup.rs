@@ -113,6 +113,28 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     let futures_service = services::FuturesService::new(db_pool.clone());
     info!("✅ Futures service initialized");
 
+    // Initialize webhook service
+    let webhook_service = services::WebhookService::new(
+        config.event_processor.webhook_url.clone(),
+        config.event_processor.webhook_secret.clone(),
+    );
+
+    // Initialize event processor service
+    let event_processor = services::EventProcessorService::new(
+        std::sync::Arc::new(db_pool.clone()),
+        config.solana_rpc_url.clone(),
+        config.event_processor.clone(),
+        config.energy_token_mint.clone(),
+    );
+    info!("✅ Event processor service initialized");
+
+    // Initialize dashboard service
+    let dashboard_service = services::DashboardService::new(
+        health_checker.clone(),
+        event_processor.clone(),
+    );
+    info!("✅ Dashboard service initialized");
+
     // Create minimal application state
     let app_state = AppState {
         db: db_pool,
@@ -132,6 +154,9 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         settlement,
         market_clearing_engine,
         futures_service,
+        dashboard_service,
+        event_processor,
+        webhook_service,
         metrics_handle,
     };
 
@@ -224,6 +249,13 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
         }
     });
     info!("✅ Settlement Service started");
+
+    // Start Event Processor Service
+    let event_processor = app_state.event_processor.clone();
+    tokio::spawn(async move {
+        event_processor.start().await;
+    });
+    info!("✅ Event Processor Service started");
 }
 
 /// Wait for shutdown signal.

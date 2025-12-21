@@ -2,6 +2,7 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 use uuid::Uuid;
 use crate::error::{ApiError, Result};
+use utoipa::ToSchema;
 // Removed AppState
 
 #[derive(Debug, Clone)]
@@ -133,32 +134,40 @@ impl FuturesService {
 }
 
 // Data structures mapping to DB tables
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow, ToSchema)]
 pub struct FuturesProduct {
     pub id: Uuid,
     pub symbol: Option<String>,
     pub base_asset: Option<String>,
     pub quote_asset: Option<String>,
+    #[schema(value_type = String)]
     pub contract_size: Decimal,
     pub expiration_date: chrono::DateTime<Utc>,
+    #[schema(value_type = String)]
     pub current_price: Decimal,
     pub is_active: Option<bool>,
     pub created_at: Option<chrono::DateTime<Utc>>,
     pub updated_at: Option<chrono::DateTime<Utc>>,
 }
 
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow, ToSchema)]
 pub struct FuturesPosition {
     pub id: Uuid,
     pub user_id: Uuid,
     pub product_id: Uuid,
     pub side: Option<String>, // 'long' or 'short' - Postgres enum mapped to string
+    #[schema(value_type = String)]
     pub quantity: Decimal,
+    #[schema(value_type = String)]
     pub entry_price: Decimal,
+    #[schema(value_type = String)]
     pub current_price: Decimal,
     pub leverage: i32,
+    #[schema(value_type = String)]
     pub margin_used: Decimal,
+    #[schema(value_type = Option<String>)]
     pub unrealized_pnl: Option<Decimal>,
+    #[schema(value_type = Option<String>)]
     pub liquidation_price: Option<Decimal>,
     pub created_at: Option<chrono::DateTime<Utc>>,
     pub updated_at: Option<chrono::DateTime<Utc>>,
@@ -166,41 +175,53 @@ pub struct FuturesPosition {
     pub product_symbol: Option<String>,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct Candle {
     pub time: String,
+    #[schema(value_type = String)]
     pub open: Decimal,
+    #[schema(value_type = String)]
     pub high: Decimal,
+    #[schema(value_type = String)]
     pub low: Decimal,
+    #[schema(value_type = String)]
     pub close: Decimal,
+    #[schema(value_type = String)]
     pub volume: Decimal,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct OrderBookEntry {
+    #[schema(value_type = String)]
     pub price: Decimal,
+    #[schema(value_type = String)]
     pub quantity: Decimal,
+    #[schema(value_type = String)]
     pub total: Decimal,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct OrderBook {
     pub bids: Vec<OrderBookEntry>,
     pub asks: Vec<OrderBookEntry>,
 }
 
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow, ToSchema)]
 pub struct FuturesOrder {
     pub id: Uuid,
     pub user_id: Uuid,
     pub product_id: Uuid,
     pub side: Option<String>, // 'long', 'short'
     pub order_type: Option<String>, // 'market', 'limit'
+    #[schema(value_type = String)]
     pub quantity: Decimal,
+    #[schema(value_type = String)]
     pub price: Decimal,
     pub leverage: i32,
     pub status: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub filled_quantity: Option<Decimal>,
+    #[schema(value_type = Option<String>)]
     pub average_fill_price: Option<Decimal>,
     pub created_at: Option<chrono::DateTime<Utc>>,
     pub updated_at: Option<chrono::DateTime<Utc>>,

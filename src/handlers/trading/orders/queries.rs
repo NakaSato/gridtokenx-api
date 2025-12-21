@@ -2,6 +2,7 @@ use axum::{
     extract::{Query, State},
     response::Json,
 };
+use utoipa::{IntoParams, ToSchema};
 
 use crate::auth::middleware::AuthenticatedUser;
 use crate::error::{ApiError, Result};
@@ -319,16 +320,19 @@ pub async fn get_my_trades(
     Ok(Json(TradeHistoryResponse { trades }))
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, IntoParams)]
 pub struct TradeHistoryParams {
     pub limit: Option<i32>,
 }
 
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow, ToSchema)]
 pub struct TradeRecord {
     pub id: uuid::Uuid,
+    #[schema(value_type = String)]
     pub quantity: rust_decimal::Decimal,
+    #[schema(value_type = String)]
     pub price: rust_decimal::Decimal,
+    #[schema(value_type = String)]
     pub total_value: rust_decimal::Decimal,
     pub role: String,
     pub counterparty_id: uuid::Uuid,
@@ -336,7 +340,7 @@ pub struct TradeRecord {
     pub status: String,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct TradeHistoryResponse {
     pub trades: Vec<TradeRecord>,
 }
@@ -418,7 +422,7 @@ pub async fn get_token_balance(
 
 use std::str::FromStr;
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct TokenBalanceResponse {
     pub wallet_address: Option<String>,
     pub token_balance: f64,

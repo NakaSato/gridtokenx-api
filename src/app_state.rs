@@ -42,6 +42,9 @@ pub struct AppState {
     pub settlement: services::SettlementService,
     pub market_clearing_engine: services::OrderMatchingEngine,
     pub futures_service: services::FuturesService,
+    pub dashboard_service: services::DashboardService,
+    pub event_processor: services::EventProcessorService,
+    pub webhook_service: services::WebhookService,
     
     /// Prometheus metrics handle
     pub metrics_handle: metrics_exporter_prometheus::PrometheusHandle,
@@ -57,5 +60,11 @@ impl axum::extract::FromRef<AppState> for services::WebSocketService {
 impl axum::extract::FromRef<AppState> for services::HealthChecker {
     fn from_ref(app_state: &AppState) -> Self {
         app_state.health_checker.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for services::DashboardService {
+    fn from_ref(app_state: &AppState) -> Self {
+        app_state.dashboard_service.clone()
     }
 }

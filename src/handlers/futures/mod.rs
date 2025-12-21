@@ -3,10 +3,12 @@ use axum::{
     routing::{get, post},
     Json, Router
 };
+use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
 use crate::AppState;
 use crate::error::ApiError;
-use crate::services::futures::{FuturesProduct, FuturesPosition};
+use crate::services::futures::{FuturesProduct, FuturesPosition, Candle, OrderBook, FuturesOrder};
+use serde_json::Value;
 use serde::Deserialize;
 use rust_decimal::Decimal;
 use crate::handlers::ApiResponse;
@@ -23,16 +25,27 @@ pub fn routes() -> Router<AppState> {
         .route("/orderbook", get(get_order_book))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CreateFuturesOrderRequest {
     pub product_id: Uuid,
     pub side: String, // 'long' or 'short'
     pub order_type: String, // 'market' or 'limit'
+    #[schema(value_type = String)]
     pub quantity: Decimal,
+    #[schema(value_type = String)]
     pub price: Decimal,
     pub leverage: i32,
 }
 
+/// Get all futures products
+#[utoipa::path(
+    get,
+    path = "/api/v1/futures/products",
+    responses(
+        (status = 200, description = "List of futures products", body = ApiResponse<Vec<FuturesProduct>>),
+    ),
+    tag = "futures"
+)]
 pub async fn get_products(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<FuturesProduct>>>, ApiError> {
@@ -40,6 +53,18 @@ pub async fn get_products(
     Ok(Json(ApiResponse::success(products)))
 }
 
+/// Create a new futures order
+#[utoipa::path(
+    post,
+    path = "/api/v1/futures/orders",
+    request_body = CreateFuturesOrderRequest,
+    responses(
+        (status = 200, description = "Order created successfully", body = ApiResponse<Value>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "futures"
+)]
 pub async fn create_order(
     user: AuthenticatedUser,
     State(state): State<AppState>,
@@ -58,6 +83,17 @@ pub async fn create_order(
     Ok(Json(ApiResponse::success(serde_json::json!({ "order_id": order_id }))))
 }
 
+/// Get user's futures positions
+#[utoipa::path(
+    get,
+    path = "/api/v1/futures/positions",
+    responses(
+        (status = 200, description = "List of user's positions", body = ApiResponse<Vec<FuturesPosition>>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "futures"
+)]
 pub async fn get_positions(
     user: AuthenticatedUser,
     State(state): State<AppState>,
@@ -66,12 +102,22 @@ pub async fn get_positions(
     Ok(Json(ApiResponse::success(positions)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
 pub struct GetCandlesRequest {
     pub product_id: Uuid,
     pub interval: String,
 }
 
+/// Get candles for a product
+#[utoipa::path(
+    get,
+    path = "/api/v1/futures/candles",
+    params(GetCandlesRequest),
+    responses(
+        (status = 200, description = "Candle data", body = ApiResponse<Vec<Candle>>),
+    ),
+    tag = "futures"
+)]
 pub async fn get_candles(
     State(state): State<AppState>,
     Query(req): Query<GetCandlesRequest>,
@@ -80,11 +126,21 @@ pub async fn get_candles(
     Ok(Json(ApiResponse::success(candles)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, IntoParams)]
 pub struct GetOrderBookRequest {
     pub product_id: Uuid,
 }
 
+/// Get order book for a product
+#[utoipa::path(
+    get,
+    path = "/api/v1/futures/orderbook",
+    params(GetOrderBookRequest),
+    responses(
+        (status = 200, description = "Order book data", body = ApiResponse<OrderBook>),
+    ),
+    tag = "futures"
+)]
 pub async fn get_order_book(
     State(state): State<AppState>,
     Query(req): Query<GetOrderBookRequest>,
@@ -93,6 +149,17 @@ pub async fn get_order_book(
     Ok(Json(ApiResponse::success(order_book)))
 }
 
+/// Get user's futures orders
+#[utoipa::path(
+    get,
+    path = "/api/v1/futures/orders/my",
+    responses(
+        (status = 200, description = "List of user's orders", body = ApiResponse<Vec<FuturesOrder>>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "futures"
+)]
 pub async fn get_my_orders(
     user: AuthenticatedUser,
     State(state): State<AppState>,
@@ -101,6 +168,20 @@ pub async fn get_my_orders(
     Ok(Json(ApiResponse::success(orders)))
 }
 
+/// Close a futures position
+#[utoipa::path(
+    post,
+    path = "/api/v1/futures/positions/{id}/close",
+    params(
+        ("id" = Uuid, Path, description = "Position ID")
+    ),
+    responses(
+        (status = 200, description = "Position closed successfully", body = ApiResponse<Value>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(("bearer_auth" = [])),
+    tag = "futures"
+)]
 pub async fn close_position(
     user: AuthenticatedUser,
     State(state): State<AppState>,

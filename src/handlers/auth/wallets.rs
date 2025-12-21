@@ -12,6 +12,17 @@ use crate::AppState;
 use super::types::TokenBalanceResponse;
 
 /// Token Balance Handler - queries blockchain for wallet balance
+#[utoipa::path(
+    get,
+    path = "/api/v1/wallets/{address}/balance",
+    params(
+        ("address" = String, Path, description = "Wallet Address")
+    ),
+    responses(
+        (status = 200, description = "Token balance", body = TokenBalanceResponse),
+    ),
+    tag = "wallets"
+)]
 pub async fn token_balance(
     State(state): State<AppState>,
     Path(wallet_address): Path<String>,
