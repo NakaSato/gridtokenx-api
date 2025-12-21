@@ -489,8 +489,8 @@ impl BlockchainUtils {
 
     /// Get Registry program ID
     fn registry_program_id() -> Result<Pubkey> {
-        let program_id = std::env::var("REGISTRY_PROGRAM_ID")
-            .unwrap_or_else(|_| "9wvMT6f2Y7A37LB8y5LEQRSJxbnwLYqw1Bqq1RBtD3oM".to_string());
+        let program_id = std::env::var("SOLANA_REGISTRY_PROGRAM_ID")
+            .unwrap_or_else(|_| "DiJi39HDJQwEYGxSwL6qtLUtWzbAP5irv1S4Tube9ouH".to_string());
 
         program_id
             .parse()
@@ -499,8 +499,8 @@ impl BlockchainUtils {
 
     /// Get Oracle program ID
     fn oracle_program_id() -> Result<Pubkey> {
-        let program_id = std::env::var("ORACLE_PROGRAM_ID")
-            .unwrap_or_else(|_| "69e8LaTfPnFycbD1kAhStfkyJxe1LnN323k3NQAMYBHr".to_string());
+        let program_id = std::env::var("SOLANA_ORACLE_PROGRAM_ID")
+            .unwrap_or_else(|_| "TjYDEtQoFP9LRuVhmcGPZ52zBnQmtM5ixvE1T1SoCya".to_string());
 
         program_id
             .parse()
@@ -510,8 +510,8 @@ impl BlockchainUtils {
     /// Get Governance program ID
     #[allow(dead_code)]
     fn governance_program_id() -> Result<Pubkey> {
-        let program_id = std::env::var("GOVERNANCE_PROGRAM_ID")
-            .unwrap_or_else(|_| "2GprryNp7j7yxGuPNNjpJLHELfCdXH8UPfKSxXCvisjL".to_string());
+        let program_id = std::env::var("SOLANA_GOVERNANCE_PROGRAM_ID")
+            .unwrap_or_else(|_| "HZdnWsQc5vsMXScEn8u3GezFtqPmcKM6Ex3XEUXCgSBT".to_string());
 
         program_id
             .parse()
@@ -520,8 +520,8 @@ impl BlockchainUtils {
 
     /// Get Energy Token program ID
     fn energy_token_program_id() -> Result<Pubkey> {
-        let program_id = std::env::var("ENERGY_TOKEN_PROGRAM_ID")
-            .unwrap_or_else(|_| "AZBstnPmUeRJnwv55128awdfi2tmCFzcK4W6NPXbTkWA".to_string());
+        let program_id = std::env::var("SOLANA_ENERGY_TOKEN_PROGRAM_ID")
+            .unwrap_or_else(|_| "5FVExLSAC94gSWH6TJa1TmBDWXuqFe5obZaC5DkqJihU".to_string());
 
         program_id
             .parse()
@@ -531,8 +531,8 @@ impl BlockchainUtils {
     /// Get Trading program ID
     #[allow(dead_code)]
     fn trading_program_id() -> Result<Pubkey> {
-        let program_id = std::env::var("TRADING_PROGRAM_ID")
-            .unwrap_or_else(|_| "e7rS5sykWMXtciUEgUZ6xByqo6VqwNRNeAmQQn3Sbj2".to_string());
+        let program_id = std::env::var("SOLANA_TRADING_PROGRAM_ID")
+            .unwrap_or_else(|_| "CdxzGUNHPcgkhnaH6V4jAcvMGRsUhPKFK6R71UCQhJ8H".to_string());
 
         program_id
             .parse()

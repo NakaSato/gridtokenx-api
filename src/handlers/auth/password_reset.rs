@@ -47,17 +47,17 @@ pub async fn forgot_password(
         Ok(None) => {
             // Don't reveal if email exists (security best practice)
             info!("Password reset requested for non-existent email: {}", request.email);
-            return Json(VerifyEmailResponse {
-                success: true,
-                message: "If an account with that email exists, a password reset link has been sent.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                true,
+                "If an account with that email exists, a password reset link has been sent."
+            ));
         }
         Err(e) => {
             tracing::error!("Database error looking up user: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "An error occurred. Please try again.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "An error occurred. Please try again."
+            ));
         }
     };
 
@@ -81,10 +81,10 @@ pub async fn forgot_password(
 
     if let Err(e) = update_result {
         tracing::error!("Failed to store password reset token: {}", e);
-        return Json(VerifyEmailResponse {
-            success: false,
-            message: "Failed to generate reset token. Please try again.".to_string(),
-        });
+        return Json(VerifyEmailResponse::simple(
+            false,
+            "Failed to generate reset token. Please try again."
+        ));
     }
 
     // Send password reset email
@@ -106,10 +106,10 @@ pub async fn forgot_password(
         info!("⚠️ Email service not configured, skipping password reset email");
     }
 
-    Json(VerifyEmailResponse {
-        success: true,
-        message: "If an account with that email exists, a password reset link has been sent.".to_string(),
-    })
+    Json(VerifyEmailResponse::simple(
+        true,
+        "If an account with that email exists, a password reset link has been sent."
+    ))
 }
 
 /// Reset Password Handler - validates token and updates password
@@ -131,17 +131,17 @@ pub async fn reset_password(
     info!("🔐 Password reset attempt with token");
 
     if request.token.is_empty() {
-        return Json(VerifyEmailResponse {
-            success: false,
-            message: "Reset token is required.".to_string(),
-        });
+        return Json(VerifyEmailResponse::simple(
+            false,
+            "Reset token is required."
+        ));
     }
 
     if request.new_password.len() < 8 {
-        return Json(VerifyEmailResponse {
-            success: false,
-            message: "Password must be at least 8 characters long.".to_string(),
-        });
+        return Json(VerifyEmailResponse::simple(
+            false,
+            "Password must be at least 8 characters long."
+        ));
     }
 
     // Look up user by reset token
@@ -159,26 +159,26 @@ pub async fn reset_password(
     let (user_id, username, expires_at) = match user_result {
         Ok(Some(user)) => user,
         Ok(None) => {
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "Invalid or expired reset token.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "Invalid or expired reset token."
+            ));
         }
         Err(e) => {
             tracing::error!("Database error looking up reset token: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "An error occurred. Please try again.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "An error occurred. Please try again."
+            ));
         }
     };
 
     // Check if token is expired
     if Utc::now() > expires_at {
-        return Json(VerifyEmailResponse {
-            success: false,
-            message: "Reset token has expired. Please request a new one.".to_string(),
-        });
+        return Json(VerifyEmailResponse::simple(
+            false,
+            "Reset token has expired. Please request a new one."
+        ));
     }
 
     // Hash new password using bcrypt
@@ -186,10 +186,10 @@ pub async fn reset_password(
         Ok(hash) => hash,
         Err(e) => {
             tracing::error!("Failed to hash new password: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: format!("{}", e),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                format!("{}", e)
+            ));
         }
     };
 
@@ -210,17 +210,17 @@ pub async fn reset_password(
     match update_result {
         Ok(_) => {
             info!("✅ Password reset successful for user: {}", username);
-            Json(VerifyEmailResponse {
-                success: true,
-                message: "Password has been reset successfully. You can now login with your new password.".to_string(),
-            })
+            Json(VerifyEmailResponse::simple(
+                true,
+                "Password has been reset successfully. You can now login with your new password."
+            ))
         }
         Err(e) => {
             tracing::error!("Failed to update password: {}", e);
-            Json(VerifyEmailResponse {
-                success: false,
-                message: "Failed to reset password. Please try again.".to_string(),
-            })
+            Json(VerifyEmailResponse::simple(
+                false,
+                "Failed to reset password. Please try again."
+            ))
         }
     }
 }
@@ -258,10 +258,10 @@ pub async fn change_password(
     let claims = match state.jwt_service.decode_token(token) {
         Ok(c) => c,
         Err(_) => {
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "Invalid or expired token. Please log in again.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "Invalid or expired token. Please log in again."
+            ));
         }
     };
     
@@ -269,10 +269,10 @@ pub async fn change_password(
 
     // Validate new password
     if request.new_password.len() < 8 {
-        return Json(VerifyEmailResponse {
-            success: false,
-            message: "New password must be at least 8 characters long.".to_string(),
-        });
+        return Json(VerifyEmailResponse::simple(
+            false,
+            "New password must be at least 8 characters long."
+        ));
     }
 
     // Get user's current password hash
@@ -286,17 +286,17 @@ pub async fn change_password(
     let current_hash = match user_result {
         Ok(Some(row)) => row.0,
         Ok(None) => {
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "User not found.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "User not found."
+            ));
         }
         Err(e) => {
             tracing::error!("Database error: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "An error occurred. Please try again.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "An error occurred. Please try again."
+            ));
         }
     };
 
@@ -304,17 +304,17 @@ pub async fn change_password(
     match PasswordService::verify_password(&request.current_password, &current_hash) {
         Ok(true) => {}
         Ok(false) => {
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "Current password is incorrect.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "Current password is incorrect."
+            ));
         }
         Err(e) => {
             tracing::error!("Password verification error: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: "An error occurred. Please try again.".to_string(),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                "An error occurred. Please try again."
+            ));
         }
     }
 
@@ -323,10 +323,10 @@ pub async fn change_password(
         Ok(hash) => hash,
         Err(e) => {
             tracing::error!("Password hashing error: {}", e);
-            return Json(VerifyEmailResponse {
-                success: false,
-                message: format!("{}", e),
-            });
+            return Json(VerifyEmailResponse::simple(
+                false,
+                format!("{}", e)
+            ));
         }
     };
 
@@ -342,17 +342,17 @@ pub async fn change_password(
     match update_result {
         Ok(_) => {
             info!("✅ Password changed for user: {}", claims.sub);
-            Json(VerifyEmailResponse {
-                success: true,
-                message: "Password changed successfully.".to_string(),
-            })
+            Json(VerifyEmailResponse::simple(
+                true,
+                "Password changed successfully."
+            ))
         }
         Err(e) => {
             tracing::error!("Failed to update password: {}", e);
-            Json(VerifyEmailResponse {
-                success: false,
-                message: "Failed to change password. Please try again.".to_string(),
-            })
+            Json(VerifyEmailResponse::simple(
+                false,
+                "Failed to change password. Please try again."
+            ))
         }
     }
 }

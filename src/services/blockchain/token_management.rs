@@ -130,10 +130,10 @@ impl TokenManager {
         let amount_lamports = (amount_kwh * 1_000_000_000.0) as u64;
 
         // Get energy token program ID from environment (with fallback to deployed program ID)
-        let energy_token_program_id = std::env::var("ENERGY_TOKEN_PROGRAM_ID")
-            .unwrap_or_else(|_| "AZBstnPmUeRJnwv55128awdfi2tmCFzcK4W6NPXbTkWA".to_string());
+        let energy_token_program_id = std::env::var("SOLANA_ENERGY_TOKEN_PROGRAM_ID")
+            .unwrap_or_else(|_| "5FVExLSAC94gSWH6TJa1TmBDWXuqFe5obZaC5DkqJihU".to_string());
         let energy_token_program_id = Pubkey::from_str(&energy_token_program_id)
-            .map_err(|e| anyhow!("Invalid ENERGY_TOKEN_PROGRAM_ID: {}", e))?;
+            .map_err(|e| anyhow!("Invalid SOLANA_ENERGY_TOKEN_PROGRAM_ID: {}", e))?;
 
         // Derive the mint PDA from energy_token program
         let (mint_pda, _) = Pubkey::find_program_address(

@@ -84,10 +84,36 @@ pub struct VerifyEmailRequest {
 }
 
 /// Email Verification Response
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema, Default)]
 pub struct VerifyEmailResponse {
     pub success: bool,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthResponse>,
+}
+
+impl VerifyEmailResponse {
+    /// Create a simple success/failure response without auth data
+    pub fn simple(success: bool, message: impl Into<String>) -> Self {
+        Self {
+            success,
+            message: message.into(),
+            wallet_address: None,
+            auth: None,
+        }
+    }
+    
+    /// Create a success response with auth data for auto-login
+    pub fn with_auth(message: impl Into<String>, wallet_address: Option<String>, auth: Option<AuthResponse>) -> Self {
+        Self {
+            success: true,
+            message: message.into(),
+            wallet_address,
+            auth,
+        }
+    }
 }
 
 /// Resend Email Verification

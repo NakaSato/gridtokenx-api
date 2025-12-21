@@ -10,6 +10,7 @@ use axum::{
 use solana_sdk::signer::Signer;
 use tracing::info;
 use uuid::Uuid;
+use base64::{engine::general_purpose, Engine as _};
 
 use crate::AppState;
 use crate::auth::password::PasswordService;
@@ -207,6 +208,8 @@ pub async fn verify_email(
         return Json(VerifyEmailResponse {
             success: false,
             message: "Missing verification token".to_string(),
+            wallet_address: None,
+            auth: None,
         });
     }
 
@@ -214,6 +217,29 @@ pub async fn verify_email(
     let new_keypair = solana_sdk::signer::keypair::Keypair::new();
     let wallet_address = new_keypair.pubkey().to_string();
     info!("🔑 Generated wallet address for verified user: {}", wallet_address);
+
+    // Encrypt private key with SYSTEM SECRET
+    // Note: This makes the wallet custodial-capable for the platform.
+    let (encrypted_key, salt, iv) = match crate::services::WalletService::encrypt_private_key(
+        &state.config.encryption_secret,
+        &new_keypair.to_bytes()
+    ) {
+        Ok(vals) => vals,
+        Err(e) => {
+            tracing::error!("Failed to encrypt wallet: {}", e);
+            return Json(VerifyEmailResponse {
+                success: false,
+                message: "Failed to create secure wallet".to_string(),
+                wallet_address: None,
+                auth: None,
+            });
+        }
+    };
+
+    // Decode to bytes for BYTEA columns
+    let encrypted_key_bytes = general_purpose::STANDARD.decode(&encrypted_key).unwrap_or_default();
+    let salt_bytes = general_purpose::STANDARD.decode(&salt).unwrap_or_default();
+    let iv_bytes = general_purpose::STANDARD.decode(&iv).unwrap_or_default();
 
     // Register user on-chain via Anchor registry program
     // First, fund the new keypair with SOL via airdrop (devnet only)
@@ -251,71 +277,164 @@ pub async fn verify_email(
         }
     }
 
+    // Helper function to generate auth response for a user
+    let generate_auth_response = |user_id: Uuid, username: String, email: String, role: String, first_name: Option<String>, last_name: Option<String>, wallet: Option<String>| -> Option<AuthResponse> {
+        let claims = crate::auth::Claims::new(user_id, username.clone(), role.clone());
+        let token = state.jwt_service.encode_token(&claims).ok()?;
+        
+        Some(AuthResponse {
+            access_token: token,
+            expires_in: 86400,
+            user: UserResponse {
+                id: user_id,
+                username,
+                email,
+                role,
+                first_name: first_name.unwrap_or_default(),
+                last_name: last_name.unwrap_or_default(),
+                wallet_address: wallet,
+            },
+        })
+    };
 
     // Try to find and update user by verification token
+    // Try to find and update user by verification token
     let update_result = sqlx::query(
-        "UPDATE users SET email_verified = true, wallet_address = $1, blockchain_registered = $2, updated_at = NOW() 
-         WHERE email_verification_token = $3 AND email_verified = false"
+        "UPDATE users SET 
+            email_verified = true, 
+            wallet_address = $1, 
+            encrypted_private_key = $2,
+            wallet_salt = $3,
+            encryption_iv = $4,
+            blockchain_registered = $5, 
+            updated_at = NOW() 
+         WHERE email_verification_token = $6 AND email_verified = false
+         RETURNING id, username, email, role::text as role, first_name, last_name"
     )
     .bind(&wallet_address)
+    .bind(&encrypted_key_bytes)
+    .bind(&salt_bytes)
+    .bind(&iv_bytes)
     .bind(blockchain_registered)
     .bind(&token)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await;
 
     match update_result {
-        Ok(result) if result.rows_affected() > 0 => {
+        Ok(Some(row)) => {
+            use sqlx::Row;
+            let user_id: Uuid = row.get("id");
+            let username: String = row.get("username");
+            let email: String = row.get("email");
+            let role: String = row.get("role");
+            let first_name: Option<String> = row.get("first_name");
+            let last_name: Option<String> = row.get("last_name");
+            
             let chain_status = if blockchain_registered { " (on-chain)" } else { "" };
             info!("✅ Email verified successfully, wallet assigned{}: {}", chain_status, wallet_address);
+            
+            let auth = generate_auth_response(user_id, username, email, role, first_name, last_name, Some(wallet_address.clone()));
+            
             Json(VerifyEmailResponse {
                 success: true,
-                message: format!("Email verified successfully. Wallet address generated{}: {}", chain_status, wallet_address),
+                message: format!("Email verified successfully! You are now logged in."),
+                wallet_address: Some(wallet_address),
+                auth,
             })
         }
-        _ => {
+        Ok(None) => {
             // For testing, auto-verify based on token pattern (verify_<username>)
             if token.starts_with("verify_") {
                 let username = token.strip_prefix("verify_").unwrap_or("");
                 let update_test = sqlx::query(
                     "UPDATE users SET email_verified = true, wallet_address = $1, blockchain_registered = $2, updated_at = NOW() 
-                     WHERE username = $3 AND (wallet_address IS NULL OR wallet_address = '')"
+                     WHERE username = $3 AND (wallet_address IS NULL OR wallet_address = '')
+                     RETURNING id, username, email, role::text as role, first_name, last_name"
                 )
                 .bind(&wallet_address)
                 .bind(blockchain_registered)
                 .bind(username)
-                .execute(&state.db)
+                .fetch_optional(&state.db)
                 .await;
 
                 match update_test {
-                    Ok(r) if r.rows_affected() > 0 => {
+                    Ok(Some(row)) => {
+                        use sqlx::Row;
+                        let user_id: Uuid = row.get("id");
+                        let username: String = row.get("username");
+                        let email: String = row.get("email");
+                        let role: String = row.get("role");
+                        let first_name: Option<String> = row.get("first_name");
+                        let last_name: Option<String> = row.get("last_name");
+                        
                         let chain_status = if blockchain_registered { " (on-chain)" } else { "" };
                         info!("✅ Email verified (test mode), wallet assigned{}: {}", chain_status, wallet_address);
-                        Json(VerifyEmailResponse {
-                            success: true,
-                            message: format!("Email verified (test mode). Wallet address generated{}: {}", chain_status, wallet_address),
-                        })
-                    }
-                    _ => {
-                        // User may already have a wallet, just verify email
-                        let _ = sqlx::query(
-                            "UPDATE users SET email_verified = true WHERE username = $1"
-                        )
-                        .bind(username)
-                        .execute(&state.db)
-                        .await;
+                        
+                        let auth = generate_auth_response(user_id, username, email, role, first_name, last_name, Some(wallet_address.clone()));
                         
                         Json(VerifyEmailResponse {
                             success: true,
-                            message: "Email verified (test mode). Wallet already exists.".to_string(),
+                            message: format!("Email verified! You are now logged in."),
+                            wallet_address: Some(wallet_address),
+                            auth,
                         })
+                    }
+                    _ => {
+                        // User may already have a wallet, just verify email and fetch user
+                        let user_result = sqlx::query(
+                            "UPDATE users SET email_verified = true WHERE username = $1
+                             RETURNING id, username, email, role::text as role, first_name, last_name, wallet_address"
+                        )
+                        .bind(username)
+                        .fetch_optional(&state.db)
+                        .await;
+                        
+                        match user_result {
+                            Ok(Some(row)) => {
+                                use sqlx::Row;
+                                let user_id: Uuid = row.get("id");
+                                let username: String = row.get("username");
+                                let email: String = row.get("email");
+                                let role: String = row.get("role");
+                                let first_name: Option<String> = row.get("first_name");
+                                let last_name: Option<String> = row.get("last_name");
+                                let existing_wallet: Option<String> = row.get("wallet_address");
+                                
+                                let auth = generate_auth_response(user_id, username, email, role, first_name, last_name, existing_wallet.clone());
+                                
+                                Json(VerifyEmailResponse {
+                                    success: true,
+                                    message: "Email verified! You are now logged in.".to_string(),
+                                    wallet_address: existing_wallet,
+                                    auth,
+                                })
+                            }
+                            _ => Json(VerifyEmailResponse {
+                                success: false,
+                                message: "Invalid or expired verification token".to_string(),
+                                wallet_address: None,
+                                auth: None,
+                            })
+                        }
                     }
                 }
             } else {
                 Json(VerifyEmailResponse {
                     success: false,
                     message: "Invalid or expired verification token".to_string(),
+                    wallet_address: None,
+                    auth: None,
                 })
             }
+        }
+        Err(e) => {
+            tracing::error!("Database error during email verification: {}", e);
+            Json(VerifyEmailResponse {
+                success: false,
+                message: "Verification failed. Please try again.".to_string(),
+                wallet_address: None,
+                auth: None,
+            })
         }
     }
 }

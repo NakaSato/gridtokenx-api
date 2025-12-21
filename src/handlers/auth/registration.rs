@@ -60,34 +60,16 @@ pub async fn register(
         state.config.email.verification_expiry_hours
     );
 
-    // Create wallet
-    let keypair = crate::services::WalletService::create_keypair();
-    let wallet_address = keypair.pubkey().to_string();
-    // Encrypt private key with SYSTEM SECRET (for background settlement compatibility)
-    // Note: This makes the wallet custodial-capable for the platform.
-    let (encrypted_key, salt, iv) = crate::services::WalletService::encrypt_private_key(
-        &state.config.encryption_secret,
-        &keypair.to_bytes()
-    ).map_err(|e| {
-        tracing::error!("Failed to encrypt wallet: {}", e);
-        ApiError::Internal("Failed to generate encrypted wallet".to_string())
-    })?;
-
-    // Decode to bytes for BYTEA columns
-    let encrypted_key_bytes = general_purpose::STANDARD.decode(&encrypted_key).unwrap_or_default();
-    let salt_bytes = general_purpose::STANDARD.decode(&salt).unwrap_or_default();
-    let iv_bytes = general_purpose::STANDARD.decode(&iv).unwrap_or_default();
-
     // Insert user into database with verification token
+    // Note: Wallet columns are NULL until email verification
     let insert_result = sqlx::query(
         "INSERT INTO users (
             id, username, email, password_hash, role, first_name, last_name, 
             is_active, email_verified, blockchain_registered, 
-            wallet_address, encrypted_private_key, wallet_salt, encryption_iv,
             email_verification_token, email_verification_sent_at, email_verification_expires_at,
             created_at, updated_at
         )
-         VALUES ($1, $2, $3, $4, 'user', $5, $6, true, false, false, $7, $8, $9, $10, $11, NOW(), $12, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, 'user', $5, $6, true, false, false, $7, NOW(), $8, NOW(), NOW())"
     )
     .bind(id)
     .bind(&request.username)
@@ -95,10 +77,6 @@ pub async fn register(
     .bind(&password_hash)
     .bind(&request.first_name)
     .bind(&request.last_name)
-    .bind(&wallet_address)
-    .bind(&encrypted_key_bytes)
-    .bind(&salt_bytes)
-    .bind(&iv_bytes)
     .bind(&verification_token)
     .bind(verification_expires_at)
     .execute(&state.db)
@@ -114,18 +92,7 @@ pub async fn register(
         }));
     }
 
-    info!("✅ User created in database: {} with wallet {}", request.username, wallet_address);
-
-    // Automatic Airdrop for Localnet/Devnet
-    if let Ok(pubkey) = solana_sdk::pubkey::Pubkey::from_str(&wallet_address) {
-        info!("💧 Requesting airdrop for new user wallet: {}", wallet_address);
-        match state.wallet_service.request_airdrop(&pubkey, 2.0).await {
-            Ok(sig) => info!("✅ Airdrop successful: {}", sig),
-            Err(e) => tracing::error!("❌ Airdrop failed: {}", e),
-        }
-    } else {
-        tracing::error!("❌ Invalid wallet address generated: {}", wallet_address);
-    }
+    info!("✅ User created in database: {} (Pending Verification)", request.username);
 
     // Send verification email
     let email_sent = if let Some(ref email_service) = state.email_service {
@@ -161,7 +128,7 @@ pub async fn register(
         role: "user".to_string(),
         first_name: request.first_name,
         last_name: request.last_name,
-        wallet_address: Some(wallet_address),
+        wallet_address: None,
     };
 
     let auth = AuthResponse {
@@ -214,6 +181,8 @@ pub async fn resend_verification(
             return Ok(Json(VerifyEmailResponse {
                 success: false,
                 message: "Email address not found.".to_string(),
+                wallet_address: None,
+                auth: None,
             }));
         }
         Err(e) => {
@@ -221,6 +190,8 @@ pub async fn resend_verification(
             return Ok(Json(VerifyEmailResponse {
                 success: false,
                 message: "An error occurred. Please try again.".to_string(),
+                wallet_address: None,
+                auth: None,
             }));
         }
     };
@@ -230,6 +201,8 @@ pub async fn resend_verification(
         return Ok(Json(VerifyEmailResponse {
             success: true,
             message: "Email is already verified. You can login now.".to_string(),
+            wallet_address: None,
+            auth: None,
         }));
     }
 
@@ -258,6 +231,8 @@ pub async fn resend_verification(
         return Ok(Json(VerifyEmailResponse {
             success: false,
             message: "Failed to generate new verification token.".to_string(),
+            wallet_address: None,
+            auth: None,
         }));
     }
 
@@ -286,11 +261,15 @@ pub async fn resend_verification(
         Ok(Json(VerifyEmailResponse {
             success: true,
             message: format!("Verification email sent to {}. Please check your inbox.", request.email),
+            wallet_address: None,
+            auth: None,
         }))
     } else {
         Ok(Json(VerifyEmailResponse {
             success: false,
             message: "Failed to send verification email. Please try again later.".to_string(),
+            wallet_address: None,
+            auth: None,
         }))
     }
 }

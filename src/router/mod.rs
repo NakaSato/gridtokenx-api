@@ -208,7 +208,8 @@ pub fn build_router(app_state: AppState) -> Router {
         .nest("/futures", futures_routes)      // /api/v1/futures
         .nest("/analytics", analytics_routes)  // /api/v1/analytics
         .nest("/dashboard", v1_dashboard_routes()) // /api/v1/dashboard/metrics
-        .nest("/dev", dev::dev_routes());      // POST /api/v1/dev/faucet
+        .nest("/dev", dev::dev_routes())       // POST /api/v1/dev/faucet
+        .route("/rpc", axum::routing::post(crate::handlers::rpc::rpc_handler)); // /api/v1/rpc
 
     health
         .merge(ws)

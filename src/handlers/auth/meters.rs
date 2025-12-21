@@ -465,7 +465,7 @@ pub async fn create_reading(
     // Get wallet address, meter_id, user_id from meter or request
     let (meter_id, user_id, wallet_address) = {
         let meter_info = sqlx::query_as::<_, (Uuid, Uuid, Option<String>)>(
-            "SELECT m.id, m.user_id, u.wallet_address FROM meters m JOIN users u ON m.user_id = u.id WHERE m.serial_number = $1"
+            "SELECT m.id, m.user_id, u.wallet_address FROM meter_registry m JOIN users u ON m.user_id = u.id WHERE m.meter_serial = $1"
         )
         .bind(&serial)
         .fetch_optional(&state.db)
@@ -517,18 +517,27 @@ pub async fn create_reading(
                 crate::services::BlockchainService::parse_pubkey(&wallet_address),
             ) {
                 if let Ok(token_account) = state.blockchain_service.ensure_token_account_exists(&authority, &wallet, &mint).await {
-                    if let Ok(sig) = state.blockchain_service.mint_energy_tokens(&authority, &token_account, &wallet, &mint, request.kwh).await {
-                        minted = true;
-                        tx_signature = Some(sig.to_string());
-                        
-                        if request.kwh > 0.0 {
-                            message = format!("{} kWh minted successfully", request.kwh);
-                            info!("🎉 Minted {} kWh for meter {}", request.kwh, serial);
-                        } else {
-                            message = format!("{} kWh burned successfully", request.kwh.abs());
-                            info!("🔥 Burned {} kWh for meter {}", request.kwh.abs(), serial);
+                    match state.blockchain_service.mint_energy_tokens(&authority, &token_account, &wallet, &mint, request.kwh).await {
+                        Ok(sig) => {
+                            minted = true;
+                            tx_signature = Some(sig.to_string());
+                            
+                            if request.kwh > 0.0 {
+                                message = format!("{} kWh minted successfully", request.kwh);
+                                info!("🎉 Minted {} kWh for meter {}", request.kwh, serial);
+                            } else {
+                                message = format!("{} kWh burned successfully", request.kwh.abs());
+                                info!("🔥 Burned {} kWh for meter {}", request.kwh.abs(), serial);
+                            }
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to mint tokens for meter {}: {}", serial, e);
+                            message = format!("Tokenization failed: {}", e);
                         }
                     }
+                } else {
+                    error!("❌ Failed to ensure token account for wallet: {}", wallet_address);
+                    message = "Failed to ensure token account".to_string();
                 }
             }
         }
@@ -537,6 +546,7 @@ pub async fn create_reading(
     // Persist reading to database
     let (gen, cons) = if request.kwh > 0.0 { (request.kwh, 0.0) } else { (0.0, request.kwh.abs()) };
     
+
     let insert_result = sqlx::query(
         "INSERT INTO meter_readings (
             id, meter_serial, meter_id, user_id, wallet_address, 
@@ -559,10 +569,14 @@ pub async fn create_reading(
     .execute(&state.db)
     .await;
 
-    if let Err(e) = insert_result {
-        info!("⚠️ Failed to save reading to DB: {}", e);
-    } else {
-        info!("💾 Saved reading {} to DB", reading_id);
+    match insert_result {
+        Ok(_) => {
+            info!("✅ Successfully saved reading {} to DB", reading_id);
+        }
+        Err(e) => {
+            error!("❌ CRITICAL: Failed to save reading {} to DB: {}", reading_id, e);
+            message = format!("{}. Database error: {}", message, e);
+        }
     }
 
     Json(CreateReadingResponse {
