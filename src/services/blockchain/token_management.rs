@@ -200,6 +200,72 @@ impl TokenManager {
             .await
     }
 
+    /// Mint SPL tokens directly using standard spl-token CLI
+    /// This is for testing purposes when using a standard SPL token mint
+    /// (not the Anchor-based energy token program)
+    pub async fn mint_spl_tokens(
+        &self,
+        _authority: &Keypair,
+        user_wallet: &Pubkey,
+        mint: &Pubkey,
+        amount_kwh: f64,
+    ) -> Result<Signature> {
+        use solana_sdk::signature::Signer;
+
+        // Convert kWh to UI amount with 6 decimals (standard SPL token)
+        let amount_ui = amount_kwh; // We pass kWh directly as the UI amount
+
+        // Use spl-token CLI to mint tokens
+        let wallet_path = std::env::var("AUTHORITY_WALLET_PATH")
+            .unwrap_or_else(|_| "dev-wallet.json".to_string());
+        let rpc_url =
+            std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "http://localhost:8899".to_string());
+
+        println!(
+            "DEBUG: Minting {} tokens to {} for mint {}",
+            amount_ui, user_wallet, mint
+        );
+
+        let output = std::process::Command::new("spl-token")
+            .arg("mint")
+            .arg(mint.to_string())
+            .arg(amount_ui.to_string())
+            .arg("--recipient-owner")
+            .arg(user_wallet.to_string())
+            .arg("--fee-payer")
+            .arg(&wallet_path)
+            .arg("--mint-authority")
+            .arg(&wallet_path)
+            .arg("--url")
+            .arg(&rpc_url)
+            .output()
+            .map_err(|e| anyhow!("Failed to execute spl-token CLI: {}", e))?;
+
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        println!("DEBUG: spl-token mint stdout: {}", stdout_str);
+        println!("DEBUG: spl-token mint stderr: {}", stderr_str);
+
+        if !output.status.success() {
+            return Err(anyhow!("spl-token mint failed: {}", stderr_str));
+        }
+
+        // Extract signature from output (format: "Minting X tokens\n  Token: ...\n\nSignature: <sig>")
+        let signature_str = stdout_str
+            .lines()
+            .find(|line| line.contains("Signature:"))
+            .and_then(|line| line.split_whitespace().last())
+            .ok_or_else(|| anyhow!("Failed to parse signature from output: {}", stdout_str))?;
+
+        let signature = Signature::from_str(signature_str)
+            .map_err(|e| anyhow!("Failed to parse signature '{}': {}", signature_str, e))?;
+
+        // Wait for confirmation
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        Ok(signature)
+    }
+
     /// Burn energy tokens from a user's token account
     pub async fn burn_energy_tokens(
         &self,

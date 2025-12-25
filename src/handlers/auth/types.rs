@@ -233,6 +233,15 @@ pub struct ReadingFilterParams {
     pub serial_number: Option<String>,
 }
 
+/// Query Params for Create Reading endpoint
+#[derive(Debug, Deserialize, IntoParams, Default)]
+pub struct CreateReadingParams {
+    /// If false, skip auto-minting and just record the reading. Default: true
+    pub auto_mint: Option<bool>,
+    /// Timeout in seconds for blockchain operations. Default: 30
+    pub timeout_secs: Option<u64>,
+}
+
 // ============================================================================
 // Token/Wallet Types
 // ============================================================================

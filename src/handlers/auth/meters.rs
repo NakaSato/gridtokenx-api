@@ -15,6 +15,7 @@ use super::types::{
     MeterResponse, RegisterMeterRequest, RegisterMeterResponse,
     VerifyMeterRequest, MeterFilterParams, UpdateMeterStatusRequest,
     CreateReadingRequest, CreateReadingResponse, MeterReadingResponse, ReadingFilterParams,
+    CreateReadingParams,
 };
 
 /// Get user's registered meters from database

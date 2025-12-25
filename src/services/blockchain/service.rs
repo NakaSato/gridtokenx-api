@@ -719,6 +719,20 @@ impl BlockchainService {
         }
     }
 
+    /// Mint SPL tokens using standard spl-token CLI (for testing with standard SPL tokens)
+    pub async fn mint_spl_tokens(
+        &self,
+        authority: &Keypair,
+        user_wallet: &Pubkey,
+        mint: &Pubkey,
+        amount_kwh: f64,
+    ) -> Result<Signature> {
+        info!("Minting {} SPL tokens for wallet {} using CLI", amount_kwh, user_wallet);
+        self.token_manager
+            .mint_spl_tokens(authority, user_wallet, mint, amount_kwh)
+            .await
+    }
+
     /// Burn energy tokens from a user's token account
     pub async fn burn_energy_tokens(
         &self,

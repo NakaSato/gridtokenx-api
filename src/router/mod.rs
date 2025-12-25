@@ -198,10 +198,13 @@ pub fn build_router(app_state: AppState) -> Router {
     let analytics_routes = crate::handlers::analytics::routes()
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
+    let meters_routes = v1_meters_routes()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify
         .nest("/users", v1_users_routes())     // POST /api/v1/users, GET /api/v1/users/me
-        .nest("/meters", v1_meters_routes())   // POST /api/v1/meters, PATCH /api/v1/meters/{serial}
+        .nest("/meters", meters_routes)        // POST /api/v1/meters, auth required for minting
         .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance
         .nest("/status", v1_status_routes())   // GET /api/v1/status
         .nest("/trading", trading_routes)      // POST /api/v1/trading/orders

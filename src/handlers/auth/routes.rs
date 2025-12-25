@@ -52,6 +52,7 @@ pub fn v1_meters_routes() -> Router<AppState> {
         .route("/{serial}", axum::routing::patch(update_meter_status))  // PATCH /api/v1/meters/{serial}
         .route("/readings", get(get_my_readings))  // GET /api/v1/meters/readings
         .route("/{serial}/readings", post(create_reading))  // POST /api/v1/meters/{serial}/readings
+        .route("/readings/{reading_id}/mint", post(crate::handlers::meter::mint_user_reading))  // POST /api/v1/meters/readings/{reading_id}/mint
 }
 
 /// Build V1 wallets routes
