@@ -187,7 +187,7 @@ pub async fn register_meter(
     // Insert meter into database
     let insert_result = sqlx::query(
         "INSERT INTO meters (id, user_id, serial_number, meter_type, location, is_verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())"
     )
     .bind(meter_id)
     .bind(user_id)
@@ -204,7 +204,7 @@ pub async fn register_meter(
             // Sync to meter_registry for FK constraints
             let _ = sqlx::query(
                 "INSERT INTO meter_registry (id, user_id, meter_serial, meter_type, location_address, meter_key_hash, verification_method, verification_status)
-                 VALUES ($1, $2, $3, $4, $5, 'mock_hash', 'serial', 'pending')"
+                 VALUES ($1, $2, $3, $4, $5, 'mock_hash', 'serial', 'verified')"
             )
             .bind(meter_id)
             .bind(user_id)
@@ -236,7 +236,7 @@ pub async fn register_meter(
                     serial_number: request.serial_number,
                     meter_type,
                     location,
-                    is_verified: false,
+                    is_verified: true,
                     wallet_address: wallet,
                 }),
             })
@@ -546,10 +546,17 @@ pub async fn create_reading(
                     .map_err(|e| format!("Token account error: {}", e))?;
                 
                 // Mint tokens
-                let sig = state.blockchain_service
-                    .mint_energy_tokens(&authority, &token_account, &wallet_pubkey, &mint_pubkey, request.kwh)
-                    .await
-                    .map_err(|e| format!("Mint error: {}", e))?;
+                let sig = if state.config.tokenization.enable_real_blockchain {
+                    state.blockchain_service
+                        .mint_energy_tokens(&authority, &token_account, &wallet_pubkey, &mint_pubkey, request.kwh)
+                        .await
+                        .map_err(|e| format!("Anchor Mint error: {}", e))?
+                } else {
+                    state.blockchain_service
+                        .mint_spl_tokens(&authority, &wallet_pubkey, &mint_pubkey, request.kwh)
+                        .await
+                        .map_err(|e| format!("CLI Mint error: {}", e))?
+                };
                 
                 Ok::<_, String>(sig.to_string())
             }

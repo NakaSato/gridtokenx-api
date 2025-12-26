@@ -278,7 +278,7 @@ impl SettlementService {
             .unwrap_or(0);
 
         info!(
-            "Executing Direct Token Transfer: From {} to {}, Amount: {} (atomic)",
+            "Executing Direct Token Transfer: From {} to {}, Amount: {} (atomic), Decimals: 9",
             seller_token_account, buyer_token_account, transfer_amount
         );
 

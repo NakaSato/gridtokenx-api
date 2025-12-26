@@ -128,113 +128,114 @@ pub async fn create_order(
     // ========================================================================
     // ON-CHAIN ORDER CREATION (Added to fix P2P Settlement)
     // ========================================================================
-    let (signature, order_pda) = if _state.config.tokenization.enable_real_blockchain {
-        // Fetch user keys to sign the transaction
-        let db_user = sqlx::query!(
-            "SELECT wallet_address, encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
-            user.0.sub
+    // ========================================================================
+    // WALLET MANAGEMENT (Ensure user has keys)
+    // ========================================================================
+    
+    // Fetch user keys to sign the transaction (or generates them if missing)
+    let db_user = sqlx::query!(
+        "SELECT wallet_address, encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
+        user.0.sub
+    )
+    .fetch_optional(&_state.db)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to fetch user keys: {}", e);
+        ApiError::Database(e)
+    })?
+    .ok_or_else(|| ApiError::Internal("User data not found".to_string()))?;
+
+    let keypair = if let (Some(enc_key), Some(iv), Some(salt)) = (
+        db_user.encrypted_private_key,
+        db_user.encryption_iv,
+        db_user.wallet_salt,
+    ) {
+        // User has keys, decrypt them
+        let master_secret = &_state.config.encryption_secret;
+        let enc_key_b64 = general_purpose::STANDARD.encode(enc_key);
+        let iv_b64 = general_purpose::STANDARD.encode(iv);
+        let salt_b64 = general_purpose::STANDARD.encode(salt);
+
+        let private_key_bytes = crate::services::WalletService::decrypt_private_key(
+            &master_secret,
+            &enc_key_b64,
+            &salt_b64,
+            &iv_b64,
         )
-        .fetch_optional(&_state.db)
+        .map_err(|e| {
+            tracing::error!("Failed to decrypt user key: {}", e);
+            ApiError::Internal(format!("Failed to decrypt key: {}", e))
+        })?;
+
+        let keypair =
+            Keypair::from_base58_string(&bs58::encode(&private_key_bytes).into_string());
+        keypair
+    } else {
+        // LAZY WALLET GENERATION
+        tracing::info!("User {} missing keys, generating new wallet...", user.0.sub);
+
+        let master_secret = &_state.config.encryption_secret;
+        let new_keypair = Keypair::new();
+        let pubkey = new_keypair.pubkey().to_string();
+
+        let (enc_key_b64, salt_b64, iv_b64) =
+            crate::services::WalletService::encrypt_private_key(
+                &master_secret,
+                &new_keypair.to_bytes(),
+            )
+            .map_err(|e| {
+                tracing::error!("Failed to encrypt new key: {}", e);
+                ApiError::Internal(format!("Key encryption failed: {}", e))
+            })?;
+
+        // Decode b64 to bytes for DB storage
+        let enc_key_bytes = general_purpose::STANDARD.decode(&enc_key_b64).unwrap_or_default();
+        let salt_bytes = general_purpose::STANDARD.decode(&salt_b64).unwrap_or_default();
+        let iv_bytes = general_purpose::STANDARD.decode(&iv_b64).unwrap_or_default();
+
+        // Update user record with new wallet
+        sqlx::query!(
+             "UPDATE users SET wallet_address=$1, encrypted_private_key=$2, wallet_salt=$3, encryption_iv=$4 WHERE id=$5",
+             pubkey, enc_key_bytes, salt_bytes, iv_bytes, user.0.sub
+        )
+        .execute(&_state.db)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to fetch user keys: {}", e);
-            ApiError::Database(e)
-        })?
-        .ok_or_else(|| ApiError::Internal("User data not found".to_string()))?;
+             tracing::error!("Failed to persist new wallet: {}", e);
+             ApiError::Database(e)
+        })?;
 
-        let keypair = if let (Some(enc_key), Some(iv), Some(salt)) = (
-            db_user.encrypted_private_key,
-            db_user.encryption_iv,
-            db_user.wallet_salt,
-        ) {
-            tracing::info!(
-                "User {} has encrypted keys, proceeding with on-chain order creation",
-                user.0.sub
-            );
-
-            let master_secret = &_state.config.encryption_secret;
-
-            // Encode bytea to Base64 strings for WalletService
-            let enc_key_b64 = general_purpose::STANDARD.encode(enc_key);
-            let iv_b64 = general_purpose::STANDARD.encode(iv);
-            let salt_b64 = general_purpose::STANDARD.encode(salt);
-
-            // Decrypt private key
-            let private_key_bytes = crate::services::WalletService::decrypt_private_key(
-                &master_secret,
-                &enc_key_b64,
-                &salt_b64,
-                &iv_b64,
-            )
-            .map_err(|e| {
-                tracing::error!("Failed to decrypt user key: {}", e);
-                ApiError::Internal(format!("Failed to decrypt key: {}", e))
-            })?;
-
-            // Keypair::from_bytes seems missing, use base58 workaround
-            let keypair =
-                Keypair::from_base58_string(&bs58::encode(&private_key_bytes).into_string());
-            tracing::info!("Starting on-chain order creation with decrypted wallet: {}", keypair.pubkey());
-            keypair
-        } else {
-            // LAZY WALLET GENERATION
-            tracing::info!("User {} missing keys, generating new wallet...", user.0.sub);
-
-            let master_secret = &_state.config.encryption_secret;
-            let new_keypair = Keypair::new();
-            let pubkey = new_keypair.pubkey().to_string();
-
-            let (enc_key_b64, salt_b64, iv_b64) =
-                crate::services::WalletService::encrypt_private_key(
-                    &master_secret,
-                    &new_keypair.to_bytes(),
-                )
-                .map_err(|e| {
-                    tracing::error!("Failed to encrypt new key: {}", e);
-                    ApiError::Internal(format!("Key encryption failed: {}", e))
-                })?;
-
-            // Decode b64 to bytes for DB storage
-            let enc_key_bytes = general_purpose::STANDARD
-                .decode(&enc_key_b64)
-                .unwrap_or_default();
-            let salt_bytes = general_purpose::STANDARD
-                .decode(&salt_b64)
-                .unwrap_or_default();
-            let iv_bytes = general_purpose::STANDARD
-                .decode(&iv_b64)
-                .unwrap_or_default();
-
-            // Update user record with new wallet
-            sqlx::query!(
-                 "UPDATE users SET wallet_address=$1, encrypted_private_key=$2, wallet_salt=$3, encryption_iv=$4 WHERE id=$5",
-                 pubkey, enc_key_bytes, salt_bytes, iv_bytes, user.0.sub
-            )
-            .execute(&_state.db)
+        // Request Airdrop to fund the new wallet
+        // Note: In mock mode, this might fail if RPC is unreachable, but we log and continue if possible?
+        // Actually, if airdrop fails, we might still want to proceed if we are mocking.
+        // But for "Settlement" later, we assume the user has funds if we are simulating. 
+        // Let's attempt airdrop but not hard-fail if it's just connection refused in a pure offline env (unless checked).
+        // For now, we keep the error behavior but assume environment is set up.
+        if let Err(e) = _state
+            .wallet_service
+            .request_airdrop(&new_keypair.pubkey(), 2.0)
             .await
-            .map_err(|e| {
-                 tracing::error!("Failed to persist new wallet: {}", e);
-                 ApiError::Database(e)
-            })?;
+        {
+             tracing::error!("Failed to request airdrop: {}", e);
+             // Verify if we should fail or just warn. 
+             // If we return Err, we block order creation. 
+             // Let's fail for now to be safe, assuming dev env has validator.
+             return Err(ApiError::Internal(format!("Failed to fund new wallet: {}", e)));
+        }
 
-            // Request Airdrop to fund the new wallet
-            if let Err(e) = _state
-                .wallet_service
-                .request_airdrop(&new_keypair.pubkey(), 2.0)
-                .await
-            {
-                tracing::error!("Failed to request airdrop: {}", e);
-                return Err(ApiError::Internal(format!(
-                    "Failed to fund new wallet: {}",
-                    e
-                )));
-            }
+        tracing::info!("Generated and persisted new wallet for user {}", user.0.sub);
+        new_keypair
+    };
 
-            tracing::info!("Generated and persisted new wallet for user {}", user.0.sub);
-            new_keypair
-        };
+    // ========================================================================
+    // ON-CHAIN ORDER CREATION
+    // ========================================================================
+    let (signature, order_pda) = if _state.config.tokenization.enable_real_blockchain {
+        tracing::info!(
+            "Proceeding with on-chain order creation for user {}",
+            user.0.sub
+        );
 
-        // Proceed with on-chain creation using `keypair` (from either branch)
         // Derive Market PDA
         let trading_program_id = _state
             .blockchain_service
