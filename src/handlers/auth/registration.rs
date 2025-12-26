@@ -37,7 +37,7 @@ pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegistrationRequest>,
 ) -> Result<Json<RegistrationResponse>, ApiError> {
-    info!("📝 Registration for user: {}", request.username);
+    info!("📝 Registration for user: {} (email: {})", request.username, request.email);
 
     let id = Uuid::new_v4();
     
@@ -92,7 +92,7 @@ pub async fn register(
         }));
     }
 
-    info!("✅ User created in database: {} (Pending Verification)", request.username);
+    info!("✅ User created in database: {} (email: {}) (Pending Verification)", request.username, request.email);
 
     // Send verification email
     let email_sent = if let Some(ref email_service) = state.email_service {

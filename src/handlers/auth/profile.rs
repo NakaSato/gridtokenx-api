@@ -50,7 +50,7 @@ pub async fn profile(
         .await;
 
         if let Ok(Some(user)) = user_result {
-            info!("✅ Returning profile for: {} (from database)", user.username);
+            info!("✅ Returning profile for: {} (email: {}) (from database)", user.username, user.email);
             return Json(UserResponse {
                 id: user.id,
                 username: user.username,

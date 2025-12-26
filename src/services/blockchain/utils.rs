@@ -540,11 +540,10 @@ impl BlockchainUtils {
     }
 
     /// Get the correct Token Program ID
-    /// For now, we use Token-2022 since our mint is deployed with Token-2022
-    /// In a production system, you would query the mint account to detect its owner
+    /// We use Token-2022 since our mint is deployed with Token-2022 (--program-2022)
     pub fn get_token_program_id() -> Result<Pubkey> {
-        // Use Standard Token program ID since Energy Token program seems to rely on it
-        Pubkey::from_str(TOKEN_PROGRAM_ID)
+        // Use Token-2022 program ID since Energy Token mint was created with --program-2022
+        Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
             .map_err(|e| anyhow!("Failed to parse token program ID: {}", e))
     }
 }

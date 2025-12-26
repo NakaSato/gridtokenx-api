@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     
     // Settlement ID
-    let settlement_id = Uuid::parse_str("7c8d902c-f748-4c6b-af84-dd3abc71360f")?;
+    let settlement_id = Uuid::parse_str("9be0ceae-c78a-424c-9b9e-7a374fcf3580")?;
     
     // Fetch Settlement Data
     let settlement = sqlx::query!(
@@ -86,10 +86,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mint_str = env::var("ENERGY_TOKEN_MINT").expect("ENERGY_TOKEN_MINT missing");
     let mint = Pubkey::from_str(&mint_str)?;
     
-    // ATAs
-    // Assuming ATAs exist (we checked/created them)
-    let seller_ata = spl_associated_token_account::get_associated_token_address(&seller_keypair.pubkey(), &mint);
-    let buyer_ata = spl_associated_token_account::get_associated_token_address(&buyer_wallet, &mint);
+    // ATAs - Using Token-2022 program ID (TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb)
+    let token_2022_program = Pubkey::from_str("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")?;
+    let seller_ata = spl_associated_token_account::get_associated_token_address_with_program_id(
+        &seller_keypair.pubkey(), 
+        &mint,
+        &token_2022_program
+    );
+    let buyer_ata = spl_associated_token_account::get_associated_token_address_with_program_id(
+        &buyer_wallet, 
+        &mint,
+        &token_2022_program
+    );
     
     println!("Seller ATA: {}", seller_ata);
     println!("Buyer ATA: {}", buyer_ata);

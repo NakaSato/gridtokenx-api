@@ -43,7 +43,10 @@ pub async fn forgot_password(
     .await;
 
     let (user_id, username) = match user_result {
-        Ok(Some(user)) => user,
+        Ok(Some(user)) => {
+            info!("🔑 Password reset initiated for user: {} (email: {})", user.1, request.email);
+            user
+        }
         Ok(None) => {
             // Don't reveal if email exists (security best practice)
             info!("Password reset requested for non-existent email: {}", request.email);
@@ -209,7 +212,7 @@ pub async fn reset_password(
 
     match update_result {
         Ok(_) => {
-            info!("✅ Password reset successful for user: {}", username);
+            info!("✅ Password reset successful for user: {} (id: {})", username, user_id);
             Json(VerifyEmailResponse::simple(
                 true,
                 "Password has been reset successfully. You can now login with your new password."
@@ -265,7 +268,7 @@ pub async fn change_password(
         }
     };
     
-    info!("🔐 Password change request for user: {}", claims.sub);
+    info!("🔐 Password change request for user: {} (username: {})", claims.sub, claims.username);
 
     // Validate new password
     if request.new_password.len() < 8 {
@@ -341,7 +344,7 @@ pub async fn change_password(
 
     match update_result {
         Ok(_) => {
-            info!("✅ Password changed for user: {}", claims.sub);
+            info!("✅ Password changed for user: {} (username: {})", claims.sub, claims.username);
             Json(VerifyEmailResponse::simple(
                 true,
                 "Password changed successfully."

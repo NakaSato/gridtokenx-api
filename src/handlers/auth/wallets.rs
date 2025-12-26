@@ -52,11 +52,28 @@ pub async fn token_balance(
         Err(_) => 0.0
     };
 
+    // Get SOL balance
+    let balance_sol = match crate::services::BlockchainService::parse_pubkey(&wallet_address) {
+        Ok(wallet_pubkey) => {
+             match state.blockchain_service.get_balance_sol(&wallet_pubkey).await {
+                Ok(bal) => {
+                     info!("✅ Got SOL balance for {}: {} SOL", wallet_address, bal);
+                     bal
+                },
+                Err(e) => {
+                     info!("⚠️ Could not get SOL balance: {}", e);
+                     0.0
+                }
+             }
+        },
+        Err(_) => 0.0
+    };
+
     Json(TokenBalanceResponse {
         wallet_address: wallet_address.clone(),
         token_balance: format!("{:.2}", token_balance),
         token_balance_raw: token_balance,
-        balance_sol: 0.0,
+        balance_sol,
         decimals: 9,
         token_mint: state.config.energy_token_mint.clone(),
         token_account: format!("{}...token", &wallet_address[..8.min(wallet_address.len())]),

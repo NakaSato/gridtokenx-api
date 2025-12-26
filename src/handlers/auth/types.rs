@@ -30,6 +30,7 @@ pub struct UserRow {
 /// Login Request
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
+    /// Username or Email address of the user
     pub username: String,
     pub password: String,
 }

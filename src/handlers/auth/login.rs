@@ -49,12 +49,12 @@ pub async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> impl IntoResponse {
-    info!("🔐 Login for user: {}", request.username);
+    info!("🔐 Login attempt for identity: {}", request.username);
 
-    // Query database for user including password_hash
+    // Query database for user including password_hash, searching by either username or email
     let user_result = sqlx::query_as::<_, LoginUserRow>(
         "SELECT id, username, email, password_hash, role::text as role, first_name, last_name, wallet_address 
-         FROM users WHERE username = $1 AND is_active = true"
+         FROM users WHERE (username = $1 OR email = $1) AND is_active = true"
     )
     .bind(&request.username)
     .fetch_optional(&state.db)
@@ -167,7 +167,7 @@ pub async fn login(
         format!("token_{}_{}", user.username, user.id)
     });
 
-    info!("✅ Login successful for: {} (wallet: {:?})", user.username, user.wallet_address);
+    info!("✅ Login successful for: {} (email: {}, wallet: {:?})", user.username, user.email, user.wallet_address);
 
     Json(AuthResponse {
         access_token: token,
@@ -331,7 +331,7 @@ pub async fn verify_email(
             let last_name: Option<String> = row.get("last_name");
             
             let chain_status = if blockchain_registered { " (on-chain)" } else { "" };
-            info!("✅ Email verified successfully, wallet assigned{}: {}", chain_status, wallet_address);
+            info!("✅ Email verified successfully for user: {} (email: {}), wallet assigned{}: {}", username, email, chain_status, wallet_address);
             
             let auth = generate_auth_response(user_id, username, email, role, first_name, last_name, Some(wallet_address.clone()));
             
@@ -368,7 +368,7 @@ pub async fn verify_email(
                         let last_name: Option<String> = row.get("last_name");
                         
                         let chain_status = if blockchain_registered { " (on-chain)" } else { "" };
-                        info!("✅ Email verified (test mode), wallet assigned{}: {}", chain_status, wallet_address);
+                        info!("✅ Email verified (test mode) for user: {} (email: {}), wallet assigned{}: {}", username, email, chain_status, wallet_address);
                         
                         let auth = generate_auth_response(user_id, username, email, role, first_name, last_name, Some(wallet_address.clone()));
                         

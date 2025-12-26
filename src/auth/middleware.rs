@@ -146,6 +146,7 @@ pub async fn auth_middleware(
 
     match state.jwt_service.decode_token(token) {
         Ok(claims) => {
+            info!("🔓 JWT authenticated: {} (user_id: {})", claims.username, claims.sub);
             // Add claims to request extensions for use in handlers
             request.extensions_mut().insert(claims);
             next.run(request).await

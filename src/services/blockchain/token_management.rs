@@ -83,8 +83,7 @@ impl TokenManager {
         let rpc_url =
             std::env::var("SOLANA_RPC_URL").unwrap_or_else(|_| "http://localhost:8899".to_string());
 
-        println!("DEBUG: Creating ATA via CLI for wallet {} and mint {}", user_wallet, mint);
-        println!("DEBUG: Using authority: {} and RPC: {}", wallet_path, rpc_url);
+
 
         let output = std::process::Command::new("spl-token")
             .arg("create-account")
@@ -100,8 +99,7 @@ impl TokenManager {
 
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         let stderr_str = String::from_utf8_lossy(&output.stderr);
-        println!("DEBUG: spl-token stdout: {}", stdout_str);
-        println!("DEBUG: spl-token stderr: {}", stderr_str);
+
 
         if !output.status.success() {
             if !stderr_str.contains("already exists") && !stdout_str.contains("already exists") {
@@ -225,10 +223,8 @@ impl TokenManager {
 
         if is_burn {
             // BURN tokens from user's account
-            println!(
-                "DEBUG: Burning {} tokens from {} for mint {}",
-                amount_abs, user_wallet, mint
-            );
+            // BURN tokens from user's account
+
 
             // First, get the user's associated token account
             let get_account_output = std::process::Command::new("spl-token")
@@ -246,7 +242,7 @@ impl TokenManager {
                 .map_err(|e| anyhow!("Failed to get token account: {}", e))?;
 
             let stdout_str = String::from_utf8_lossy(&get_account_output.stdout);
-            println!("DEBUG: spl-token address stdout: {}", stdout_str);
+
 
             if !get_account_output.status.success() {
                 let stderr_str = String::from_utf8_lossy(&get_account_output.stderr);
@@ -261,8 +257,7 @@ impl TokenManager {
                 .map(|s| s.trim().to_string())
                 .ok_or_else(|| anyhow!("Failed to parse associated token address from output: {}", stdout_str))?;
 
-            println!("DEBUG: User token account: {}", token_account_str);
-            println!("DEBUG: Burning {} from account {}", amount_abs, token_account_str);
+
 
             // Burn tokens from the user's account
             let output = std::process::Command::new("spl-token")
@@ -281,8 +276,9 @@ impl TokenManager {
 
             let stdout_str = String::from_utf8_lossy(&output.stdout);
             let stderr_str = String::from_utf8_lossy(&output.stderr);
-            println!("DEBUG: spl-token burn stdout: {}", stdout_str);
-            println!("DEBUG: spl-token burn stderr: {}", stderr_str);
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+
 
             if !output.status.success() {
                 return Err(anyhow!("spl-token burn failed: {}", stderr_str));
@@ -304,10 +300,8 @@ impl TokenManager {
             Ok(signature)
         } else {
             // MINT tokens to user's account
-            println!(
-                "DEBUG: Minting {} tokens to {} for mint {}",
-                amount_abs, user_wallet, mint
-            );
+            // MINT tokens to user's account
+
 
             let output = std::process::Command::new("spl-token")
                 .arg("mint")
@@ -326,8 +320,9 @@ impl TokenManager {
 
             let stdout_str = String::from_utf8_lossy(&output.stdout);
             let stderr_str = String::from_utf8_lossy(&output.stderr);
-            println!("DEBUG: spl-token mint stdout: {}", stdout_str);
-            println!("DEBUG: spl-token mint stderr: {}", stderr_str);
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+
 
             if !output.status.success() {
                 return Err(anyhow!("spl-token mint failed: {}", stderr_str));
