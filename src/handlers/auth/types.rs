@@ -182,12 +182,47 @@ pub struct PublicMeterResponse {
     /// Longitude coordinate for map display
     #[serde(skip_serializing_if = "Option::is_none")]
     pub longitude: Option<f64>,
-    /// Latest energy generation reading (kW)
+    /// Latest energy generation reading (kWh)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_generation: Option<f64>,
-    /// Latest energy consumption reading (kW)
+    /// Latest energy consumption reading (kWh)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_consumption: Option<f64>,
+    /// Electrical: Grid voltage in Volts
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voltage: Option<f64>,
+    /// Electrical: Current in Amperes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<f64>,
+    /// Electrical: Grid frequency in Hz
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frequency: Option<f64>,
+    /// Electrical: Power factor (0-1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power_factor: Option<f64>,
+    /// Energy: Surplus energy available for trading (kWh)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub surplus_energy: Option<f64>,
+    /// Energy: Deficit energy needed from grid (kWh)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deficit_energy: Option<f64>,
+}
+
+/// Public Grid Status Response (aggregate statistics)
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PublicGridStatusResponse {
+    /// Aggregate generation from all active meters (kW)
+    pub total_generation: f64,
+    /// Aggregate consumption from all active meters (kW)
+    pub total_consumption: f64,
+    /// Net balance (generation - consumption) (kW)
+    pub net_balance: f64,
+    /// Number of currently reporting active meters
+    pub active_meters: i64,
+    /// Estimated CO2 saved today (kg)
+    pub co2_saved_kg: f64,
+    /// Timestamp of the status calculation
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 /// Meter Registration Request

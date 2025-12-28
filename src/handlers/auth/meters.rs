@@ -15,7 +15,7 @@ use super::types::{
     MeterResponse, PublicMeterResponse, RegisterMeterRequest, RegisterMeterResponse,
     VerifyMeterRequest, MeterFilterParams, UpdateMeterStatusRequest,
     CreateReadingRequest, CreateReadingResponse, MeterReadingResponse, ReadingFilterParams,
-    CreateReadingParams, MeterStats,
+    CreateReadingParams, MeterStats, PublicGridStatusResponse,
 };
 
 /// Get user's registered meters from database
@@ -143,8 +143,13 @@ pub async fn public_get_meters(
 ) -> Json<Vec<PublicMeterResponse>> {
     info!("Public meters request for map display");
     
-    // Query public-safe fields with latest reading data
-    let meters_result = sqlx::query_as::<_, (String, String, bool, Option<f64>, Option<f64>, Option<f64>, Option<f64>)>(
+    // Query public-safe fields with latest reading data including telemetry
+    let meters_result = sqlx::query_as::<_, (
+        String, String, bool, Option<f64>, Option<f64>, 
+        Option<f64>, Option<f64>,
+        Option<f64>, Option<f64>, Option<f64>, Option<f64>,
+        Option<f64>, Option<f64>
+    )>(
         r#"
         SELECT 
             m.meter_type, 
@@ -153,12 +158,24 @@ pub async fn public_get_meters(
             m.latitude, 
             m.longitude,
             lr.current_generation,
-            lr.current_consumption
+            lr.current_consumption,
+            lr.voltage,
+            lr.current_amps,
+            lr.frequency,
+            lr.power_factor,
+            lr.surplus_energy,
+            lr.deficit_energy
         FROM meters m
         LEFT JOIN LATERAL (
             SELECT 
                 energy_generated::FLOAT8 as current_generation, 
-                energy_consumed::FLOAT8 as current_consumption
+                energy_consumed::FLOAT8 as current_consumption,
+                voltage::FLOAT8 as voltage,
+                current_amps::FLOAT8 as current_amps,
+                frequency::FLOAT8 as frequency,
+                power_factor::FLOAT8 as power_factor,
+                surplus_energy::FLOAT8 as surplus_energy,
+                deficit_energy::FLOAT8 as deficit_energy
             FROM meter_readings
             WHERE meter_serial = m.serial_number
             ORDER BY reading_timestamp DESC
@@ -172,7 +189,11 @@ pub async fn public_get_meters(
 
     match meters_result {
         Ok(meters) => {
-            let responses: Vec<PublicMeterResponse> = meters.iter().map(|(mtype, loc, verified, lat, lng, gen, cons)| {
+            let responses: Vec<PublicMeterResponse> = meters.iter().map(|(
+                mtype, loc, verified, lat, lng, gen, cons,
+                voltage, current, frequency, power_factor,
+                surplus, deficit
+            )| {
                 PublicMeterResponse {
                     meter_type: mtype.clone(),
                     location: loc.clone(),
@@ -181,10 +202,16 @@ pub async fn public_get_meters(
                     longitude: *lng,
                     current_generation: *gen,
                     current_consumption: *cons,
+                    voltage: *voltage,
+                    current: *current,
+                    frequency: *frequency,
+                    power_factor: *power_factor,
+                    surplus_energy: *surplus,
+                    deficit_energy: *deficit,
                 }
             }).collect();
             
-            info!("✅ Public API: Returning {} meters for map (with latest readings)", responses.len());
+            info!("✅ Public API: Returning {} meters for map (with telemetry)", responses.len());
             Json(responses)
         }
         Err(e) => {
@@ -192,6 +219,71 @@ pub async fn public_get_meters(
             Json(vec![])
         }
     }
+}
+
+/// Internal helper to fetch aggregate grid status
+async fn get_aggregate_stats(db: &sqlx::PgPool) -> (f64, f64, i64, f64, f64) {
+    let stats_result = sqlx::query_as::<_, (Option<f64>, Option<f64>, Option<i64>)>(
+        r#"
+        SELECT 
+            SUM(lr.current_generation) as total_gen,
+            SUM(lr.current_consumption) as total_cons,
+            COUNT(m.id) FILTER (WHERE lr.current_generation > 0 OR lr.current_consumption > 0) as active_count
+        FROM meters m
+        LEFT JOIN LATERAL (
+            SELECT 
+                energy_generated::FLOAT8 as current_generation, 
+                energy_consumed::FLOAT8 as current_consumption
+            FROM meter_readings
+            WHERE meter_serial = m.serial_number
+            ORDER BY reading_timestamp DESC
+            LIMIT 1
+        ) lr ON true
+        WHERE m.is_verified = true
+        "#
+    )
+    .fetch_one(db)
+    .await;
+
+    let (total_gen, total_cons, active_meters) = match stats_result {
+        Ok((gen, cons, count)) => (gen.unwrap_or(0.0), cons.unwrap_or(0.0), count.unwrap_or(0)),
+        Err(e) => {
+            error!("❌ Grid status aggregation error: {}", e);
+            (0.0, 0.0, 0)
+        }
+    };
+
+    let net_balance = total_gen - total_cons;
+    let co2_saved = total_gen * 0.431;
+
+    (total_gen, total_cons, active_meters, net_balance, co2_saved)
+}
+
+/// Get aggregate grid status - PUBLIC endpoint (no auth required)
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/grid-status",
+    responses(
+        (status = 200, description = "Aggregate grid status", body = PublicGridStatusResponse)
+    ),
+    tag = "meters"
+)]
+pub async fn public_grid_status(
+    State(state): State<AppState>,
+) -> Json<PublicGridStatusResponse> {
+    info!("Public grid status request");
+    
+    let (total_generation, total_consumption, active_meters, net_balance, co2_saved_kg) = 
+        get_aggregate_stats(&state.db).await;
+
+    Json(PublicGridStatusResponse {
+        total_generation,
+        total_consumption,
+        net_balance,
+        active_meters,
+        co2_saved_kg,
+        timestamp: chrono::Utc::now(),
+    })
 }
 
 /// Register a new meter to user account
@@ -729,6 +821,14 @@ pub async fn create_reading(
     match insert_result {
         Ok(_) => {
             info!("✅ Successfully saved reading {} to DB", reading_id);
+            
+            // Broadcast real-time grid status update via WebSocket
+            let db = state.db.clone();
+            let websocket = state.websocket_service.clone();
+            tokio::spawn(async move {
+                let (gen, cons, count, balance, co2) = get_aggregate_stats(&db).await;
+                websocket.broadcast_grid_status_updated(gen, cons, balance, count, co2).await;
+            });
         }
         Err(e) => {
             error!("❌ CRITICAL: Failed to save reading {} to DB: {}", reading_id, e);

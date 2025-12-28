@@ -203,7 +203,8 @@ pub fn build_router(app_state: AppState) -> Router {
 
     // Public routes (no auth required)
     let public_routes = Router::new()
-        .route("/meters", get(crate::handlers::auth::meters::public_get_meters));
+        .route("/meters", get(crate::handlers::auth::meters::public_get_meters))
+        .route("/grid-status", get(crate::handlers::auth::meters::public_grid_status));
 
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify

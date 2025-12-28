@@ -131,6 +131,16 @@ pub enum MarketEvent {
         failed_mints: u32,
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+
+    /// Aggregate grid status updated
+    GridStatusUpdated {
+        total_generation: f64,
+        total_consumption: f64,
+        net_balance: f64,
+        active_meters: i64,
+        co2_saved_kg: f64,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Price level for order book updates

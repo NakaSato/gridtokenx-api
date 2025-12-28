@@ -432,6 +432,26 @@ impl WebSocketService {
         })
         .await;
     }
+
+    /// Broadcast aggregate grid status updated
+    pub async fn broadcast_grid_status_updated(
+        &self,
+        total_generation: f64,
+        total_consumption: f64,
+        net_balance: f64,
+        active_meters: i64,
+        co2_saved_kg: f64,
+    ) {
+        self.broadcast(MarketEvent::GridStatusUpdated {
+            total_generation,
+            total_consumption,
+            net_balance,
+            active_meters,
+            co2_saved_kg,
+            timestamp: chrono::Utc::now(),
+        })
+        .await;
+    }
 }
 
 impl Default for WebSocketService {
