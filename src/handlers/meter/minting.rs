@@ -157,11 +157,12 @@ pub async fn mint_from_reading(
         .to_f64()
         .ok_or_else(|| ApiError::Internal("Failed to convert amount".to_string()))?;
 
-    // Mint tokens using standard SPL token minting (for localnet testing)
+    // Mint tokens using Energy Token program
     let signature = state
         .blockchain_service
-        .mint_spl_tokens(
+        .mint_energy_tokens(
             &authority_keypair,
+            &_user_token_account, // create_ata_idempotent will handle this if needed, or we just pass it
             &wallet_pubkey,
             &token_mint,
             amount_f64,
@@ -257,6 +258,7 @@ pub async fn mint_user_reading(
         })?;
 
     // Parse addresses
+    info!("Using token mint: {}", state.config.energy_token_mint);
     let token_mint = BlockchainService::parse_pubkey(&state.config.energy_token_mint)
         .map_err(|e| ApiError::Internal(format!("Invalid token mint: {}", e)))?;
 
@@ -278,11 +280,12 @@ pub async fn mint_user_reading(
         .to_f64()
         .ok_or_else(|| ApiError::Internal("Failed to convert amount".to_string()))?;
 
-    // Mint tokens using standard SPL token minting (for localnet testing)
+    // Mint tokens using Energy Token program
     let signature = state
         .blockchain_service
-        .mint_spl_tokens(
+        .mint_energy_tokens(
             &authority_keypair,
+            &_user_token_account,
             &wallet_pubkey,
             &token_mint,
             amount_f64,

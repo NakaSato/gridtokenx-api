@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
+use uuid::Uuid;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -143,4 +144,57 @@ pub fn parse_timeframe(timeframe: &str) -> Result<Duration> {
 
 pub fn decimal_to_f64(d: Decimal) -> f64 {
     d.to_f64().unwrap_or(0.0)
+}
+
+// ==================== TRANSACTION TYPES ====================
+
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct UserTransaction {
+    pub operation_type: String,
+    pub operation_id: Uuid,
+    pub user_id: Option<Uuid>,
+    pub signature: Option<String>,
+    pub tx_type: Option<String>,
+    pub status: String,
+    pub attempts: i32,
+    pub last_error: Option<String>,
+    pub submitted_at: Option<DateTime<Utc>>,
+    pub confirmed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct SettlementMetadata {
+    #[schema(value_type = String)]
+    pub energy_amount: Decimal,
+    #[schema(value_type = String)]
+    pub price_per_kwh: Decimal,
+    #[schema(value_type = String)]
+    pub total_amount: Decimal,
+    #[schema(value_type = String)]
+    pub wheeling_charge: Decimal,
+    #[schema(value_type = String)]
+    pub loss_cost: Decimal,
+    #[schema(value_type = String)]
+    pub loss_factor: Decimal,
+    #[schema(value_type = String)]
+    pub effective_energy: Decimal,
+    pub buyer_zone_id: Option<i32>,
+    pub seller_zone_id: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TransactionQuery {
+    pub transaction_type: Option<String>,
+    pub status: Option<String>,
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UserTransactionsResponse {
+    pub transactions: Vec<UserTransaction>,
+    pub total: i64,
 }

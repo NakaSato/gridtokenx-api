@@ -274,6 +274,24 @@ pub async fn public_grid_status(
     State(state): State<AppState>,
 ) -> Json<PublicGridStatusResponse> {
     info!("Public grid status request");
+
+    // Try to fetch from simulator first
+    let simulator_url = std::env::var("SIMULATOR_URL").unwrap_or("http://localhost:8000".to_string());
+    
+    // Use shared HTTP client from AppState
+    match state.http_client.get(format!("{}/api/grid/status", simulator_url)).send().await {
+        Ok(response) => {
+            if let Ok(status) = response.json::<PublicGridStatusResponse>().await {
+                info!("✅ Fetched grid status from Simulator: {} kW gen, {} active", status.total_generation, status.active_meters);
+                return Json(status);
+            } else {
+                error!("❌ Failed to parse Simulator response");
+            }
+        },
+        Err(e) => {
+            info!("⚠️ Simulator unreachable ({}), falling back to database", e);
+        }
+    }
     
     let (total_generation, total_consumption, active_meters, net_balance, co2_saved_kg) = 
         get_aggregate_stats(&state.db).await;
@@ -636,131 +654,194 @@ async fn internal_create_reading(
         serial, request.kwh, auto_mint, timeout_secs
     );
 
-    // Get wallet address, meter_id, user_id from meter or request
-    let (meter_id, user_id, wallet_address) = {
-        let meter_info = sqlx::query_as::<_, (Uuid, Uuid, Option<String>)>(
-            "SELECT m.id, m.user_id, u.wallet_address FROM meter_registry m JOIN users u ON m.user_id = u.id WHERE m.meter_serial = $1"
-        )
-        .bind(&serial)
-        .fetch_optional(&state.db)
-        .await;
-
-        match meter_info {
-            Ok(Some((mid, uid, Some(w)))) => (mid, uid, w),
-            Ok(Some((mid, uid, None))) => {
-                if let Some(req_w) = request.wallet_address.clone() {
-                    (mid, uid, req_w)
-                } else {
-                     return CreateReadingResponse {
-                        id: Uuid::new_v4(),
-                        serial_number: serial,
-                        kwh: request.kwh,
-                        timestamp: request.timestamp.unwrap_or_else(chrono::Utc::now),
-                        minted: false,
-                        tx_signature: None,
-                        message: "Wallet address required (not found on user profile)".to_string(),
-                    };
-                }
-            }
-            _ => {
-                return CreateReadingResponse {
-                    id: Uuid::new_v4(),
-                    serial_number: serial,
-                    kwh: request.kwh,
-                    timestamp: request.timestamp.unwrap_or_else(chrono::Utc::now),
-                    minted: false,
-                    tx_signature: None,
-                    message: "Meter not found".to_string(),
-                };
-            }
-        }
+    // 1. Resolve Meter Context (ID, User, Wallet)
+    let (meter_id, user_id, wallet_address) = match resolve_meter_context(state, &serial, &request.wallet_address).await {
+        Ok(ctx) => ctx,
+        Err(err_msg) => return CreateReadingResponse {
+            id: Uuid::new_v4(),
+            serial_number: serial,
+            kwh: request.kwh,
+            timestamp: request.timestamp.unwrap_or_else(chrono::Utc::now),
+            minted: false,
+            tx_signature: None,
+            message: err_msg,
+        },
     };
 
+    // 2. Process Blockchain Minting
+    let (minted, tx_signature, mut message) = if auto_mint && request.kwh > 0.0 {
+        process_minting(state, timeout_secs, &wallet_address, request.kwh, &serial).await
+    } else {
+        (false, None, "Reading recorded (auto_mint disabled)".to_string())
+    };
+
+    // 3. Persist Reading to Database
     let reading_id = Uuid::new_v4();
     let timestamp = request.timestamp.unwrap_or_else(chrono::Utc::now);
 
-    // Track minting result
-    let mut minted = false;
-    let mut tx_signature: Option<String> = None;
-    let mut message = "Reading recorded".to_string();
+    if let Err(e) = persist_reading_to_db(
+        state, 
+        reading_id, 
+        &serial, 
+        meter_id, 
+        user_id, 
+        &wallet_address, 
+        timestamp, 
+        &request, 
+        minted, 
+        &tx_signature
+    ).await {
+        error!("❌ CRITICAL: Failed to save reading {} to DB: {}", reading_id, e);
+        message = format!("{}. Database error: {}", message, e);
+    } else {
+        info!("✅ Successfully saved reading {} to DB", reading_id);
+        
+        // 4. Trigger Post-Processing (Async)
+        // We pass the raw values needed for logic
+        let surplus = request.surplus_energy.unwrap_or(if request.kwh > 0.0 { request.kwh } else { 0.0 });
+        let deficit = request.deficit_energy.unwrap_or(if request.kwh < 0.0 { request.kwh.abs() } else { 0.0 });
+        
+        let power_val = request.power.or_else(|| {
+             request.voltage.zip(request.current).map(|(v, i)| v * i * request.power_factor.unwrap_or(1.0) / 1000.0) // kW
+        });
 
-    // Only attempt minting if auto_mint is enabled and kwh is positive
-    if auto_mint && request.kwh > 0.0 {
-        info!("🔗 Attempting blockchain mint with {}s timeout", timeout_secs);
-        
-        // Wrap blockchain operations in a timeout
-        let mint_result = tokio::time::timeout(
-            std::time::Duration::from_secs(timeout_secs),
-            async {
-                // Get authority keypair
-                let authority = state.wallet_service.get_authority_keypair().await
-                    .map_err(|e| format!("Authority keypair error: {}", e))?;
-                
-                // Parse addresses
-                let mint_pubkey = crate::services::BlockchainService::parse_pubkey(&state.config.energy_token_mint)
-                    .map_err(|e| format!("Invalid token mint: {}", e))?;
-                let wallet_pubkey = crate::services::BlockchainService::parse_pubkey(&wallet_address)
-                    .map_err(|e| format!("Invalid wallet address: {}", e))?;
-                
-                // Ensure token account exists
-                let token_account = state.blockchain_service
-                    .ensure_token_account_exists(&authority, &wallet_pubkey, &mint_pubkey)
-                    .await
-                    .map_err(|e| format!("Token account error: {}", e))?;
-                
-                // Mint tokens
-                let sig = if state.config.tokenization.enable_real_blockchain {
-                    state.blockchain_service
-                        .mint_energy_tokens(&authority, &token_account, &wallet_pubkey, &mint_pubkey, request.kwh)
-                        .await
-                        .map_err(|e| format!("Anchor Mint error: {}", e))?
-                } else {
-                    state.blockchain_service
-                        .mint_spl_tokens(&authority, &wallet_pubkey, &mint_pubkey, request.kwh)
-                        .await
-                        .map_err(|e| format!("CLI Mint error: {}", e))?
-                };
-                
-                Ok::<_, String>(sig.to_string())
-            }
+        trigger_post_processing(
+            state.clone(),
+            serial.clone(),
+            user_id,
+            surplus,
+            deficit,
+            request.max_sell_price,
+            request.max_buy_price,
+            request.kwh,
+            wallet_address,
+            power_val,
+            request.voltage,
+            request.current
         ).await;
-        
-        match mint_result {
-            Ok(Ok(sig)) => {
-                minted = true;
-                tx_signature = Some(sig.clone());
-                if request.kwh > 0.0 {
-                    message = format!("{} kWh minted successfully", request.kwh);
-                    info!("🎉 Minted {} kWh for meter {} - TX: {}", request.kwh, serial, sig);
-                } else {
-                    message = format!("{} kWh burned successfully", request.kwh.abs());
-                    info!("🔥 Burned {} kWh for meter {} - TX: {}", request.kwh.abs(), serial, sig);
-                }
-            }
-            Ok(Err(e)) => {
-                error!("❌ Blockchain operation failed: {}", e);
-                message = format!("Reading recorded but minting failed: {}", e);
-            }
-            Err(_) => {
-                error!("⏱️ Blockchain operation timed out after {}s", timeout_secs);
-                message = format!("Reading recorded but minting timed out after {}s", timeout_secs);
-            }
-        }
-    } else if !auto_mint {
-        message = "Reading recorded (auto_mint disabled)".to_string();
-        info!("📝 Reading saved without minting (auto_mint=false)");
     }
 
-    // Persist reading to database with full telemetry
-    let (gen, cons) = if request.kwh > 0.0 { (request.kwh, 0.0) } else { (0.0, request.kwh.abs()) };
+    CreateReadingResponse {
+        id: reading_id,
+        serial_number: serial,
+        kwh: request.kwh,
+        timestamp,
+        minted,
+        tx_signature,
+        message,
+    }
+}
+
+// --- Helper Functions ---
+
+async fn resolve_meter_context(
+    state: &AppState,
+    serial: &str,
+    request_wallet: &Option<String>
+) -> Result<(Uuid, Uuid, String), String> {
+    let meter_info = sqlx::query_as::<_, (Uuid, Uuid, Option<String>)>(
+        "SELECT m.id, m.user_id, u.wallet_address FROM meter_registry m JOIN users u ON m.user_id = u.id WHERE m.meter_serial = $1"
+    )
+    .bind(serial)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| format!("Database lookup error: {}", e))?;
+
+    match meter_info {
+        Some((mid, uid, Some(w))) => Ok((mid, uid, w)),
+        Some((mid, uid, None)) => {
+            if let Some(req_w) = request_wallet {
+                Ok((mid, uid, req_w.clone()))
+            } else {
+                Err("Wallet address required (not found on user profile)".to_string())
+            }
+        },
+        None => Err("Meter not found".to_string()),
+    }
+}
+
+async fn process_minting(
+    state: &AppState,
+    timeout_secs: u64,
+    wallet_address: &str,
+    kwh: f64,
+    serial: &str
+) -> (bool, Option<String>, String) {
+    info!("🔗 Attempting blockchain mint with {}s timeout", timeout_secs);
     
-    // Use request values for energy if provided, otherwise calculate from kwh
-    let energy_gen = request.energy_generated.unwrap_or(gen);
-    let energy_cons = request.energy_consumed.unwrap_or(cons);
+    let mint_result = tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        async {
+            // Get authority keypair
+            let authority = state.wallet_service.get_authority_keypair().await
+                .map_err(|e| format!("Authority keypair error: {}", e))?;
+            
+            // Parse addresses
+            let mint_pubkey = crate::services::BlockchainService::parse_pubkey(&state.config.energy_token_mint)
+                .map_err(|e| format!("Invalid token mint: {}", e))?;
+            let wallet_pubkey = crate::services::BlockchainService::parse_pubkey(wallet_address)
+                .map_err(|e| format!("Invalid wallet address: {}", e))?;
+            
+            // Ensure token account exists
+            let token_account = state.blockchain_service
+                .ensure_token_account_exists(&authority, &wallet_pubkey, &mint_pubkey)
+                .await
+                .map_err(|e| format!("Token account error: {}", e))?;
+            
+            // Mint tokens
+            let sig = if state.config.tokenization.enable_real_blockchain {
+                state.blockchain_service
+                    .mint_energy_tokens(&authority, &token_account, &wallet_pubkey, &mint_pubkey, kwh)
+                    .await
+                    .map_err(|e| format!("Anchor Mint error: {}", e))?
+            } else {
+                state.blockchain_service
+                    .mint_spl_tokens(&authority, &wallet_pubkey, &mint_pubkey, kwh)
+                    .await
+                    .map_err(|e| format!("CLI Mint error: {}", e))?
+            };
+            
+            Ok::<_, String>(sig.to_string())
+        }
+    ).await;
+    
+    match mint_result {
+        Ok(Ok(sig)) => {
+            info!("🎉 Minted {} kWh for meter {} - TX: {}", kwh, serial, sig);
+            (true, Some(sig), format!("{} kWh minted successfully", kwh))
+        }
+        Ok(Err(e)) => {
+            error!("❌ Blockchain operation failed: {}", e);
+            (false, None, format!("Reading recorded but minting failed: {}", e))
+        }
+        Err(_) => {
+            error!("⏱️ Blockchain operation timed out after {}s", timeout_secs);
+            (false, None, format!("Reading recorded but minting timed out after {}s", timeout_secs))
+        }
+    }
+}
+
+async fn persist_reading_to_db(
+    state: &AppState,
+    reading_id: Uuid,
+    serial: &str,
+    meter_id: Uuid,
+    user_id: Uuid,
+    wallet_address: &str,
+    timestamp: chrono::DateTime<chrono::Utc>,
+    request: &CreateReadingRequest,
+    minted: bool,
+    tx_signature: &Option<String>
+) -> Result<(), sqlx::Error> {
+    // Calculate derived energy values if not provided
+    let (def_gen, def_cons) = if request.kwh > 0.0 { (request.kwh, 0.0) } else { (0.0, request.kwh.abs()) };
+    
+    let energy_gen = request.energy_generated.unwrap_or(def_gen);
+    let energy_cons = request.energy_consumed.unwrap_or(def_cons);
     let surplus = request.surplus_energy.unwrap_or(if request.kwh > 0.0 { request.kwh } else { 0.0 });
     let deficit = request.deficit_energy.unwrap_or(if request.kwh < 0.0 { request.kwh.abs() } else { 0.0 });
 
-    let insert_result = sqlx::query(
+    sqlx::query(
         "INSERT INTO meter_readings (
             id, meter_serial, meter_id, user_id, wallet_address, 
             timestamp, reading_timestamp, kwh_amount,
@@ -775,10 +856,10 @@ async fn internal_create_reading(
                    $21, $22, $23, $24, $25, $26, $27, $28, NOW())"
     )
     .bind(reading_id)
-    .bind(&serial)
+    .bind(serial)
     .bind(meter_id)
     .bind(user_id)
-    .bind(&wallet_address)
+    .bind(wallet_address)
     .bind(timestamp)
     .bind(request.kwh)
     .bind(energy_gen)
@@ -809,98 +890,98 @@ async fn internal_create_reading(
     .bind(minted)
     .bind(tx_signature.clone())
     .execute(&state.db)
-    .await;
+    .await
+    .map(|_| ())
+}
 
-    match insert_result {
-        Ok(_) => {
-            info!("✅ Successfully saved reading {} to DB", reading_id);
-            
-            // Broadcast real-time grid status update via WebSocket
-            let db = state.db.clone();
-            let websocket = state.websocket_service.clone();
-            tokio::spawn(async move {
-                let (gen, cons, count, balance, co2) = get_aggregate_stats(&db).await;
-                websocket.broadcast_grid_status_updated(gen, cons, balance, count, co2).await;
-            });
+async fn trigger_post_processing(
+    state: AppState,
+    serial: String,
+    user_id: Uuid,
+    surplus: f64,
+    deficit: f64,
+    max_sell_price: Option<f64>,
+    max_buy_price: Option<f64>,
+    kwh: f64,
+    wallet_address: String,
+    power: Option<f64>,
+    voltage: Option<f64>,
+    current: Option<f64>
+) {
+    let db = state.db.clone();
+    let websocket = state.websocket_service.clone();
+    
+    // Broadcast real-time meter update
+    let ws_meter_serial = serial.clone();
+    let ws_wallet = wallet_address.clone();
+    tokio::spawn(async move {
+        websocket.broadcast_meter_reading_received(
+            &user_id,
+            &ws_wallet,
+            &ws_meter_serial,
+            kwh,
+            power,
+            voltage,
+            current
+        ).await;
 
-            // ========================================================================
-            // P2P AUTO-ORDER GENERATION BRIDGE
-            // ========================================================================
-            // Trigger order creation if surplus or deficit is present
-            let market_clearing = state.market_clearing.clone();
-            let serial_clone = serial.clone();
-            let surplus_val = rust_decimal::Decimal::from_f64_retain(surplus).unwrap_or_default();
-            let deficit_val = rust_decimal::Decimal::from_f64_retain(deficit).unwrap_or_default();
-            
-            let sell_price = request.max_sell_price.map(|p| rust_decimal::Decimal::from_f64_retain(p).unwrap_or_default());
-            let buy_price = request.max_buy_price.map(|p| rust_decimal::Decimal::from_f64_retain(p).unwrap_or_default());
+        let (gen, cons, count, balance, co2) = get_aggregate_stats(&db).await;
+        websocket.broadcast_grid_status_updated(gen, cons, balance, count, co2).await;
+    });
 
-            info!("🔍 [Auto-P2P-Debug] Reading for {}: surplus={}, deficit={}, sell_price={:?}, buy_price={:?}", 
-                serial_clone, surplus_val, deficit_val, sell_price, buy_price);
+    // P2P Auto-Order Generation
+    let market_clearing = state.market_clearing.clone();
+    let surplus_val = rust_decimal::Decimal::from_f64_retain(surplus).unwrap_or_default();
+    let deficit_val = rust_decimal::Decimal::from_f64_retain(deficit).unwrap_or_default();
+    
+    let sell_price = max_sell_price.map(|p| rust_decimal::Decimal::from_f64_retain(p).unwrap_or_default());
+    let buy_price = max_buy_price.map(|p| rust_decimal::Decimal::from_f64_retain(p).unwrap_or_default());
 
-            tokio::spawn(async move {
-                // Handle Surplus -> Sell Order
-                if surplus_val > rust_decimal::Decimal::ZERO {
-                    match sell_price {
-                        Some(price) if price > rust_decimal::Decimal::ZERO => {
-                            info!("📈 [Auto-P2P] Triggering SELL order for meter {}: {} kWh @ {} THB", serial_clone, surplus_val, price);
-                            let res = market_clearing.create_order(
-                                user_id,
-                                crate::database::schema::types::OrderSide::Sell,
-                                crate::database::schema::types::OrderType::Limit,
-                                surplus_val,
-                                Some(price),
-                                None
-                            ).await;
-                            if let Err(e) = res {
-                                error!("❌ [Auto-P2P] Failed to create Sell order for {}: {}", serial_clone, e);
-                            } else {
-                                info!("✅ [Auto-P2P] Created Sell order for {}", serial_clone);
-                            }
-                        }
-                        _ => info!("⚠️ [Auto-P2P] Skipping Sell order for {}: No valid price preference", serial_clone),
+    tokio::spawn(async move {
+        // Handle Surplus -> Sell Order
+        if surplus_val > rust_decimal::Decimal::ZERO {
+            match sell_price {
+                Some(price) if price > rust_decimal::Decimal::ZERO => {
+                    info!("📈 [Auto-P2P] Triggering SELL order for meter {}: {} kWh @ {} THB", serial, surplus_val, price);
+                    let res = market_clearing.create_order(
+                        user_id,
+                        crate::database::schema::types::OrderSide::Sell,
+                        crate::database::schema::types::OrderType::Limit,
+                        surplus_val,
+                        Some(price),
+                        None,
+                        None
+                    ).await;
+                    if let Err(e) = res {
+                        error!("❌ [Auto-P2P] Failed to create Sell order for {}: {}", serial, e);
                     }
                 }
+                _ => {} // No price preference, skip
+            }
+        }
 
-                // Handle Deficit -> Buy Order
-                if deficit_val > rust_decimal::Decimal::ZERO {
-                    match buy_price {
-                        Some(price) if price > rust_decimal::Decimal::ZERO => {
-                            info!("📉 [Auto-P2P] Triggering BUY order for meter {}: {} kWh @ {} THB", serial_clone, deficit_val, price);
-                            let res = market_clearing.create_order(
-                                user_id,
-                                crate::database::schema::types::OrderSide::Buy,
-                                crate::database::schema::types::OrderType::Limit,
-                                deficit_val,
-                                Some(price),
-                                None
-                            ).await;
-                            if let Err(e) = res {
-                                error!("❌ [Auto-P2P] Failed to create Buy order for {}: {}", serial_clone, e);
-                            } else {
-                                info!("✅ [Auto-P2P] Created Buy order for {}", serial_clone);
-                            }
-                        }
-                        _ => info!("⚠️ [Auto-P2P] Skipping Buy order for {}: No valid price preference", serial_clone),
+        // Handle Deficit -> Buy Order
+        if deficit_val > rust_decimal::Decimal::ZERO {
+            match buy_price {
+                Some(price) if price > rust_decimal::Decimal::ZERO => {
+                    info!("📉 [Auto-P2P] Triggering BUY order for meter {}: {} kWh @ {} THB", serial, deficit_val, price);
+                    let res = market_clearing.create_order(
+                        user_id,
+                        crate::database::schema::types::OrderSide::Buy,
+                        crate::database::schema::types::OrderType::Limit,
+                        deficit_val,
+                        Some(price),
+                        None,
+                        None
+                    ).await;
+                    if let Err(e) = res {
+                        error!("❌ [Auto-P2P] Failed to create Buy order for {}: {}", serial, e);
                     }
                 }
-            });
+                _ => {} // No price preference, skip
+            }
         }
-        Err(e) => {
-            error!("❌ CRITICAL: Failed to save reading {} to DB: {}", reading_id, e);
-            message = format!("{}. Database error: {}", message, e);
-        }
-    }
-
-    CreateReadingResponse {
-        id: reading_id,
-        serial_number: serial,
-        kwh: request.kwh,
-        timestamp,
-        minted,
-        tx_signature,
-        message,
-    }
+    });
 }
 
 /// Get meter readings for the authenticated user
@@ -1041,8 +1122,11 @@ pub async fn create_batch_readings(
         let serial = reading.meter_serial.clone().or_else(|| reading.meter_id.clone());
         
         if let Some(serial) = serial {
-            // Use defaults for batch items
-            let params = CreateReadingParams::default();
+            // Disable auto_mint for batch submissions to improve performance
+            let params = CreateReadingParams {
+                auto_mint: Some(false),
+                timeout_secs: Some(30),
+            };
             let _ = internal_create_reading(&state, serial, params, reading).await;
             success_count += 1;
         } else {

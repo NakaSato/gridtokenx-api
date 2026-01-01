@@ -70,6 +70,7 @@ use crate::middleware::{metrics_middleware, active_requests_middleware};
         crate::handlers::analytics::market::get_market_analytics,
         crate::handlers::analytics::user::get_user_trading_stats,
         crate::handlers::analytics::user::get_user_wealth_history,
+        crate::handlers::analytics::user::get_user_transactions,
         crate::handlers::analytics::admin::get_admin_stats,
         crate::handlers::analytics::admin::get_admin_activity,
         crate::handlers::analytics::admin::get_system_health,
@@ -148,6 +149,8 @@ use crate::middleware::{metrics_middleware, active_requests_middleware};
             crate::handlers::analytics::types::OverallUserStats,
             crate::handlers::analytics::types::UserWealthHistory,
             crate::handlers::analytics::types::WealthPoint,
+            crate::handlers::analytics::types::UserTransaction,
+            crate::handlers::analytics::types::UserTransactionsResponse,
             crate::handlers::analytics::admin::AdminStatsResponse,
             crate::services::audit_logger::types::AuditEventRecord,
             crate::services::health_check::types::DetailedHealthStatus,
@@ -189,8 +192,8 @@ pub fn build_router(app_state: AppState) -> Router {
     // =========================================================================
     // V1 RESTful API Routes (New)
     // =========================================================================
-    let trading_routes = v1_trading_routes();
-        // .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+    let trading_routes = v1_trading_routes()
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
     let futures_routes = crate::handlers::futures::routes()
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
@@ -221,8 +224,14 @@ pub fn build_router(app_state: AppState) -> Router {
         .nest("/public", public_routes)        // GET /api/v1/public/meters (no auth)
         .route("/rpc", axum::routing::post(crate::handlers::rpc::rpc_handler)); // /api/v1/rpc
 
+    // Proxy routes implementation (at root /api/*)
+    let proxy_routes = Router::new()
+        .route("/api/zones", get(crate::handlers::proxy::proxy_to_simulator))
+        .route("/api/thailand/data", get(crate::handlers::proxy::proxy_to_simulator));
+
     health
         .merge(ws)
+        .merge(proxy_routes)
         .merge(swagger)  // Swagger UI at /api/docs
         // V1 API
         .nest("/api/v1", v1_api)

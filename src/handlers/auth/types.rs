@@ -209,7 +209,7 @@ pub struct PublicMeterResponse {
 }
 
 /// Public Grid Status Response (aggregate statistics)
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PublicGridStatusResponse {
     /// Aggregate generation from all active meters (kW)
     pub total_generation: f64,
@@ -285,6 +285,7 @@ pub struct CreateReadingRequest {
     // Electrical Parameters
     pub voltage: Option<f64>,
     pub current: Option<f64>,
+    pub power: Option<f64>,
     pub power_factor: Option<f64>,
     pub frequency: Option<f64>,
     pub temperature: Option<f64>,

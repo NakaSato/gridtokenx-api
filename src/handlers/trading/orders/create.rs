@@ -47,6 +47,7 @@ pub async fn create_order(
             payload.energy_amount,
             payload.price_per_kwh,
             payload.expiry_time,
+            payload.zone_id,
         )
         .await
         .map_err(|e| {

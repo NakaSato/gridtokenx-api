@@ -109,6 +109,111 @@ pub async fn get_user_wealth_history(
     }))
 }
 
+/// Get user transaction history
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/transactions",
+    params(TransactionQuery),
+    responses(
+        (status = 200, description = "User transaction history retrieved", body = UserTransactionsResponse),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn get_user_transactions(
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+    Query(params): Query<TransactionQuery>,
+) -> Result<Json<UserTransactionsResponse>> {
+    let limit = params.limit.unwrap_or(50).min(100);
+    let offset = params.offset.unwrap_or(0);
+
+    let mut where_conditions = vec!["user_id = $1".to_string()];
+    let mut bind_count = 2;
+
+    if let Some(_type) = &params.transaction_type {
+        where_conditions.push(format!("operation_type = ${}", bind_count));
+        bind_count += 1;
+    }
+
+    if let Some(_status) = &params.status {
+        where_conditions.push(format!("operation_status = ${}", bind_count));
+        bind_count += 1;
+    }
+
+    let where_clause = where_conditions.join(" AND ");
+
+    // Count total
+    let count_query = format!("SELECT COUNT(*) FROM blockchain_operations WHERE {}", where_clause);
+    let mut count_sqlx = sqlx::query_scalar::<_, i64>(&count_query).bind(user.0.sub);
+    
+    if let Some(t) = &params.transaction_type {
+        count_sqlx = count_sqlx.bind(t);
+    }
+    if let Some(s) = &params.status {
+        count_sqlx = count_sqlx.bind(s);
+    }
+
+    let total = count_sqlx.fetch_one(&state.db).await.unwrap_or(0);
+
+    // Fetch data - map to the view columns
+    // The UserTransaction struct in types.rs uses standard names
+    let query = format!(
+        "SELECT 
+            operation_type, operation_id, user_id, signature, tx_type, 
+            operation_status as status, attempts, last_error, 
+            submitted_at, confirmed_at, created_at, updated_at,
+            CASE 
+                WHEN operation_type = 'settlement' THEN (
+                    SELECT json_build_object(
+                        'energy_amount', energy_amount,
+                        'price_per_kwh', price_per_kwh,
+                        'total_amount', total_amount,
+                        'wheeling_charge', wheeling_charge,
+                        'loss_cost', loss_cost,
+                        'loss_factor', loss_factor,
+                        'effective_energy', effective_energy,
+                        'buyer_zone_id', buyer_zone_id,
+                        'seller_zone_id', seller_zone_id
+                    ) FROM settlements WHERE id = operation_id
+                )
+                WHEN operation_type = 'trading_order' THEN (
+                    SELECT json_build_object(
+                        'side', side,
+                        'energy_amount', energy_amount,
+                        'price_per_kwh', price_per_kwh,
+                        'zone_id', zone_id
+                    ) FROM trading_orders WHERE id = operation_id
+                )
+                ELSE NULL
+            END as metadata
+         FROM blockchain_operations 
+         WHERE {} 
+         ORDER BY created_at DESC 
+         LIMIT ${} OFFSET ${}",
+        where_clause, bind_count, bind_count + 1
+    );
+
+    let mut sqlx_query = sqlx::query_as::<_, UserTransaction>(&query).bind(user.0.sub);
+
+    if let Some(t) = &params.transaction_type {
+        sqlx_query = sqlx_query.bind(t);
+    }
+    if let Some(s) = &params.status {
+        sqlx_query = sqlx_query.bind(s);
+    }
+
+    sqlx_query = sqlx_query.bind(limit);
+    sqlx_query = sqlx_query.bind(offset);
+
+    let transactions = sqlx_query.fetch_all(&state.db).await.unwrap_or_default();
+
+    Ok(Json(UserTransactionsResponse {
+        transactions,
+        total,
+    }))
+}
+
 // ==================== HELPER FUNCTIONS ====================
 
 async fn get_seller_stats(

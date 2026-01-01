@@ -12,6 +12,7 @@ pub fn routes() -> Router<AppState> {
         .route("/market", get(market::get_market_analytics))
         .route("/my-stats", get(user::get_user_trading_stats))
         .route("/my-history", get(user::get_user_wealth_history))
+        .route("/transactions", get(user::get_user_transactions))
         .route("/admin/stats", get(admin::get_admin_stats).layer(from_fn(require_admin_role)))
         .route("/admin/activity", get(admin::get_admin_activity).layer(from_fn(require_admin_role)))
         .route("/admin/health", get(admin::get_system_health).layer(from_fn(require_admin_role)))

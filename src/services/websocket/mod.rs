@@ -18,7 +18,7 @@ struct Client {
 }
 
 /// WebSocket broadcast service
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WebSocketService {
     clients: Arc<RwLock<HashMap<Uuid, mpsc::UnboundedSender<MarketEvent>>>>,
 }
@@ -362,12 +362,18 @@ impl WebSocketService {
         wallet_address: &str,
         meter_serial: &str,
         kwh_amount: f64,
+        power: Option<f64>,
+        voltage: Option<f64>,
+        current: Option<f64>,
     ) {
         self.broadcast(MarketEvent::MeterReadingReceived {
             user_id: *user_id,
             wallet_address: wallet_address.to_string(),
             meter_serial: meter_serial.to_string(),
             kwh_amount,
+            power,
+            voltage,
+            current,
             timestamp: chrono::Utc::now(),
         })
         .await;

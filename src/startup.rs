@@ -95,6 +95,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         config.clone(),
         wallet_service.clone(),
         audit_logger.clone(),
+        websocket_service.clone(),
     );
     info!("✅ Market clearing service initialized");
 
@@ -138,6 +139,13 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     );
     info!("✅ Dashboard service initialized");
 
+    // Initialize HTTP Client
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {}", e))?;
+    info!("✅ HTTP client initialized");
+
     // Create minimal application state
     let app_state = AppState {
         db: db_pool,
@@ -161,6 +169,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         event_processor,
         webhook_service,
         metrics_handle,
+        http_client,
     };
 
     info!("✅ AppState created successfully with P2P services");

@@ -99,6 +99,12 @@ pub enum MarketEvent {
         wallet_address: String,
         meter_serial: String,
         kwh_amount: f64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        power: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        voltage: Option<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        current: Option<f64>,
         timestamp: chrono::DateTime<chrono::Utc>,
     },
 

@@ -18,6 +18,7 @@ pub mod futures; pub mod dashboard;
 pub mod analytics;
 pub mod websocket;
 pub mod rpc;
+pub mod proxy;
 
 // Shared utilities
 pub mod common;

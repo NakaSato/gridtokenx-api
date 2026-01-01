@@ -25,6 +25,7 @@ pub struct TradingOrder {
     pub created_at: Option<DateTime<Utc>>,
     pub filled_at: Option<DateTime<Utc>>,
     pub epoch_id: Option<Uuid>,
+    pub zone_id: Option<i32>,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -41,6 +42,7 @@ pub struct TradingOrderDb {
     pub created_at: Option<DateTime<Utc>>,
     pub filled_at: Option<DateTime<Utc>>,
     pub epoch_id: Option<Uuid>,
+    pub zone_id: Option<i32>,
 }
 
 impl From<TradingOrderDb> for TradingOrder {
@@ -58,6 +60,7 @@ impl From<TradingOrderDb> for TradingOrder {
             created_at: db.created_at,
             filled_at: db.filled_at,
             epoch_id: db.epoch_id,
+            zone_id: db.zone_id,
         }
     }
 }
@@ -75,6 +78,8 @@ pub struct CreateOrderRequest {
     pub order_type: OrderType,
 
     pub expiry_time: Option<DateTime<Utc>>,
+
+    pub zone_id: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]

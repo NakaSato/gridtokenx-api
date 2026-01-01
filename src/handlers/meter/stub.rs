@@ -163,6 +163,9 @@ pub async fn submit_reading(
                                                 &wallet_address,
                                                 request.meter_serial.as_deref().unwrap_or("unknown"),
                                                 kwh_f64,
+                                                None, // power
+                                                None, // voltage
+                                                None, // current
                                             )
                                             .await;
                                         
@@ -286,6 +289,9 @@ pub async fn submit_reading(
                                                 &wallet_address,
                                                 request.meter_serial.as_deref().unwrap_or("unknown"),
                                                 -burn_amount, // Negative to indicate consumption
+                                                None, // power
+                                                None, // voltage
+                                                None, // current
                                             )
                                             .await;
                                     }

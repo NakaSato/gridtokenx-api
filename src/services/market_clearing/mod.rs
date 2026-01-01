@@ -2,7 +2,7 @@ pub mod types;
 
 use anyhow::Result;
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
-use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::prelude::{ToPrimitive, FromPrimitive};
 use rust_decimal::Decimal;
 use solana_sdk::pubkey::Pubkey;
 use sqlx::PgPool;
@@ -13,11 +13,12 @@ use uuid::Uuid;
 use crate::database::schema::types::{EpochStatus, OrderSide, OrderStatus, OrderType};
 use crate::error::ApiError;
 use crate::services::BlockchainService;
+use reqwest::Client;
 
 pub use types::*;
 
 use crate::config::Config;
-use crate::services::{AuditLogger, WalletService};
+use crate::services::{AuditLogger, WalletService, WebSocketService};
 
 #[derive(Clone, Debug)]
 pub struct MarketClearingService {
@@ -26,6 +27,7 @@ pub struct MarketClearingService {
     config: Config,
     wallet_service: WalletService,
     audit_logger: AuditLogger,
+    websocket_service: WebSocketService,
 }
 
 impl MarketClearingService {
@@ -35,6 +37,7 @@ impl MarketClearingService {
         config: Config,
         wallet_service: WalletService,
         audit_logger: AuditLogger,
+        websocket_service: WebSocketService,
     ) -> Self {
         Self {
             db,
@@ -42,6 +45,7 @@ impl MarketClearingService {
             config,
             wallet_service,
             audit_logger,
+            websocket_service,
         }
     }
 
@@ -182,14 +186,14 @@ impl MarketClearingService {
         info!("Getting order book for epoch: {}", epoch_id);
 
         // Get pending buy orders (sorted by price descending, then time ascending)
-        let buy_orders = sqlx::query_as!(
+        let buy_orders: Vec<OrderBookEntry> = sqlx::query_as!(
             OrderBookEntry,
             r#"
             SELECT 
-                id as order_id, user_id, side as "side: OrderSide", 
-                energy_amount, price_per_kwh, created_at
+                id as order_id, user_id, side as "side!: OrderSide", 
+                energy_amount, price_per_kwh as "price_per_kwh!", created_at as "created_at!", zone_id
             FROM trading_orders 
-            WHERE status = 'pending' AND side = 'buy' AND epoch_id = $1
+            WHERE status = 'pending' AND side = 'buy' AND epoch_id = $1 AND price_per_kwh IS NOT NULL
             ORDER BY price_per_kwh DESC, created_at ASC
             "#,
             epoch_id
@@ -204,14 +208,14 @@ impl MarketClearingService {
         );
 
         // Get pending sell orders (sorted by price ascending, then time ascending)
-        let sell_orders = sqlx::query_as!(
+        let sell_orders: Vec<OrderBookEntry> = sqlx::query_as!(
             OrderBookEntry,
             r#"
             SELECT 
-                id as order_id, user_id, side as "side: OrderSide", 
-                energy_amount, price_per_kwh, created_at
+                id as order_id, user_id, side as "side!: OrderSide", 
+                energy_amount, price_per_kwh as "price_per_kwh!", created_at as "created_at!", zone_id
             FROM trading_orders 
-            WHERE status = 'pending' AND side = 'sell' AND epoch_id = $1
+            WHERE status = 'pending' AND side = 'sell' AND epoch_id = $1 AND price_per_kwh IS NOT NULL
             ORDER BY price_per_kwh ASC, created_at ASC
             "#,
             epoch_id
@@ -500,24 +504,66 @@ impl MarketClearingService {
     async fn create_settlement(&self, order_match: &OrderMatch) -> Result<Settlement> {
         // Get buyer and seller information from orders
         let buy_order = sqlx::query!(
-            "SELECT user_id FROM trading_orders WHERE id = $1",
+            "SELECT user_id, zone_id FROM trading_orders WHERE id = $1",
             order_match.buy_order_id
         )
         .fetch_one(&self.db)
         .await?;
 
         let sell_order = sqlx::query!(
-            "SELECT user_id FROM trading_orders WHERE id = $1",
+            "SELECT user_id, zone_id FROM trading_orders WHERE id = $1",
             order_match.sell_order_id
         )
         .fetch_one(&self.db)
         .await?;
 
+        // --- Zone Cost Calculation ---
+        let mut wheeling_charge = Decimal::ZERO;
+        let mut loss_factor = Decimal::ZERO;
+        let mut loss_cost = Decimal::ZERO;
+        let mut effective_energy = order_match.matched_amount;
+
+        if let (Some(b_zone), Some(s_zone)) = (buy_order.zone_id, sell_order.zone_id) {
+            info!("Calculating P2P costs between zones {} and {}", b_zone, s_zone);
+            
+            let simulator_url = std::env::var("SIMULATOR_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+            let client = Client::new();
+            
+            let calc_request = serde_json::json!({
+                "buyer_zone_id": b_zone,
+                "seller_zone_id": s_zone,
+                "energy_amount": order_match.matched_amount.to_f64().unwrap_or(0.0),
+                "agreed_price": order_match.match_price.to_f64().unwrap_or(0.0)
+            });
+
+            match client.post(&format!("{}/api/v1/p2p/calculate-cost", simulator_url))
+                .json(&calc_request)
+                .send()
+                .await 
+            {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(cost_data) = resp.json::<serde_json::Value>().await {
+                        wheeling_charge = Decimal::from_f64(cost_data["wheeling_charge"].as_f64().unwrap_or(0.0)).unwrap_or(Decimal::ZERO);
+                        loss_factor = Decimal::from_f64(cost_data["loss_factor"].as_f64().unwrap_or(0.0)).unwrap_or(Decimal::ZERO);
+                        loss_cost = Decimal::from_f64(cost_data["loss_cost"].as_f64().unwrap_or(0.0)).unwrap_or(Decimal::ZERO);
+                        effective_energy = Decimal::from_f64(cost_data["effective_energy"].as_f64().unwrap_or(0.0)).unwrap_or(order_match.matched_amount);
+                        info!("P2P Costs: wheeling={}, loss_factor={}, loss_cost={}, effective_energy={}", 
+                            wheeling_charge, loss_factor, loss_cost, effective_energy);
+                    }
+                }
+                _ => {
+                    error!("Failed to fetch costs from simulator for zones {}->{}", s_zone, b_zone);
+                    // Fallback to zero charges/losses if simulator fails
+                }
+            }
+        }
+
         // Calculate settlement amounts
         let total_amount = order_match.matched_amount * order_match.match_price;
         let fee_rate = Decimal::from_str("0.01").expect("Invalid fee rate constant"); // 1% fee
         let fee_amount = total_amount * fee_rate;
-        let net_amount = total_amount - fee_amount;
+        // Total settlement value includes fees and wheeling charges
+        let net_amount = total_amount - fee_amount - wheeling_charge;
 
         // =================================================================
         // NEW: Execute On-Chain Transfer (Settlement)
@@ -582,7 +628,8 @@ impl MarketClearingService {
 
                 // 3. Transfer Energy Tokens (Seller -> Buyer)
                 // Assuming 9 decimals (1 GRX = 1 kWh = 1_000_000_000 units)
-                let transfer_amount = (order_match.matched_amount * Decimal::from(1_000_000_000))
+                // We transfer the EFFECTIVE energy after losses
+                let transfer_amount = (effective_energy * Decimal::from(1_000_000_000))
                     .to_u64()
                     .unwrap_or(0);
 
@@ -627,6 +674,12 @@ impl MarketClearingService {
             price_per_kwh: order_match.match_price.clone(),
             total_amount: total_amount.clone(),
             fee_amount: fee_amount.clone(),
+            wheeling_charge: wheeling_charge.clone(),
+            loss_factor: loss_factor.clone(),
+            loss_cost: loss_cost.clone(),
+            effective_energy: effective_energy.clone(),
+            buyer_zone_id: buy_order.zone_id,
+            seller_zone_id: sell_order.zone_id,
             net_amount: net_amount.clone(),
             status: "pending".to_string(),
         };
@@ -636,8 +689,10 @@ impl MarketClearingService {
             r#"
             INSERT INTO settlements (
                 id, epoch_id, buyer_id, seller_id, energy_amount, 
-                price_per_kwh, total_amount, fee_amount, net_amount, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                price_per_kwh, total_amount, fee_amount, wheeling_charge,
+                loss_factor, loss_cost, effective_energy, buyer_zone_id,
+                seller_zone_id, net_amount, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
             settlement.id,
             settlement.epoch_id,
@@ -647,6 +702,12 @@ impl MarketClearingService {
             settlement.price_per_kwh,
             settlement.total_amount,
             settlement.fee_amount,
+            settlement.wheeling_charge,
+            settlement.loss_factor,
+            settlement.loss_cost,
+            settlement.effective_energy,
+            settlement.buyer_zone_id,
+            settlement.seller_zone_id,
             settlement.net_amount,
             settlement.status
         )
@@ -715,8 +776,13 @@ impl MarketClearingService {
             Settlement,
             r#"
             SELECT 
-                id, epoch_id, buyer_id, seller_id, energy_amount,
-                price_per_kwh, total_amount, fee_amount, net_amount, status
+                id as "id!", epoch_id as "epoch_id!", buyer_id as "buyer_id!", seller_id as "seller_id!", 
+                energy_amount as "energy_amount!", price_per_kwh as "price_per_kwh!", 
+                total_amount as "total_amount!", fee_amount as "fee_amount!", 
+                wheeling_charge as "wheeling_charge!", loss_factor as "loss_factor!", 
+                loss_cost as "loss_cost!", effective_energy as "effective_energy!", 
+                buyer_zone_id as "buyer_zone_id", seller_zone_id as "seller_zone_id", 
+                net_amount as "net_amount!", status as "status!"
             FROM settlements 
             WHERE buyer_id = $1 OR seller_id = $1
             ORDER BY created_at DESC
@@ -761,6 +827,7 @@ impl MarketClearingService {
         energy_amount: Decimal,
         price_per_kwh: Option<Decimal>,
         expiry_time: Option<DateTime<Utc>>,
+        zone_id: Option<i32>,
     ) -> Result<Uuid> {
         info!("Creating order in MarketClearingService for user: {}", user_id);
 
@@ -793,8 +860,8 @@ impl MarketClearingService {
             r#"
             INSERT INTO trading_orders (
                 id, user_id, order_type, side, energy_amount, price_per_kwh,
-                filled_amount, status, expires_at, created_at, epoch_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                filled_amount, status, expires_at, created_at, epoch_id, zone_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
             order_id,
             user_id,
@@ -806,10 +873,25 @@ impl MarketClearingService {
             OrderStatus::Pending as OrderStatus,
             expires_at,
             now,
-            epoch.id
+            epoch.id,
+            zone_id
         )
         .execute(&self.db)
         .await?;
+
+        info!("Created order {} for user {}", order_id, user_id);
+
+        // Broadcast order created event
+        self.websocket_service.broadcast_order_created(
+            order_id.to_string(),
+            energy_amount.to_f64().unwrap_or(0.0),
+            price_per_kwh_val.to_f64().unwrap_or(0.0),
+            match side {
+                OrderSide::Buy => None,
+                OrderSide::Sell => Some("solar".to_string()), // Simplified assumption
+            },
+            user_id.to_string(),
+        ).await;
 
         // 2. Audit Log
         self.audit_logger.log_async(crate::services::AuditEvent::OrderCreated {

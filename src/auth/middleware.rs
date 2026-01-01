@@ -137,12 +137,9 @@ pub async fn auth_middleware(
         );
         request.extensions_mut().insert(claims);
         return next.run(request).await;
-    } else {
-        info!(
-            "Auth Middleware: Token mismatch. Received: '{}', Expected: '{}'",
-            token, state.config.engineering_api_key
-        );
     }
+    // Try JWT decoding if API key didn't match
+
 
     match state.jwt_service.decode_token(token) {
         Ok(claims) => {

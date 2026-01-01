@@ -232,6 +232,14 @@ impl BlockchainService {
         self.build_and_send_transaction(vec![instruction], &[authority]).await
     }
 
+    /// Initialize the Trading Market on-chain
+    pub async fn initialize_trading_market(&self, authority: &Keypair) -> Result<Signature> {
+        info!("Initializing Trading Market on-chain with Authority: {}", authority.pubkey());
+        let instruction = self.instruction_builder.build_initialize_market_instruction(authority.pubkey())?;
+        
+        self.build_and_send_transaction(vec![instruction], &[authority]).await
+    }
+
     /// Issue an ERC certificate on-chain
     pub async fn issue_erc(
         &self,
@@ -362,22 +370,21 @@ impl BlockchainService {
     // Instruction Building Methods (delegated to InstructionBuilder)
     // ====================================================================
 
-    /// Build instruction for creating energy trade order
     /// Get active orders count from market account
-    async fn get_market_active_orders(&self, market_pubkey: &Pubkey) -> Result<u64> {
+    async fn get_market_active_orders(&self, market_pubkey: &Pubkey) -> Result<u32> {
         let client = Arc::clone(&self.rpc_client);
         let market_pubkey = *market_pubkey;
 
         let active_orders = tokio::task::spawn_blocking(move || {
             let account = client.get_account(&market_pubkey)?;
-            // Parse active_orders from account data (offset 40, u64)
-            if account.data.len() < 48 {
+            // Parse active_orders from account data (offset 40, u32)
+            if account.data.len() < 44 {
                 return Err(anyhow!("Market account data too small"));
             }
-            let active_orders_bytes: [u8; 8] = account.data[40..48]
+            let active_orders_bytes: [u8; 4] = account.data[40..44]
                 .try_into()
-                .expect("slice length already verified to be 8 bytes");
-            Ok(u64::from_le_bytes(active_orders_bytes))
+                .expect("slice length already verified to be 4 bytes");
+            Ok(u32::from_le_bytes(active_orders_bytes))
         })
         .await??;
 

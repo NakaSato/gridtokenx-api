@@ -83,7 +83,7 @@ pub async fn get_user_orders(
 
     // Build data query with sorting
     let query = format!(
-        "SELECT id, user_id, order_type, side, energy_amount, price_per_kwh, filled_amount, status, expires_at, created_at, filled_at, epoch_id 
+        "SELECT id, user_id, order_type, side, energy_amount, price_per_kwh, filled_amount, status, expires_at, created_at, filled_at, epoch_id, zone_id 
          FROM trading_orders 
          WHERE {} 
          ORDER BY {} {}

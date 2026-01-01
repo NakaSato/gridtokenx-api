@@ -54,6 +54,12 @@ pub struct Settlement {
     pub price_per_kwh: Decimal,
     pub total_amount: Decimal,
     pub fee_amount: Decimal,
+    pub wheeling_charge: Decimal,
+    pub loss_factor: Decimal,
+    pub loss_cost: Decimal,
+    pub effective_energy: Decimal,
+    pub buyer_zone_id: Option<i32>,
+    pub seller_zone_id: Option<i32>,
     pub net_amount: Decimal,
     pub status: String,
 }
@@ -62,8 +68,9 @@ pub struct Settlement {
 pub struct OrderBookEntry {
     pub order_id: Uuid,
     pub user_id: Uuid,
-    pub side: Option<OrderSide>,
+    pub side: OrderSide,
     pub energy_amount: Decimal,
     pub price_per_kwh: Decimal,
-    pub created_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub zone_id: Option<i32>,
 }

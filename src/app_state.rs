@@ -48,6 +48,8 @@ pub struct AppState {
     
     /// Prometheus metrics handle
     pub metrics_handle: metrics_exporter_prometheus::PrometheusHandle,
+    /// HTTP Client for external requests (Simulator, etc.)
+    pub http_client: reqwest::Client,
 }
 
 // Implement FromRef for services that need to be extracted from AppState

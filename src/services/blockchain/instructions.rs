@@ -633,6 +633,30 @@ impl InstructionBuilder {
             data,
         })
     }
+
+    /// Build instruction for initializing the Trading Market
+    pub fn build_initialize_market_instruction(&self, authority: Pubkey) -> Result<Instruction> {
+        let program_id = Pubkey::from_str(TRADING_PROGRAM_ID)?;
+        let system_program = Pubkey::from_str(SYSTEM_PROGRAM_ID)?;
+
+        // Find market PDA: seeds = ["market"]
+        let (market_pda, _) = Pubkey::find_program_address(&[b"market"], &program_id);
+
+        let accounts = vec![
+            AccountMeta::new(market_pda, false),
+            AccountMeta::new(authority, true),
+            AccountMeta::new_readonly(system_program, false),
+        ];
+
+        // discriminator: [35, 35, 189, 193, 155, 48, 170, 203]
+        let data = vec![35, 35, 189, 193, 155, 48, 170, 203];
+
+        Ok(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
+    }
 }
 
 
