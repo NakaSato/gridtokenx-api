@@ -67,6 +67,10 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     };
     initialize_wallet(&wallet_service).await;
 
+    // Initialize wallet session service (for secure auto-trading)
+    let wallet_session = services::WalletSessionService::new(db_pool.clone());
+    info!("✅ Wallet session service initialized");
+
     // Initialize WebSocket service
     let websocket_service = services::WebSocketService::new();
     info!("✅ WebSocket service initialized");
@@ -99,13 +103,20 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
     );
     info!("✅ Market clearing service initialized");
 
-    // Initialize settlement service
-    let settlement = services::SettlementService::new(
+    // Initialize settlement service with environment-based config
+    let settlement_config = services::settlement::SettlementConfig::from_env();
+    info!(
+        "✅ Settlement config: fee_rate={}, real_blockchain={}",
+        settlement_config.fee_rate, settlement_config.enable_real_blockchain
+    );
+    let settlement = services::SettlementService::with_config(
         db_pool.clone(),
         blockchain_service.clone(),
+        settlement_config,
         config.encryption_secret.clone(),
     );
     info!("✅ Settlement service initialized");
+
 
     // Initialize matching engine
     let market_clearing_engine = services::OrderMatchingEngine::new(db_pool.clone())
@@ -134,8 +145,10 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
 
     // Initialize dashboard service
     let dashboard_service = services::DashboardService::new(
+        db_pool.clone(),
         health_checker.clone(),
         event_processor.clone(),
+        websocket_service.clone(),
     );
     info!("✅ Dashboard service initialized");
 
@@ -157,6 +170,7 @@ pub async fn initialize_app(config: &Config) -> Result<AppState> {
         email_service,
         blockchain_service,
         wallet_service,
+        wallet_session,
         websocket_service,
         cache_service,
         health_checker,
@@ -244,8 +258,12 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
 
     // Start Settlement Service Loop
     let settlement = app_state.settlement.clone();
+    let settlement_interval = std::env::var("SETTLEMENT_INTERVAL_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(5);
     tokio::spawn(async move {
-        info!("🚀 Starting automated settlement processing (interval: 5s)");
+        info!("🚀 Starting automated settlement processing (interval: {}s)", settlement_interval);
         loop {
             match settlement.process_pending_settlements().await {
                 Ok(count) => {
@@ -257,7 +275,7 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
                     error!("❌ Error processing settlements: {}", e);
                 }
             }
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(settlement_interval)).await;
         }
     });
     info!("✅ Settlement Service started");
@@ -268,6 +286,10 @@ pub async fn spawn_background_tasks(app_state: &AppState, _config: &Config) {
         event_processor.start().await;
     });
     info!("✅ Event Processor Service started");
+
+    // Start Grid History Recorder
+    app_state.dashboard_service.start_history_recorder().await;
+    info!("✅ Grid History Recorder started");
 }
 
 /// Wait for shutdown signal.

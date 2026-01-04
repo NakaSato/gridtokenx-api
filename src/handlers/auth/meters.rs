@@ -3,7 +3,7 @@
 //! Meter management handlers: registration, verification, readings, etc.
 
 use axum::{
-    extract::State,
+    extract::{State, Query},
     http::HeaderMap,
     Json,
 };
@@ -16,7 +16,7 @@ use super::types::{
     MeterResponse, PublicMeterResponse, RegisterMeterRequest, RegisterMeterResponse,
     VerifyMeterRequest, MeterFilterParams, UpdateMeterStatusRequest,
     CreateReadingRequest, CreateReadingResponse, MeterReadingResponse, ReadingFilterParams,
-    CreateReadingParams, MeterStats, PublicGridStatusResponse,
+    CreateReadingParams, MeterStats, PublicGridStatusResponse, GridHistoryParams,
     CreateBatchReadingRequest, BatchReadingResponse,
 };
 
@@ -273,37 +273,57 @@ async fn get_aggregate_stats(db: &sqlx::PgPool) -> (f64, f64, i64, f64, f64) {
 pub async fn public_grid_status(
     State(state): State<AppState>,
 ) -> Json<PublicGridStatusResponse> {
-    info!("Public grid status request");
+    info!("Public grid status request (serving from DashboardService cache)");
 
-    // Try to fetch from simulator first
-    let simulator_url = std::env::var("SIMULATOR_URL").unwrap_or("http://localhost:8000".to_string());
-    
-    // Use shared HTTP client from AppState
-    match state.http_client.get(format!("{}/api/grid/status", simulator_url)).send().await {
-        Ok(response) => {
-            if let Ok(status) = response.json::<PublicGridStatusResponse>().await {
-                info!("✅ Fetched grid status from Simulator: {} kW gen, {} active", status.total_generation, status.active_meters);
-                return Json(status);
-            } else {
-                error!("❌ Failed to parse Simulator response");
-            }
-        },
-        Err(e) => {
-            info!("⚠️ Simulator unreachable ({}), falling back to database", e);
-        }
-    }
-    
-    let (total_generation, total_consumption, active_meters, net_balance, co2_saved_kg) = 
-        get_aggregate_stats(&state.db).await;
+    let metrics = state.dashboard_service.get_grid_status().await;
 
     Json(PublicGridStatusResponse {
-        total_generation,
-        total_consumption,
-        net_balance,
-        active_meters,
-        co2_saved_kg,
-        timestamp: chrono::Utc::now(),
+        total_generation: metrics.total_generation,
+        total_consumption: metrics.total_consumption,
+        net_balance: metrics.net_balance,
+        active_meters: metrics.active_meters,
+        co2_saved_kg: metrics.co2_saved_kg,
+        timestamp: metrics.timestamp,
     })
+}
+
+/// Get aggregate grid status history - PUBLIC endpoint (no auth required)
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/grid-status/history",
+    params(
+        ("limit" = Option<usize>, Query, description = "Maximum data points to return")
+    ),
+    responses(
+        (status = 200, description = "Historical aggregate grid status", body = Vec<PublicGridStatusResponse>)
+    ),
+    tag = "meters"
+)]
+pub async fn public_grid_history(
+    State(state): State<AppState>,
+    Query(params): Query<GridHistoryParams>,
+) -> Json<Vec<PublicGridStatusResponse>> {
+    info!("Public grid status history request (limit: {:?})", params.limit);
+
+    let limit = params.limit.unwrap_or(1440); // Default to last 24 hours if 1 snapshot/min
+    
+    match state.dashboard_service.get_grid_history(limit as i64).await {
+        Ok(history) => {
+            let response = history.into_iter().map(|h| PublicGridStatusResponse {
+                total_generation: h.total_generation,
+                total_consumption: h.total_consumption,
+                net_balance: h.net_balance,
+                active_meters: h.active_meters,
+                co2_saved_kg: h.co2_saved_kg,
+                timestamp: h.timestamp,
+            }).collect();
+            Json(response)
+        },
+        Err(e) => {
+            error!("❌ Failed to fetch grid history: {}", e);
+            Json(vec![]) // Return empty list on error for now
+        }
+    }
 }
 
 /// Register a new meter to user account
@@ -704,6 +724,9 @@ async fn internal_create_reading(
         let power_val = request.power.or_else(|| {
              request.voltage.zip(request.current).map(|(v, i)| v * i * request.power_factor.unwrap_or(1.0) / 1000.0) // kW
         });
+
+        // Update aggregate grid status in dashboard service
+        let _ = state.dashboard_service.handle_meter_reading(request.kwh, &serial).await;
 
         trigger_post_processing(
             state.clone(),

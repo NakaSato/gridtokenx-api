@@ -347,11 +347,21 @@ pub async fn verify_email(
             if token.starts_with("verify_") {
                 let username = token.strip_prefix("verify_").unwrap_or("");
                 let update_test = sqlx::query(
-                    "UPDATE users SET email_verified = true, wallet_address = $1, blockchain_registered = $2, updated_at = NOW() 
-                     WHERE username = $3 AND (wallet_address IS NULL OR wallet_address = '')
+                    "UPDATE users SET 
+                        email_verified = true, 
+                        wallet_address = $1, 
+                        encrypted_private_key = $2,
+                        wallet_salt = $3,
+                        encryption_iv = $4,
+                        blockchain_registered = $5, 
+                        updated_at = NOW() 
+                     WHERE username = $6 AND (wallet_address IS NULL OR wallet_address = '')
                      RETURNING id, username, email, role::text as role, first_name, last_name"
                 )
                 .bind(&wallet_address)
+                .bind(&encrypted_key_bytes)
+                .bind(&salt_bytes)
+                .bind(&iv_bytes)
                 .bind(blockchain_registered)
                 .bind(username)
                 .fetch_optional(&state.db)
@@ -382,9 +392,19 @@ pub async fn verify_email(
                     _ => {
                         // User may already have a wallet, just verify email and fetch user
                         let user_result = sqlx::query(
-                            "UPDATE users SET email_verified = true WHERE username = $1
+                            "UPDATE users SET 
+                                email_verified = true,
+                                wallet_address = COALESCE(NULLIF(wallet_address, ''), $1),
+                                encrypted_private_key = COALESCE(encrypted_private_key, $2),
+                                wallet_salt = COALESCE(wallet_salt, $3),
+                                encryption_iv = COALESCE(encryption_iv, $4)
+                             WHERE username = $5
                              RETURNING id, username, email, role::text as role, first_name, last_name, wallet_address"
                         )
+                        .bind(&wallet_address)
+                        .bind(&encrypted_key_bytes)
+                        .bind(&salt_bytes)
+                        .bind(&iv_bytes)
                         .bind(username)
                         .fetch_optional(&state.db)
                         .await;

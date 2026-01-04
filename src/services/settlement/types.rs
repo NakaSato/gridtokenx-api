@@ -76,6 +76,46 @@ impl Default for SettlementConfig {
     }
 }
 
+impl SettlementConfig {
+    /// Load configuration from environment variables with defaults
+    pub fn from_env() -> Self {
+        let mut config = Self::default();
+
+        // Read fee rate from environment
+        if let Ok(val) = std::env::var("SETTLEMENT_FEE_RATE") {
+            if let Ok(rate) = Decimal::from_str(&val) {
+                config.fee_rate = rate;
+                tracing::info!("Using custom settlement fee rate: {}", rate);
+            }
+        }
+
+        // Read blockchain mode from environment (use same env var as tokenization)
+        if let Ok(val) = std::env::var("TOKENIZATION_ENABLE_REAL_BLOCKCHAIN") {
+            if let Ok(enabled) = val.parse::<bool>() {
+                config.enable_real_blockchain = enabled;
+                tracing::info!("Settlement real blockchain mode: {}", enabled);
+            }
+        }
+
+        // Read retry attempts from environment
+        if let Ok(val) = std::env::var("SETTLEMENT_RETRY_ATTEMPTS") {
+            if let Ok(attempts) = val.parse::<u32>() {
+                config.retry_attempts = attempts;
+            }
+        }
+
+        // Read retry delay from environment
+        if let Ok(val) = std::env::var("SETTLEMENT_RETRY_DELAY_SECS") {
+            if let Ok(delay) = val.parse::<u64>() {
+                config.retry_delay_secs = delay;
+            }
+        }
+
+        config
+    }
+}
+
+
 /// Settlement statistics
 #[derive(Debug, Clone, Serialize)]
 pub struct SettlementStats {

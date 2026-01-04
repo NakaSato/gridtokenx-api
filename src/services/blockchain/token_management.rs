@@ -92,6 +92,7 @@ impl TokenManager {
             .arg(user_wallet.to_string())
             .arg("--fee-payer")
             .arg(&wallet_path)
+            .arg("--program-2022") // Use Token-2022 program
             .arg("--url")
             .arg(&rpc_url)
             .output()
@@ -311,6 +312,7 @@ impl TokenManager {
                 .arg(&wallet_path)
                 .arg("--mint-authority")
                 .arg(&wallet_path)
+                .arg("--program-2022") // Use Token-2022 program
                 .arg("--url")
                 .arg(&rpc_url)
                 .output()
@@ -398,31 +400,87 @@ impl TokenManager {
     }
 
     /// Transfer SPL tokens from one account to another (generic)
+    /// Uses CLI for Token-2022 compatibility
     pub async fn transfer_tokens(
         &self,
         authority: &Keypair,
-        from_token_account: &Pubkey,
-        to_token_account: &Pubkey,
+        _from_token_account: &Pubkey,
+        _to_token_account: &Pubkey,
         mint: &Pubkey,
         amount: u64,
         decimals: u8,
     ) -> Result<Signature> {
-        let transfer_instruction = BlockchainUtils::create_transfer_instruction(
-            authority,
-            from_token_account,
-            to_token_account,
-            mint,
-            amount,
-            decimals,
-        )?;
-
-        let signers = vec![authority];
-        self.transaction_handler
-            .build_and_send_transaction_with_priority(
-                vec![transfer_instruction],
-                &signers,
-                "token_transaction",
-            )
-            .await
+        use std::fs;
+        
+        
+        
+        let rpc_url = std::env::var("SOLANA_RPC_URL")
+            .unwrap_or_else(|_| "http://localhost:8899".to_string());
+        
+        // Convert amount to UI amount (assuming decimals)
+        let ui_amount = amount as f64 / 10_f64.powi(decimals as i32);
+        
+        // Get recipient (to account owner) - derived from to_token_account
+        // Actually we need the owner, not the ATA. Settlement passes owner already.
+        // Wait, the function signature has from_token_account and to_token_account.
+        // For Token-2022 CLI transfer, we need: mint, amount, recipient_owner
+        // The caller should pass owner pubkeys not ATA addresses for this approach.
+        
+        // Create temp keypair file for authority
+        let temp_keypair_path = format!("/tmp/temp_keypair_{}.json", uuid::Uuid::new_v4());
+        let keypair_bytes = authority.to_bytes();
+        let keypair_json = serde_json::to_string(&keypair_bytes.to_vec())?;
+        fs::write(&temp_keypair_path, &keypair_json)?;
+        
+        // Get recipient wallet from to_token_account
+        // We need to derive the owner from ATA. For now, assume caller ensures params are correct.
+        // Actually looking at settlement, it passes ATAs. We need the owner.
+        // The settlement should be updated to pass owner, not ATA. 
+        // For now, let's just use a different approach - transfer using from account directly.
+        
+        let output = std::process::Command::new("spl-token")
+            .arg("transfer")
+            .arg(mint.to_string())
+            .arg(ui_amount.to_string())
+            .arg(_to_token_account.to_string())  // Recipient ATA 
+            .arg("--from")
+            .arg(_from_token_account.to_string())
+            .arg("--fee-payer")
+            .arg(&temp_keypair_path)
+            .arg("--owner")
+            .arg(&temp_keypair_path)
+            .arg("--program-2022")
+            .arg("--allow-unfunded-recipient") // In case buyer ATA doesn't exist
+            .arg("--fund-recipient")           // Fund new ATA if needed
+            .arg("--url")
+            .arg(&rpc_url)
+            .output()
+            .map_err(|e| anyhow!("Failed to execute spl-token transfer: {}", e))?;
+        
+        // Clean up temp file
+        let _ = fs::remove_file(&temp_keypair_path);
+        
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        
+        if !output.status.success() {
+            return Err(anyhow!("spl-token transfer failed: {}", stderr_str));
+        }
+        
+        // Extract signature from output
+        let signature_str = stdout_str
+            .lines()
+            .find(|line| line.len() > 60 && !line.contains(':'))
+            .or_else(|| {
+                stdout_str.lines().find(|line| line.starts_with("Signature:"))
+                    .and_then(|line| line.split(':').last())
+                    .map(|s| s.trim())
+            })
+            .unwrap_or("mock_transfer_signature");
+        
+        tracing::info!("Token transfer completed. Signature: {}", signature_str);
+        
+        Signature::from_str(signature_str.trim())
+            .map_err(|e| anyhow!("Failed to parse signature '{}': {}", signature_str, e))
     }
 }

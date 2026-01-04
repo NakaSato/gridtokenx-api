@@ -78,6 +78,13 @@ pub struct UserResponse {
     pub wallet_address: Option<String>,
 }
 
+/// Update Wallet Request
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateWalletRequest {
+    pub wallet_address: String,
+    pub verify_ownership: Option<bool>,
+}
+
 /// Email Verification Request
 #[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct VerifyEmailRequest {
@@ -223,6 +230,13 @@ pub struct PublicGridStatusResponse {
     pub co2_saved_kg: f64,
     /// Timestamp of the status calculation
     pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Parameters for grid history retrieval
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GridHistoryParams {
+    /// Maximum number of data points to return
+    pub limit: Option<usize>,
 }
 
 /// Meter Registration Request
@@ -403,4 +417,78 @@ pub struct StatusResponse {
     pub status: String,
     pub version: String,
     pub uptime: String,
+}
+
+// ============================================================================
+// Wallet Session Types (Session-Based Security)
+// ============================================================================
+
+/// Request to generate wallet with user password
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct GenerateWalletRequest {
+    /// User's wallet password (used to encrypt private key)
+    /// Must be at least 8 characters
+    pub wallet_password: String,
+}
+
+/// Request to unlock wallet for trading session
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UnlockWalletRequest {
+    /// User's wallet password
+    pub wallet_password: String,
+    /// Device fingerprint from frontend (used for device tracking)
+    pub device_fingerprint: String,
+    /// Optional device name for display (e.g., "iPhone 15", "Chrome on MacOS")
+    pub device_name: Option<String>,
+}
+
+/// Response for wallet unlock
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UnlockWalletResponse {
+    pub success: bool,
+    pub message: String,
+    /// Session token for auto-trading (store in localStorage)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token: Option<String>,
+    /// Session expiration time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Number of other device sessions that were revoked
+    pub revoked_sessions: i64,
+}
+
+/// Wallet session info
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WalletSessionInfo {
+    /// Whether wallet is currently unlocked
+    pub is_unlocked: bool,
+    /// Whether user needs to set wallet password (legacy migration)
+    pub needs_password_setup: bool,
+    /// Session expiration time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Device name of current session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    /// When session was created
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Encryption version (1=legacy master secret, 2=user password)
+    pub encryption_version: i32,
+}
+
+/// Request to set wallet password (for migrating legacy users)
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetWalletPasswordRequest {
+    /// New wallet password
+    pub wallet_password: String,
+    /// Confirm wallet password
+    pub confirm_password: String,
+}
+
+/// Response for lock wallet
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LockWalletResponse {
+    pub success: bool,
+    pub message: String,
 }

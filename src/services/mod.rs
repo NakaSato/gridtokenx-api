@@ -31,6 +31,7 @@ pub use cache::CacheService;
 pub use email::EmailService;
 pub use health_check::HealthChecker;
 pub use wallet::WalletService;
+pub use wallet::WalletSessionService;
 pub use websocket::WebSocketService;
 
 pub use audit_logger::{AuditLogger, AuditEvent};

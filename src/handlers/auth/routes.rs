@@ -12,7 +12,7 @@ use super::{
     login::{login, verify_email},
     registration::register,
     password_reset::{forgot_password, reset_password, change_password},
-    profile::profile,
+    profile::{profile, update_wallet, generate_wallet},
     meters::{
         get_my_meters, register_meter,
         get_registered_meters_filtered, update_meter_status, create_reading,
@@ -20,6 +20,7 @@ use super::{
     },
     wallets::token_balance,
     status::{system_status, meter_status, readiness_probe, liveness_probe},
+    wallet_session::{unlock_wallet, lock_wallet, get_wallet_session, lock_all_sessions},
 };
 
 // ============================================================================
@@ -42,7 +43,15 @@ pub fn v1_users_routes() -> Router<AppState> {
         .route("/", post(register))  // POST /api/v1/users (register)
         .route("/me", get(profile))  // GET /api/v1/users/me
         .route("/me/meters", get(get_my_meters))  // GET /api/v1/users/me/meters
+        .route("/wallet", post(update_wallet)) // POST /api/v1/users/wallet
+        .route("/wallet/generate", post(generate_wallet)) // POST /api/v1/users/wallet/generate
+        // Wallet session routes (secure auto-trading)
+        .route("/wallet/unlock", post(unlock_wallet)) // POST /api/v1/users/wallet/unlock
+        .route("/wallet/lock", post(lock_wallet)) // POST /api/v1/users/wallet/lock
+        .route("/wallet/lock-all", post(lock_all_sessions)) // POST /api/v1/users/wallet/lock-all
+        .route("/wallet/session", get(get_wallet_session)) // GET /api/v1/users/wallet/session
 }
+
 
 /// Build V1 meters routes
 pub fn v1_meters_routes() -> Router<AppState> {

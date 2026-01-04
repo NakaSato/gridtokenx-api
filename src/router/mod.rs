@@ -179,7 +179,8 @@ pub fn build_router(app_state: AppState) -> Router {
     let health = Router::new()
         .route("/health", get(health_check))
         .route("/api/health", get(health_check))
-        .route("/metrics", get(crate::handlers::dev::metrics::get_metrics));
+        .route("/metrics", get(crate::handlers::dev::metrics::get_metrics))
+        .route("/api/meters/submit-reading", post(crate::handlers::meter::submit_reading));
 
     // WebSocket endpoint
     let ws = Router::new()
@@ -208,6 +209,7 @@ pub fn build_router(app_state: AppState) -> Router {
     let public_routes = Router::new()
         .route("/meters", get(crate::handlers::auth::meters::public_get_meters))
         .route("/grid-status", get(crate::handlers::auth::meters::public_grid_status))
+        .route("/grid-status/history", get(crate::handlers::auth::meters::public_grid_history))
         .route("/meters/batch/readings", post(crate::handlers::auth::meters::create_batch_readings));
 
     let v1_api = Router::new()

@@ -7,6 +7,7 @@ use crate::app_state::AppState;
 use super::orders::{create_order, cancel_order, update_order, get_order_book, get_user_orders, get_my_trades, get_token_balance};
 use super::blockchain::{get_blockchain_market_data, match_blockchain_orders};
 use super::p2p::{calculate_p2p_cost, get_p2p_market_prices};
+use super::status::{get_matching_status, get_settlement_stats};
 
 /// Build the v1 trading routes
 pub fn v1_trading_routes() -> Router<AppState> {
@@ -31,6 +32,11 @@ pub fn v1_trading_routes() -> Router<AppState> {
         .route("/p2p/calculate-cost", post(calculate_p2p_cost))
         .route("/p2p/market-prices", get(get_p2p_market_prices))
         
+        // Status & Monitoring
+        .route("/matching-status", get(get_matching_status))
+        .route("/settlement-stats", get(get_settlement_stats))
+        
         // Admin
         .route("/admin/match-orders", post(match_blockchain_orders))
 }
+

@@ -1,7 +1,7 @@
 use axum::{
     extract::{Request, State},
-    response::{IntoResponse, Response},
-    http::{StatusCode, Uri},
+    response::Response,
+    http::StatusCode,
     body::Body,
 };
 use crate::app_state::AppState;
@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 pub async fn proxy_to_simulator(
     State(_state): State<AppState>,
-    mut req: Request<Body>,
+    req: Request<Body>,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path();
     let path_query = req

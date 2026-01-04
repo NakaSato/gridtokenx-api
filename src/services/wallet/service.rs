@@ -108,24 +108,33 @@ impl WalletService {
         }
     }
 
-    /// Confirm transaction (for development)
+    /// Confirm transaction with retry (for development)
     pub async fn confirm_transaction(&self, signature: &Signature) -> Result<bool> {
-        // Simple confirmation check for development
-        // In production, you'd want more sophisticated confirmation logic
-        match self.rpc_client.get_signature_status(signature) {
-            Ok(Some(_)) => {
-                info!("Transaction {} confirmed", signature);
-                Ok(true)
-            }
-            Ok(None) => {
-                info!("Transaction {} not yet confirmed", signature);
-                Ok(false)
-            }
-            Err(e) => {
-                error!("Error checking transaction status: {}", e);
-                Err(e.into())
+        // Wait up to 30 seconds for confirmation
+        for i in 0..30 {
+            match self.rpc_client.get_signature_status(signature) {
+                Ok(Some(status)) => {
+                    if status.is_ok() {
+                        info!("Transaction {} confirmed after {}s", signature, i);
+                        return Ok(true);
+                    } else {
+                        error!("Transaction {} failed: {:?}", signature, status);
+                        return Ok(false);
+                    }
+                }
+                Ok(None) => {
+                    if i < 29 {
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
+                }
+                Err(e) => {
+                    error!("Error checking transaction status: {}", e);
+                    return Err(e.into());
+                }
             }
         }
+        info!("Transaction {} not confirmed after 30s", signature);
+        Ok(false)
     }
 
     /// Validate Solana address format

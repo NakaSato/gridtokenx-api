@@ -32,6 +32,15 @@ pub mod types {
         Sell,
     }
 
+    impl fmt::Display for OrderSide {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                OrderSide::Buy => write!(f, "buy"),
+                OrderSide::Sell => write!(f, "sell"),
+            }
+        }
+    }
+
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type, ToSchema)]
     #[sqlx(type_name = "order_status", rename_all = "snake_case")]
     #[serde(rename_all = "snake_case")]

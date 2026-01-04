@@ -73,6 +73,9 @@ pub async fn submit_reading(
 
     info!("✅ Reading validated. ID: {}, Amount: {} kWh", reading_id, kwh_f64);
 
+    // Update aggregate grid status in dashboard service immediately after validation
+    let _ = state.dashboard_service.handle_meter_reading(kwh_f64, request.meter_serial.as_deref().unwrap_or("unknown")).await;
+
     // Track minting result
     let mut minted = false;
     let mut mint_tx_signature: Option<String> = None;

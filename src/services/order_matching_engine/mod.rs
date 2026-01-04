@@ -30,10 +30,20 @@ pub struct OrderMatchingEngine {
 
 impl OrderMatchingEngine {
     pub fn new(db: PgPool) -> Self {
+        // Read interval from environment variable, default to 5 seconds
+        let match_interval_secs = std::env::var("MATCHING_INTERVAL_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(5);
+        
+        if match_interval_secs != 5 {
+            info!("Order matching interval set to {} seconds", match_interval_secs);
+        }
+
         Self {
             db,
             running: Arc::new(RwLock::new(false)),
-            match_interval_secs: 5, // Check every 5 seconds
+            match_interval_secs,
             websocket_service: None,
             settlement: None,
         }
@@ -445,9 +455,29 @@ impl OrderMatchingEngine {
                         "✅ Created settlement {} from match {}",
                         settlement.id, match_id
                     );
-                    // Update order_match with settlement_id?
-                    // The order_matches table currently has settlement_id column but code doesn't update it?
-                    // Let's update it.
+
+                    // Broadcast trade executed event via WebSocket
+                    if let Some(ws_service) = &self.websocket_service {
+                        let ws = ws_service.clone();
+                        let s_id = settlement.id.to_string();
+                        let b_order_id = buy_order_id.to_string();
+                        let s_order_id = sell_order_id.to_string();
+                        let b_id = buyer_id.to_string();
+                        let s_id_user = seller_id.to_string();
+                        let qty = matched_amount.to_string();
+                        let prc = match_price.to_string();
+                        let total = total_price.to_string();
+                        let now = chrono::Utc::now().to_rfc3339();
+
+                        tokio::spawn(async move {
+                            ws.broadcast_trade_executed(
+                                s_id, b_order_id, s_order_id, b_id, s_id_user, qty, prc, total, now,
+                            )
+                            .await;
+                        });
+                    }
+
+                    // Update order_match with settlement_id
                     let _ =
                         sqlx::query("UPDATE order_matches SET settlement_id = $1 WHERE id = $2")
                             .bind(settlement.id)

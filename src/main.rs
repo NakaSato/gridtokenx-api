@@ -48,7 +48,8 @@ async fn main() -> Result<()> {
     startup::spawn_background_tasks(&app_state, &config).await;
 
     // Build minimal API router
-    let app = router::build_router(app_state);
+    let app = router::build_router(app_state)
+        .layer(tower_http::compression::CompressionLayer::new());
 
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));

@@ -174,7 +174,8 @@ impl BlockchainUtils {
     }
 
     /// Transfer SPL tokens from one account to another
-    /// Used for settlement transfers: buyer → seller
+    /// Used for settlement transfers: seller → buyer
+    /// Uses transfer_checked for Token-2022 compatibility
     pub fn create_transfer_instruction(
         authority: &Keypair,
         from_token_account: &Pubkey,
@@ -184,41 +185,25 @@ impl BlockchainUtils {
         decimals: u8,
     ) -> Result<Instruction> {
         info!(
-            "Creating transfer instruction for {} tokens from {} to {}",
+            "Creating transfer_checked instruction for {} tokens from {} to {}",
             amount, from_token_account, to_token_account
         );
 
-        // Create transfer instruction manually to avoid type conflicts
         let token_program_id = Self::get_token_program_id()?;
 
-        // Build instruction data for transfer_checked
-        // Instruction layout: discriminator(1) + amount(8) + decimals(1)
-        let mut instruction_data = Vec::with_capacity(10);
-        instruction_data.push(12); // transfer_checked instruction discriminator
-        instruction_data.extend_from_slice(&amount.to_le_bytes());
-        instruction_data.push(decimals);
-
-        info!(
-            "TransferChecked Accounts: Source={}, Mint={}, Dest={}, Auth={}",
+        // Use transfer_checked for Token-2022 compatibility (validates mint and decimals)
+        let instruction = spl_token::instruction::transfer_checked(
+            &token_program_id,
             from_token_account,
             mint,
             to_token_account,
-            authority.pubkey()
-        );
+            &authority.pubkey(),
+            &[],  // No multisig signers
+            amount,
+            decimals,
+        )?;
 
-        // Build accounts for the instruction
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(*from_token_account, false),
-            solana_sdk::instruction::AccountMeta::new(*mint, false),
-            solana_sdk::instruction::AccountMeta::new(*to_token_account, false),
-            solana_sdk::instruction::AccountMeta::new_readonly(authority.pubkey(), true),
-        ];
-
-        Ok(Instruction {
-            program_id: token_program_id,
-            accounts,
-            data: instruction_data,
-        })
+        Ok(instruction)
     }
 
     /// Register a user on-chain
@@ -542,8 +527,8 @@ impl BlockchainUtils {
     /// Get the correct Token Program ID
     /// We use Token-2022 since our mint is deployed with Token-2022 (--program-2022)
     pub fn get_token_program_id() -> Result<Pubkey> {
-        // Use Standard Token Program ID since Energy Token mint was created with Standard Token Program
-        Pubkey::from_str(TOKEN_PROGRAM_ID)
+        // Use Token-2022 Program ID since ENERGY_TOKEN_MINT is created with Token-2022
+        Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
             .map_err(|e| anyhow!("Failed to parse token program ID: {}", e))
     }
 }
@@ -634,5 +619,22 @@ pub mod transaction_utils {
             amount_kwh: kwh_amount,
             tokens_to_mint,
         })
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keypair_serialization_consistency() {
+        let kp = Keypair::new();
+        let pubkey_orig = kp.pubkey();
+        let bytes = kp.to_bytes();
+        
+        let mut seed = [0u8; 32];
+        seed.copy_from_slice(&bytes[0..32]);
+        let kp_der = Keypair::new_from_array(seed);
+        
+        assert_eq!(pubkey_orig, kp_der.pubkey(), "Keypair derived from first 32 bytes of to_bytes() should match original!");
     }
 }

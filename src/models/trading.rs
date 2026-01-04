@@ -80,6 +80,12 @@ pub struct CreateOrderRequest {
     pub expiry_time: Option<DateTime<Utc>>,
 
     pub zone_id: Option<i32>,
+
+    /// HMAC-SHA256 signature of the order parameters
+    pub signature: Option<String>,
+    
+    /// Timestamp of when the signature was created
+    pub timestamp: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]

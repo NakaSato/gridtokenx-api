@@ -1,16 +1,11 @@
 use axum::{extract::State, response::Json};
-use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signer};
 
-use uuid::Uuid;
 
 use crate::auth::middleware::AuthenticatedUser;
-use crate::database::schema::types::{OrderSide, OrderStatus, OrderType};
+use crate::database::schema::types::OrderStatus;
 use crate::error::{ApiError, Result};
 use crate::models::trading::CreateOrderRequest;
-use crate::services::AuditEvent;
 use crate::AppState;
 
 use crate::handlers::trading::types::CreateOrderResponse;
@@ -36,6 +31,48 @@ pub async fn create_order(
     Json(payload): Json<CreateOrderRequest>,
 ) -> Result<Json<CreateOrderResponse>> {
     tracing::info!("Creating trading order for user: {}", user.0.sub);
+
+    // Verify signature if provided (P2P orders)
+    if let (Some(signature), Some(timestamp)) = (&payload.signature, payload.timestamp) {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        use hex;
+
+        // Verify timestamp is within 5 minutes window
+        let now_ts = Utc::now().timestamp_millis();
+        if (now_ts - timestamp).abs() > 5 * 60 * 1000 {
+            return Err(ApiError::BadRequest("Order timestamp expired".to_string()));
+        }
+
+        // Reconstruct message: side + amount + price + timestamp
+        let amount_str = payload.energy_amount.to_string();
+        // Handle Option<Decimal> for price
+        let price_str = payload.price_per_kwh.map(|p| p.to_string()).unwrap_or_default();
+        
+        let message = format!("{}:{}:{}:{}", 
+            payload.side,
+            amount_str,
+            price_str,
+            timestamp
+        );
+
+        // TODO: Get secret key from user wallet/config. For now using placeholder.
+        let secret_key = "test_secret_key";
+        
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret_key.as_bytes())
+            .map_err(|e| ApiError::Internal(format!("HMAC init failed: {}", e)))?;
+        
+        mac.update(message.as_bytes());
+        let result = mac.finalize();
+        let expected_signature = hex::encode(result.into_bytes());
+
+        if signature != &expected_signature {
+           tracing::warn!("Invalid signature. Expected: {}, Got: {}", expected_signature, signature);
+           return Err(ApiError::BadRequest("Invalid order signature".to_string()));
+        }
+        
+        tracing::info!("P2P Order signature verified successfully");
+    }
 
     // Call MarketClearingService to handle order creation (DB + On-Chain)
     let order_id = state

@@ -64,7 +64,7 @@ impl InstructionBuilder {
                 AccountMeta::new(*market_pubkey, false),
                 AccountMeta::new(order_pda, false),
                 AccountMeta::new_readonly(erc_key, false),
-                AccountMeta::new_readonly(payer, true),
+                AccountMeta::new(payer, true), // Payer must be writable to pay for rent
                 AccountMeta::new_readonly(system_program, false),
             ]
         } else {
@@ -73,7 +73,7 @@ impl InstructionBuilder {
             vec![
                 AccountMeta::new(*market_pubkey, false),
                 AccountMeta::new(order_pda, false),
-                AccountMeta::new_readonly(payer, true),
+                AccountMeta::new(payer, true), // Payer must be writable to pay for rent
                 AccountMeta::new_readonly(system_program, false),
             ]
         };

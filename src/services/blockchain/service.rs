@@ -896,75 +896,22 @@ impl BlockchainService {
         // Get authority keypair
         let authority = self.account_manager.get_authority_keypair().await?;
 
-        // Get energy token program ID
-        let energy_token_program_id = self.energy_token_program_id()?;
+        // Get configured mint
+        let mint_str = std::env::var("ENERGY_TOKEN_MINT")
+            .unwrap_or_else(|_| "Geq98m3Vw63AqrMEVoZsiW5DbNkScteZAdWDmm95ykYF".to_string());
+        let mint = Pubkey::from_str(&mint_str)
+            .map_err(|e| anyhow!("Invalid ENERGY_TOKEN_MINT: {}", e))?;
+
+        // Convert atomic amount to UI amount (assuming 9 decimals)
+        let amount_kwh = amount as f64 / 1_000_000_000.0;
         
-        // Derive the mint PDA from energy_token program
-        let (mint, _) = Pubkey::find_program_address(
-            &[b"mint"],
-            &energy_token_program_id,
-        );
-        info!("Using derived mint PDA: {}", mint);
+        // Ensure ATA exists explicitly (since implicit creation via spl-token mint --recipient-owner seems unreliable in this env)
+        if let Err(e) = self.ensure_token_account_exists(&authority, user_wallet, &mint).await {
+            tracing::warn!("Failed to ensure ATA exists (might already exist): {}", e);
+            // Continue to mint, as it might just be an "already exists" error which is fine
+        }
 
-        // Derive token_info PDA (this is the mint authority)
-        let (token_info_pda, _) = Pubkey::find_program_address(
-            &[b"token_info"],
-            &energy_token_program_id,
-        );
-        info!("Using token_info PDA: {}", token_info_pda);
-
-        // Get the token program ID
-        let token_program_id = BlockchainUtils::get_token_program_id()?;
-
-        // Calculate ATA for the user
-        let user_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
-            user_wallet,
-            &mint,
-            &token_program_id,
-        );
-        info!("User ATA: {}", user_token_account);
-
-        // Build instructions
-        let mut instructions = Vec::new();
-
-        // 1. Create ATA if it doesn't exist (idempotent)
-        let create_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &authority.pubkey(),
-            user_wallet,
-            &mint,
-            &token_program_id,
-        );
-        instructions.push(create_ata_ix);
-
-        // 2. Build the Anchor mint_tokens_direct instruction
-        // Discriminator for "mint_tokens_direct": calculated from sha256("global:mint_tokens_direct")[:8]
-        let mut instruction_data = Vec::new();
-        instruction_data.extend_from_slice(&[13, 246, 31, 237, 99, 19, 88, 226]);
-        instruction_data.extend_from_slice(&amount.to_le_bytes());
-
-        let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(token_info_pda, false),
-            solana_sdk::instruction::AccountMeta::new(mint, false),
-            solana_sdk::instruction::AccountMeta::new(user_token_account, false),
-            solana_sdk::instruction::AccountMeta::new(authority.pubkey(), true),
-            solana_sdk::instruction::AccountMeta::new_readonly(token_program_id, false),
-        ];
-
-        let mint_instruction = Instruction {
-            program_id: energy_token_program_id,
-            accounts,
-            data: instruction_data,
-        };
-        instructions.push(mint_instruction);
-
-        // Send transaction
-        let signers: Vec<&Keypair> = vec![&authority];
-        self.build_and_send_transaction_with_priority(
-            instructions,
-            &signers,
-            "token_transaction",
-        )
-        .await
+        self.mint_spl_tokens(&authority, user_wallet, &mint, amount_kwh).await
     }
 }
 

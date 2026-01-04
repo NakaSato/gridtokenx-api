@@ -199,7 +199,7 @@ impl SettlementService {
         // 2. Parse wallet addresses
         let buyer_pubkey = BlockchainService::parse_pubkey(&buyer_wallet)
             .map_err(|e| ApiError::Internal(format!("Invalid buyer wallet: {}", e)))?;
-        let seller_pubkey = BlockchainService::parse_pubkey(&seller_wallet)
+        let _seller_pubkey = BlockchainService::parse_pubkey(&seller_wallet)
             .map_err(|e| ApiError::Internal(format!("Invalid seller wallet: {}", e)))?;
 
         // 3. Get mint address from environment
@@ -217,11 +217,24 @@ impl SettlementService {
 
         // 5. Decrypt Seller Keypair (CRITICAL FIX: Seller must sign transfer)
         let seller_keypair = self.get_user_keypair(&settlement.seller_id).await?;
-        info!("Decrypted seller keypair for settlement authorization: {}", seller_keypair.pubkey());
+        let seller_decrypted_pubkey = seller_keypair.pubkey();
+        
+        // High visibility debug logs
+        println!("DEBUG: Settlement {} - Decrypted seller PK: {}", settlement.id, seller_decrypted_pubkey);
+        error!("DEBUG: Settlement {} - Decrypted seller PK: {}", settlement.id, seller_decrypted_pubkey);
 
-        // 6. Ensure buyer and seller have token accounts
-        // Use Platform Authority to PAY for the creation of accounts if needed (fee payer)
-        // We need platform authority for this administrative step
+        // CRITICAL CHECK: Does the decrypted key match the wallet we expect?
+        if seller_decrypted_pubkey.to_string() != seller_wallet {
+            println!("❌ IDENTITY MISMATCH! DB={} Decrypted={}", seller_wallet, seller_decrypted_pubkey);
+            error!("❌ IDENTITY MISMATCH! DB wallet is {}, but decrypted key is {}. Aborting settlement.", seller_wallet, seller_decrypted_pubkey);
+            return Err(ApiError::Internal(format!(
+                "Wallet identity mismatch: DB={} Decrypted={}",
+                seller_wallet, seller_decrypted_pubkey
+            )));
+        }
+
+        let seller_actual_pubkey = seller_decrypted_pubkey;
+
         let buyer_token_account = self
             .blockchain
             .ensure_token_account_exists(&_platform_authority, &buyer_pubkey, &mint)
@@ -232,7 +245,7 @@ impl SettlementService {
 
         let seller_token_account = self
             .blockchain
-            .ensure_token_account_exists(&_platform_authority, &seller_pubkey, &mint)
+            .ensure_token_account_exists(&_platform_authority, &seller_actual_pubkey, &mint)
             .await
             .map_err(|e| {
                 ApiError::Internal(format!("Failed to create seller token account: {}", e))
@@ -598,7 +611,7 @@ impl SettlementService {
 
         // Fetch encrypted_private_key from users table
         let row = sqlx::query!(
-            "SELECT encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
+            "SELECT wallet_address, encrypted_private_key, wallet_salt, encryption_iv FROM users WHERE id = $1",
             user_id
         )
         .fetch_one(&self.db)
@@ -626,18 +639,23 @@ impl SettlementService {
                 &iv_b64
             ).map_err(|e| ApiError::Internal(format!("Failed to decrypt wallet: {}", e)))?;
             
-             // Valid key should be 32 (seed) or 64 (full keypair) bytes
-            if decrypted.len() == 64 || decrypted.len() == 32 {
-                let secret_key: [u8; 32] = decrypted[..32]
-                    .try_into()
-                    .map_err(|_| ApiError::Internal("Invalid key slice".to_string()))?;
-                Ok(Keypair::new_from_array(secret_key))
-            } else {
-                Err(ApiError::Internal(format!(
-                    "Invalid key length: {}",
-                    decrypted.len()
-                )))
-            }
+        // Valid key should be 32 (seed) or 64 (full keypair) bytes
+        let decrypted_kp = if decrypted.len() == 64 {
+            Keypair::try_from(decrypted.as_slice())
+                .map_err(|e| ApiError::Internal(format!("Invalid 64-byte keypair: {}", e)))?
+        } else if decrypted.len() == 32 {
+            let secret_key: [u8; 32] = decrypted[..32]
+                .try_into()
+                .map_err(|_| ApiError::Internal("Invalid key slice".to_string()))?;
+            Keypair::new_from_array(secret_key)
+        } else {
+            return Err(ApiError::Internal(format!(
+                "Invalid key length: {}",
+                decrypted.len()
+            )));
+        };
+
+        Ok(decrypted_kp)
         } else {
              // Fallback minimal decryption logic (legacy)
             use base64::{engine::general_purpose, Engine as _};

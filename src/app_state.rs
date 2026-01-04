@@ -29,6 +29,8 @@ pub struct AppState {
     pub blockchain_service: services::BlockchainService,
     /// Wallet management service
     pub wallet_service: services::WalletService,
+    /// Wallet session service (for secure auto-trading)
+    pub wallet_session: services::WalletSessionService,
     /// WebSocket service for real-time updates
     pub websocket_service: services::WebSocketService,
     /// Redis cache service
@@ -51,6 +53,7 @@ pub struct AppState {
     /// HTTP Client for external requests (Simulator, etc.)
     pub http_client: reqwest::Client,
 }
+
 
 // Implement FromRef for services that need to be extracted from AppState
 impl axum::extract::FromRef<AppState> for services::WebSocketService {

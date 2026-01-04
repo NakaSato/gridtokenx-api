@@ -11,6 +11,7 @@
 //! - `meters` - Meter management handlers
 //! - `wallets` - Wallet/token balance handlers
 //! - `status` - Status endpoint handlers
+//! - `wallet_session` - Wallet unlock/lock session handlers
 //! - `routes` - Route builders
 
 // Type definitions
@@ -24,6 +25,7 @@ pub mod profile;
 pub mod meters;
 pub mod wallets;
 pub mod status;
+pub mod wallet_session;
 
 // Route builders
 pub mod routes;
@@ -44,6 +46,7 @@ pub use meters::{
 };
 pub use wallets::token_balance;
 pub use status::{system_status, meter_status, readiness_probe, liveness_probe};
+pub use wallet_session::{unlock_wallet, lock_wallet, get_wallet_session, lock_all_sessions};
 
 // Re-export types
 pub use types::{
@@ -54,6 +57,8 @@ pub use types::{
     TokenBalanceResponse, VerifyEmailResponse, VerifyMeterRequest,
     MeterFilterParams, UpdateMeterStatusRequest, CreateReadingRequest, CreateReadingResponse,
     MeterStats,
+    GenerateWalletRequest, UnlockWalletRequest, UnlockWalletResponse, WalletSessionInfo,
+    LockWalletResponse, SetWalletPasswordRequest,
 };
 pub use status::{
     HealthResponse, ServiceStatus, ServiceHealth,

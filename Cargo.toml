@@ -25,14 +25,34 @@ tower-http = { version = "0.6.7", features = [
   "timeout",
   "compression-gzip",
 ] }
-hyper = { version = "1.8.1", features = ["full"] }
+# Explicit features: http1/http2 for protocol support, server for axum
+# Client feature omitted - reqwest handles outgoing HTTP requests
+hyper = { version = "1.8.1", features = ["http1", "http2", "server"] }
 http-body-util = "0.1"
 
 # Async Runtime
-tokio = { version = "1.14", features = ["full"] }
+# Explicit feature selection for production optimization:
+# - rt-multi-thread: Required by axum for concurrent request handling
+# - macros: Required for #[tokio::main] and #[tokio::test]
+# - io-util: Required by sqlx for I/O operations
+# - time: Required by sqlx for query timeouts and connection pool management
+# - sync: Required for async synchronization primitives (channels, mutexes)
+# - signal: Required for graceful shutdown handling
+# - parking_lot: Faster synchronization primitives under high contention
+tokio = { version = "1.48", features = [
+  "rt-multi-thread",
+  "macros",
+  "io-util",
+  "time",
+  "sync",
+  "signal",
+  "parking_lot",
+] }
 futures = "0.3"
 
 # Database
+# Note: Offline mode in sqlx 0.8+ is enabled via SQLX_OFFLINE=true env var
+# Run `cargo sqlx prepare` to generate .sqlx cache for CI builds
 sqlx = { version = "0.8", features = [
   "postgres",
   "runtime-tokio-rustls",
@@ -46,8 +66,8 @@ bigdecimal = { version = "0.4", features = ["serde"] }
 ipnetwork = { version = "0.21.1", features = ["serde"] }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Authentication
 jsonwebtoken = { version = "10.0", default-features = false, features = [
@@ -67,11 +87,11 @@ metrics-exporter-prometheus = "0.17"
 prometheus = "0.14.0"
 
 # Utilities
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { workspace = true }
+uuid = { workspace = true }
 rust_decimal = { version = "1.33", features = ["serde-float", "maths"] }
 anyhow = "1.0"
-thiserror = "2.0"
+thiserror = { workspace = true }
 config = "0.15.19"
 dotenvy = "0.15"
 sha2 = "0.10"
@@ -79,7 +99,16 @@ async-trait = "0.1"
 once_cell = "1.19"
 
 # HTTP Client
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+# Explicit features: disable defaults, enable only what's needed
+# - json: JSON body serialization/deserialization
+# - rustls-tls: Pure Rust TLS (no OpenSSL dependency)
+# - gzip: Compressed response handling
+# Omitted: http2 (not needed for most API calls), charset, system-proxy
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "gzip",
+] }
 
 # Validation
 validator = { version = "0.20", features = ["derive"] }
@@ -104,21 +133,21 @@ rand = { version = "0.8", features = ["std", "std_rng"] }
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
 
-solana-client = "3.0.0"
-solana-sdk = "3.0.0"
-solana-program = "3.0.0"
-spl-token = "9.0.0"
-spl-associated-token-account = "8.0.0"
-anchor-client = "0.32.1"
-anchor-lang = "0.32.1"
+solana-client = { workspace = true }
+solana-sdk = { workspace = true }
+solana-program = { workspace = true }
+spl-token = { workspace = true }
+spl-associated-token-account = { workspace = true }
+anchor-client = { workspace = true }
+anchor-lang = { workspace = true }
 dashmap = "6.1.0"
-solana-compute-budget = "3.0.0"
-solana-transaction-status = "3.0.0"
-solana-pubsub-client = "3.0.0"
+solana-compute-budget = { workspace = true }
+solana-transaction-status = { workspace = true }
+solana-pubsub-client = { workspace = true }
 hmac = "0.12.1"
 hex = "0.4.3"
-base64 = "0.21"
-bincode = "1.3"
+base64 = { workspace = true }
+bincode = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -145,3 +174,5 @@ path = "tests/integration/settlement_test.rs"
 [features]
 default = []
 test-utils = []
+
+# Profile settings are now defined at workspace level in gridtokenx-anchor/Cargo.toml
