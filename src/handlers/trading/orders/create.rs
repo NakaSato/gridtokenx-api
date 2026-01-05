@@ -7,6 +7,7 @@ use crate::database::schema::types::OrderStatus;
 use crate::error::{ApiError, Result};
 use crate::models::trading::CreateOrderRequest;
 use crate::AppState;
+use crate::handlers::websocket::broadcaster::broadcast_p2p_order_update;
 
 use crate::handlers::trading::types::CreateOrderResponse;
 
@@ -105,6 +106,7 @@ pub async fn create_order(
             payload.price_per_kwh,
             payload.expiry_time,
             zone_id,
+            payload.meter_id,
         )
         .await
         .map_err(|e| {
@@ -118,6 +120,20 @@ pub async fn create_order(
         tracing::error!("Failed to get epoch: {}", e);
         ApiError::Internal("Failed to assign order to epoch".to_string())
     })?;
+
+    // Broadcast P2P order creation via WebSocket
+    if let Err(e) = broadcast_p2p_order_update(
+        order_id,
+        user.0.sub,
+        payload.side.to_string(),
+        "open".to_string(),
+        payload.energy_amount.to_string(),
+        "0".to_string(), // filled_amount
+        payload.energy_amount.to_string(), // remaining_amount
+        payload.price_per_kwh.map(|p| p.to_string()).unwrap_or_default(),
+    ).await {
+        tracing::warn!("Failed to broadcast order creation: {}", e);
+    }
 
     Ok(Json(CreateOrderResponse {
         id: order_id,

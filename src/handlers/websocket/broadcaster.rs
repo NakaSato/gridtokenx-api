@@ -85,3 +85,100 @@ pub fn create_sample_order_book() -> OrderBookData {
         ],
     }
 }
+
+/// Broadcast transaction status update to the relevant user
+pub async fn broadcast_transaction_status_update(
+    operation_id: Uuid,
+    transaction_type: String,
+    old_status: String,
+    new_status: String,
+    signature: Option<String>,
+    error_message: Option<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _message = WsMessage::TransactionStatusUpdate {
+        operation_id,
+        transaction_type: transaction_type.clone(),
+        old_status: old_status.clone(),
+        new_status: new_status.clone(),
+        signature,
+        error_message,
+        timestamp: chrono::Utc::now(),
+    };
+
+    // TODO: Use connection manager to send to specific user's WebSocket
+    tracing::info!(
+        "Broadcasting transaction status update: {} {} -> {}",
+        transaction_type,
+        old_status,
+        new_status
+    );
+
+    Ok(())
+}
+
+/// Broadcast P2P order update to the order owner
+pub async fn broadcast_p2p_order_update(
+    order_id: Uuid,
+    user_id: Uuid,
+    side: String,
+    status: String,
+    original_amount: String,
+    filled_amount: String,
+    remaining_amount: String,
+    price_per_kwh: String,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _message = WsMessage::P2POrderUpdate {
+        order_id,
+        user_id,
+        side: side.clone(),
+        status: status.clone(),
+        original_amount: original_amount.clone(),
+        filled_amount: filled_amount.clone(),
+        remaining_amount: remaining_amount.clone(),
+        price_per_kwh,
+        timestamp: chrono::Utc::now(),
+    };
+
+    // TODO: Use connection manager to send to specific user's WebSocket
+    tracing::info!(
+        "Broadcasting P2P order update: {} {} order {} - filled {}/{}",
+        side,
+        status,
+        order_id,
+        filled_amount,
+        original_amount
+    );
+
+    Ok(())
+}
+
+/// Broadcast settlement completion to both buyer and seller
+pub async fn broadcast_settlement_complete(
+    settlement_id: Uuid,
+    buyer_id: Uuid,
+    seller_id: Uuid,
+    energy_amount: String,
+    total_cost: String,
+    transaction_signature: Option<String>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _message = WsMessage::SettlementComplete {
+        settlement_id,
+        buyer_id,
+        seller_id,
+        energy_amount: energy_amount.clone(),
+        total_cost: total_cost.clone(),
+        transaction_signature,
+        timestamp: chrono::Utc::now(),
+    };
+
+    // TODO: Use connection manager to send to both buyer and seller WebSockets
+    tracing::info!(
+        "Broadcasting settlement complete: {} - {} kWh for {} THB",
+        settlement_id,
+        energy_amount,
+        total_cost
+    );
+
+    Ok(())
+}
+

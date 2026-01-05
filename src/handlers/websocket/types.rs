@@ -50,6 +50,38 @@ pub enum WsMessage {
     Pong {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
+    /// Transaction status update (for user's own transactions)
+    TransactionStatusUpdate {
+        operation_id: Uuid,
+        transaction_type: String, // "EnergyTrade", "TokenMint", "Stake", etc.
+        old_status: String,
+        new_status: String,
+        signature: Option<String>,
+        error_message: Option<String>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// P2P order lifecycle update
+    P2POrderUpdate {
+        order_id: Uuid,
+        user_id: Uuid,
+        side: String,              // "buy" or "sell"
+        status: String,            // "open", "partially_filled", "filled", "cancelled"
+        original_amount: String,
+        filled_amount: String,
+        remaining_amount: String,
+        price_per_kwh: String,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
+    /// Settlement completed notification
+    SettlementComplete {
+        settlement_id: Uuid,
+        buyer_id: Uuid,
+        seller_id: Uuid,
+        energy_amount: String,
+        total_cost: String,
+        transaction_signature: Option<String>,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    },
 }
 
 /// Order book entry

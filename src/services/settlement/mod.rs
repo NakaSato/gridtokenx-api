@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
+use crate::handlers::websocket::broadcaster::broadcast_settlement_complete;
 use solana_sdk::signature::Signer;
 
 pub use types::*;
@@ -247,6 +248,18 @@ impl SettlementService {
                     // but it should be noted. In production, this should be retryable.
                 }
 
+                // Broadcast settlement completion via WebSocket
+                if let Err(e) = broadcast_settlement_complete(
+                    settlement.id,
+                    settlement.buyer_id,
+                    settlement.seller_id,
+                    settlement.energy_amount.to_string(),
+                    settlement.total_value.to_string(),
+                    Some(tx_result.signature.clone()),
+                ).await {
+                    error!("⚠️ Failed to broadcast settlement: {}", e);
+                }
+
                 info!(
                     "✅ Settlement {} completed: tx {}",
                     settlement_id, tx_result.signature
@@ -360,26 +373,9 @@ impl SettlementService {
         );
 
         // 8. Execute Token Transfer (Seller -> Buyer)
-        // Replacing execute_match_orders with direct transfer because match_orders instruction
-        // definition lacks token accounts and cannot perform transfer.
-        // We use the Seller Keypair as the "Authority" (Signer) for the transfer.
-        
-        // Note: transfer_tokens uses 'decimals' arg. Energy Token has 9 decimals?
-        // Wait, match_amount_wh is in Atomic Units?
-        // Order Creation used: payload.energy_amount * 1_000_000_000 (9 decimals).
-        // BUT logic above (Step 7) calc `match_amount_wh` as `energy_amount * 1000`.
-        // IF `energy_amount` is kWh.
-        // 1 kWh = 1000 Wh.
-        // The Token Logic usually tracks Wh? Or Atomic Units?
-        // create_order (Step 763) used `multiplier = 1_000_000_000` (9 decimals).
-        // So `energy_amount` (Decimal) * 1e9 = `amount_u64`.
-        
-        // HERE, we calculated `match_amount_wh` = `energy_amount * 1000`.
-        // This seems WRONG if decimals=9.
-        // If decimals=9, we need `energy_amount * 10^9`.
-        
-        // Let's recalculate amount based on create_order logic.
-        let amount_atomic = settlement.energy_amount * Decimal::from(1_000_000_000);
+        // Only transfer the EFFECTIVE energy to the buyer.
+        let effective_energy = settlement.effective_energy.unwrap_or(settlement.energy_amount);
+        let amount_atomic = effective_energy * Decimal::from(1_000_000_000);
         let transfer_amount = amount_atomic
             .trunc()
             .to_string()
@@ -387,8 +383,8 @@ impl SettlementService {
             .unwrap_or(0);
 
         info!(
-            "Executing Direct Token Transfer: From {} to {}, Amount: {} (atomic), Decimals: 9",
-            seller_token_account, buyer_token_account, transfer_amount
+            "Executing Direct Token Transfer: From {} to {}, Amount: {} (atomic), Decimals: 9 (Effective Energy: {})",
+            seller_token_account, buyer_token_account, transfer_amount, effective_energy
         );
 
         let signature = self
@@ -403,6 +399,23 @@ impl SettlementService {
             )
             .await
             .map_err(|e| ApiError::Internal(format!("Token transfer failed: {}", e)))?;
+
+        // Handle grid loss: the difference between energy_amount (gross) and effective_energy
+        // remain in the seller's account if we only transfer the effective amount.
+        // To properly account for it, we should 'burn' these tokens or transfer them to a loss sink.
+        let loss_energy = settlement.energy_amount - effective_energy;
+        if loss_energy > Decimal::ZERO {
+            let loss_atomic = (loss_energy * Decimal::from(1_000_000_000)).trunc().to_string().parse::<u64>().unwrap_or(0);
+            if loss_atomic > 0 {
+                let loss_sink_wallet = std::env::var("GRID_LOSS_SINK_WALLET").unwrap_or_else(|_| "LoSsSiNk1111111111111111111111111111111111".to_string());
+                if let Ok(sink_pubkey) = BlockchainService::parse_pubkey(&loss_sink_wallet) {
+                    if let Ok(sink_token_account) = self.blockchain.ensure_token_account_exists(&_platform_authority, &sink_pubkey, &mint).await {
+                        info!("📉 Recording {} loss tokens to grid loss sink", loss_atomic);
+                        let _ = self.blockchain.transfer_tokens(&seller_keypair, &seller_token_account, &sink_token_account, &mint, loss_atomic, 9).await;
+                    }
+                }
+            }
+        }
 
         info!("Settlement transfer completed. Signature: {}", signature);
 
