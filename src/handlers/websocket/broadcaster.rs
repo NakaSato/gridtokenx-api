@@ -1,6 +1,7 @@
 use uuid::Uuid;
 
 use super::types::{OrderBookData, OrderBookEntry, WsMessage};
+use super::get_connection_manager;
 use crate::AppState;
 
 /// Broadcast order book update to all subscribers
@@ -9,19 +10,19 @@ pub async fn broadcast_order_book_update(
     epoch_number: i32,
     order_book: OrderBookData,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // In a real implementation, this would use the connection manager
-    // to broadcast to all subscribers
-
-    let _message = WsMessage::OrderBookUpdate {
+    let message = WsMessage::OrderBookUpdate {
         epoch_number,
         buys: order_book.buys.clone(),
         sells: order_book.sells.clone(),
         timestamp: chrono::Utc::now(),
     };
 
-    // Store in broadcast queue for WebSocket clients
-    println!(
-        "Broadcasting order book update for epoch {} with {} buys and {} sells",
+    // Broadcast to all connected clients
+    let manager = get_connection_manager();
+    manager.broadcast(message).await?;
+
+    tracing::debug!(
+        "Broadcasted order book update for epoch {} with {} buys and {} sells",
         epoch_number,
         order_book.buys.len(),
         order_book.sells.len()
@@ -38,7 +39,7 @@ pub async fn broadcast_match_notification(
     matched_amount: String,
     match_price: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _message = WsMessage::MatchNotification {
+    let message = WsMessage::MatchNotification {
         match_id,
         buy_order_id,
         sell_order_id,
@@ -47,9 +48,12 @@ pub async fn broadcast_match_notification(
         timestamp: chrono::Utc::now(),
     };
 
-    // Store in broadcast queue for WebSocket clients
-    println!(
-        "Broadcasting match notification: {} tokens matched @ {}",
+    // Broadcast to all connected clients
+    let manager = get_connection_manager();
+    manager.broadcast(message).await?;
+
+    tracing::info!(
+        "📢 Broadcasted match notification: {} kWh @ {}",
         matched_amount, match_price
     );
 
@@ -88,6 +92,7 @@ pub fn create_sample_order_book() -> OrderBookData {
 
 /// Broadcast transaction status update to the relevant user
 pub async fn broadcast_transaction_status_update(
+    user_id: Uuid,
     operation_id: Uuid,
     transaction_type: String,
     old_status: String,
@@ -95,7 +100,7 @@ pub async fn broadcast_transaction_status_update(
     signature: Option<String>,
     error_message: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _message = WsMessage::TransactionStatusUpdate {
+    let message = WsMessage::TransactionStatusUpdate {
         operation_id,
         transaction_type: transaction_type.clone(),
         old_status: old_status.clone(),
@@ -105,9 +110,13 @@ pub async fn broadcast_transaction_status_update(
         timestamp: chrono::Utc::now(),
     };
 
-    // TODO: Use connection manager to send to specific user's WebSocket
+    // Send to specific user
+    let manager = get_connection_manager();
+    manager.send_to_user(user_id, message).await?;
+
     tracing::info!(
-        "Broadcasting transaction status update: {} {} -> {}",
+        "📢 Sent transaction status update to user {}: {} {} -> {}",
+        user_id,
         transaction_type,
         old_status,
         new_status
@@ -127,7 +136,7 @@ pub async fn broadcast_p2p_order_update(
     remaining_amount: String,
     price_per_kwh: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _message = WsMessage::P2POrderUpdate {
+    let message = WsMessage::P2POrderUpdate {
         order_id,
         user_id,
         side: side.clone(),
@@ -139,9 +148,13 @@ pub async fn broadcast_p2p_order_update(
         timestamp: chrono::Utc::now(),
     };
 
-    // TODO: Use connection manager to send to specific user's WebSocket
+    // Send to specific user who owns the order
+    let manager = get_connection_manager();
+    manager.send_to_user(user_id, message).await?;
+
     tracing::info!(
-        "Broadcasting P2P order update: {} {} order {} - filled {}/{}",
+        "📢 Sent P2P order update to user {}: {} {} order {} - filled {}/{}",
+        user_id,
         side,
         status,
         order_id,
@@ -161,7 +174,7 @@ pub async fn broadcast_settlement_complete(
     total_cost: String,
     transaction_signature: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _message = WsMessage::SettlementComplete {
+    let message = WsMessage::SettlementComplete {
         settlement_id,
         buyer_id,
         seller_id,
@@ -171,9 +184,15 @@ pub async fn broadcast_settlement_complete(
         timestamp: chrono::Utc::now(),
     };
 
-    // TODO: Use connection manager to send to both buyer and seller WebSockets
+    // Send to both buyer and seller
+    let manager = get_connection_manager();
+    manager.send_to_user(buyer_id, message.clone()).await?;
+    manager.send_to_user(seller_id, message).await?;
+
     tracing::info!(
-        "Broadcasting settlement complete: {} - {} kWh for {} THB",
+        "📢 Sent settlement complete to buyer {} and seller {}: {} - {} kWh for {}",
+        buyer_id,
+        seller_id,
         settlement_id,
         energy_amount,
         total_cost
@@ -181,4 +200,3 @@ pub async fn broadcast_settlement_complete(
 
     Ok(())
 }
-
