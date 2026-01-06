@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::error::ApiError;
 use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
+use crate::services::erc::{ErcService, IssueErcRequest};
 use crate::handlers::websocket::broadcaster::broadcast_settlement_complete;
 use solana_sdk::signature::Signer;
 
@@ -27,6 +28,8 @@ pub struct SettlementService {
     encryption_secret: String,
     #[allow(dead_code)]
     pending_settlements: Arc<RwLock<Vec<Uuid>>>,
+    /// ERC service for issuing RECs after settlement
+    erc_service: Option<ErcService>,
 }
 
 impl SettlementService {
@@ -40,12 +43,16 @@ impl SettlementService {
         config: SettlementConfig,
         encryption_secret: String,
     ) -> Self {
+        // Create ErcService with cloned db and blockchain
+        let erc_service = Some(ErcService::new(db.clone(), blockchain.clone()));
+        
         Self {
             db,
             blockchain,
             config,
             encryption_secret,
             pending_settlements: Arc::new(RwLock::new(Vec::new())),
+            erc_service,
         }
     }
 
@@ -258,6 +265,12 @@ impl SettlementService {
                     Some(tx_result.signature.clone()),
                 ).await {
                     error!("⚠️ Failed to broadcast settlement: {}", e);
+                }
+
+                // Issue REC (Renewable Energy Certificate) to seller
+                if let Err(e) = self.issue_rec_for_settlement(&settlement).await {
+                    error!("⚠️ Failed to issue REC for settlement {}: {}", settlement_id, e);
+                    // Non-blocking - settlement completed, REC issuance is secondary
                 }
 
                 info!(
@@ -982,6 +995,87 @@ impl SettlementService {
         
         info!("🔐 Escrow finalized for settlement {}: funds transferred and energy unlocked", settlement.id);
         Ok(())
+    }
+
+    /// Issue a Renewable Energy Certificate (REC) to the seller after settlement
+    async fn issue_rec_for_settlement(&self, settlement: &Settlement) -> Result<(), ApiError> {
+        let erc_service = match &self.erc_service {
+            Some(service) => service,
+            None => {
+                debug!("ERC service not available, skipping REC issuance");
+                return Ok(());
+            }
+        };
+
+        // Get seller wallet address
+        let seller_wallet = self.get_user_wallet(&settlement.seller_id).await?;
+
+        // Determine renewable source from meter info (try to fetch from DB)
+        let renewable_source = self.get_meter_renewable_source(&settlement.sell_order_id)
+            .await
+            .unwrap_or_else(|_| "Solar".to_string()); // Default to Solar
+
+        // Create metadata for the REC
+        let metadata = serde_json::json!({
+            "renewable_source": renewable_source,
+            "validation_data": format!("Settlement:{}", settlement.id),
+            "settlement_tx": settlement.id.to_string(),
+        });
+
+        // Convert energy amount to Decimal
+        let kwh_amount = settlement.energy_amount;
+
+        // Issue the certificate
+        let request = IssueErcRequest {
+            wallet_address: seller_wallet.clone(),
+            meter_id: None, // Meter ID will be looked up by ErcService if needed
+            kwh_amount,
+            expiry_date: None, // RECs have default expiry
+            metadata: Some(metadata),
+        };
+
+        match erc_service.issue_certificate(
+            settlement.seller_id,
+            &seller_wallet,
+            request,
+            Some(settlement.id),
+        ).await {
+            Ok(certificate) => {
+                info!(
+                    "🏆 REC issued: {} for {} kWh to seller {} (settlement {})",
+                    certificate.certificate_id,
+                    kwh_amount,
+                    settlement.seller_id,
+                    settlement.id
+                );
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to issue REC for settlement {}: {}", settlement.id, e);
+                Err(ApiError::Internal(format!("REC issuance failed: {}", e)))
+            }
+        }
+    }
+
+    /// Get renewable source from seller's meter
+    async fn get_meter_renewable_source(&self, order_id: &Uuid) -> Result<String, ApiError> {
+        // Try to get meter type from the sell order's user (meter_type can indicate renewable source)
+        let result: Option<String> = sqlx::query_scalar(
+            r#"
+            SELECT m.meter_type 
+            FROM meters m
+            JOIN trading_orders o ON o.user_id = m.user_id
+            WHERE o.id = $1
+            LIMIT 1
+            "#
+        )
+        .bind(order_id)
+        .fetch_optional(&self.db)
+        .await
+        .map_err(ApiError::Database)?;
+
+        // Map meter_type to renewable source or default to Solar
+        Ok(result.unwrap_or_else(|| "Solar".to_string()))
     }
 }
 
