@@ -14,6 +14,7 @@ use crate::error::ApiError;
 use crate::services::market_clearing::TradeMatch;
 use crate::services::BlockchainService;
 use crate::services::erc::{ErcService, IssueErcRequest};
+use crate::services::notification::{NotificationService, SettlementNotification};
 use crate::handlers::websocket::broadcaster::broadcast_settlement_complete;
 use solana_sdk::signature::Signer;
 
@@ -30,6 +31,8 @@ pub struct SettlementService {
     pending_settlements: Arc<RwLock<Vec<Uuid>>>,
     /// ERC service for issuing RECs after settlement
     erc_service: Option<ErcService>,
+    /// Notification service for email alerts
+    notification_service: NotificationService,
 }
 
 impl SettlementService {
@@ -46,6 +49,9 @@ impl SettlementService {
         // Create ErcService with cloned db and blockchain
         let erc_service = Some(ErcService::new(db.clone(), blockchain.clone()));
         
+        // Create NotificationService
+        let notification_service = NotificationService::new(db.clone());
+        
         Self {
             db,
             blockchain,
@@ -53,6 +59,7 @@ impl SettlementService {
             encryption_secret,
             pending_settlements: Arc::new(RwLock::new(Vec::new())),
             erc_service,
+            notification_service,
         }
     }
 
@@ -266,6 +273,9 @@ impl SettlementService {
                 ).await {
                     error!("⚠️ Failed to broadcast settlement: {}", e);
                 }
+
+                // Send email notifications to buyer and seller
+                self.send_settlement_notifications(&settlement, &tx_result.signature).await;
 
                 // Issue REC (Renewable Energy Certificate) to seller
                 if let Err(e) = self.issue_rec_for_settlement(&settlement).await {
@@ -1076,6 +1086,40 @@ impl SettlementService {
 
         // Map meter_type to renewable source or default to Solar
         Ok(result.unwrap_or_else(|| "Solar".to_string()))
+    }
+
+    /// Send email notifications to buyer and seller after settlement
+    async fn send_settlement_notifications(&self, settlement: &Settlement, tx_signature: &str) {
+        let notification_data = SettlementNotification {
+            settlement_id: settlement.id,
+            energy_amount: settlement.energy_amount,
+            total_value: settlement.total_value,
+            tx_signature: Some(tx_signature.to_string()),
+        };
+
+        // Notify buyer
+        if let Ok(buyer_email) = self.notification_service.get_user_email(&settlement.buyer_id).await {
+            if let Err(e) = self.notification_service.notify_settlement_complete(
+                settlement.buyer_id,
+                &buyer_email,
+                notification_data.clone(),
+            ).await {
+                error!("Failed to send settlement notification to buyer: {}", e);
+            }
+        }
+
+        // Notify seller
+        if let Ok(seller_email) = self.notification_service.get_user_email(&settlement.seller_id).await {
+            if let Err(e) = self.notification_service.notify_settlement_complete(
+                settlement.seller_id,
+                &seller_email,
+                notification_data,
+            ).await {
+                error!("Failed to send settlement notification to seller: {}", e);
+            }
+        }
+
+        info!("📧 Settlement notifications sent for {}", settlement.id);
     }
 }
 
