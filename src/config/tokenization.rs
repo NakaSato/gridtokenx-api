@@ -47,6 +47,10 @@ pub struct TokenizationConfig {
 
     /// Whether to use real blockchain transactions or mocks (default: false)
     pub enable_real_blockchain: bool,
+
+    /// Whether to check on-chain token balance for buy order escrow (default: false)
+    /// If true, checks blockchain token balance instead of users.balance DB column
+    pub use_onchain_balance_for_escrow: bool,
 }
 
 impl Default for TokenizationConfig {
@@ -66,6 +70,7 @@ impl Default for TokenizationConfig {
             transaction_timeout_secs: 60,
             max_transactions_per_batch: 20,
             enable_real_blockchain: true, // Default to true for integration
+            use_onchain_balance_for_escrow: false, // Default to DB balance check for compatibility
         }
     }
 }
