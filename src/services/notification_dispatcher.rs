@@ -169,7 +169,7 @@ impl NotificationDispatcher {
             INSERT INTO notifications (user_id, notification_type, title, message, data)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id, user_id, notification_type as "notification_type!: NotificationType",
-                      title, message, data, read, created_at as "created_at!"
+                      title, message, data, read as "read!", created_at as "created_at!"
             "#,
             request.user_id,
             request.notification_type as NotificationType,

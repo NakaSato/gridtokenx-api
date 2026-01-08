@@ -98,9 +98,13 @@ impl PriceMonitor {
         info!("Checking {} pending conditional orders against price {}", pending_orders.len(), current_price);
 
         for order in pending_orders {
+            // Skip orders with missing required fields
+            let Some(trigger_type) = order.trigger_type else { continue };
+            let Some(side) = order.side else { continue };
+            
             let should_trigger = self.check_trigger_condition(
-                &order.trigger_type,
-                &order.side,
+                &trigger_type,
+                &side,
                 order.trigger_price.unwrap_or(Decimal::ZERO),
                 current_price,
                 order.trailing_offset,
@@ -112,9 +116,9 @@ impl PriceMonitor {
                 if let Err(e) = self.trigger_order(
                     order.id,
                     order.user_id,
-                    order.side,
+                    side,
                     order.energy_amount,
-                    order.limit_price,
+                    Some(order.limit_price),
                 ).await {
                     error!("Failed to trigger order {}: {}", order.id, e);
                 }

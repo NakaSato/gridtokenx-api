@@ -182,7 +182,7 @@ pub async fn list_price_alerts(
         SELECT id, user_id, target_price, 
                condition as "condition!: AlertCondition",
                status as "status!: AlertStatus",
-               triggered_at, triggered_price, repeat,
+               triggered_at, triggered_price, repeat as "repeat!",
                note, created_at as "created_at!"
         FROM price_alerts
         WHERE user_id = $1

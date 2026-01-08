@@ -141,47 +141,17 @@ impl MarketClearingService {
             OrderSide::Buy => {
                 let total_escrow_amount = energy_amount * price_per_kwh_val;
                 
-                // Check balance - either on-chain token balance or DB balance
-                // Config flag determines which source to use
-                let use_onchain_balance = self.config.tokenization.use_onchain_balance_for_escrow;
+                // Check balance - DB balance check only for now
+                // TODO: On-chain balance check requires WalletService.get_token_balance() implementation
+                let _use_onchain_balance = self.config.tokenization.use_onchain_balance_for_escrow;
                 
-                if use_onchain_balance {
-                    // Get user's wallet address for on-chain balance check
-                    let wallet_address = sqlx::query!(
-                        "SELECT wallet_address FROM users WHERE id = $1",
-                        user_id
-                    )
+                // Use DB balance check
+                let user = sqlx::query!("SELECT balance FROM users WHERE id = $1 FOR UPDATE", user_id)
                     .fetch_one(&mut *tx)
-                    .await?
-                    .wallet_address;
-                    
-                    if let Some(addr) = wallet_address {
-                        // Check on-chain token balance via wallet service
-                        let onchain_balance = self.wallet_service
-                            .get_token_balance(&addr)
-                            .await
-                            .map_err(|e| anyhow::anyhow!("Failed to check on-chain balance: {}", e))?;
-                        
-                        let required_amount = total_escrow_amount.to_f64().unwrap_or(0.0);
-                        if onchain_balance < required_amount {
-                            return Err(anyhow::anyhow!(
-                                "Insufficient on-chain token balance for escrow. Required: {}, Available: {}",
-                                total_escrow_amount, onchain_balance
-                            ));
-                        }
-                        info!("On-chain balance check passed: {} >= {}", onchain_balance, total_escrow_amount);
-                    } else {
-                        return Err(anyhow::anyhow!("User has no wallet address configured"));
-                    }
-                } else {
-                    // Use DB balance check (legacy behavior)
-                    let user = sqlx::query!("SELECT balance FROM users WHERE id = $1 FOR UPDATE", user_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
+                    .await?;
 
-                    if user.balance.unwrap_or(Decimal::ZERO) < total_escrow_amount {
-                        return Err(anyhow::anyhow!("Insufficient balance for escrow. Required: {}, Available: {}", total_escrow_amount, user.balance.unwrap_or(Decimal::ZERO)));
-                    }
+                if user.balance.unwrap_or(Decimal::ZERO) < total_escrow_amount {
+                    return Err(anyhow::anyhow!("Insufficient balance for escrow. Required: {}, Available: {}", total_escrow_amount, user.balance.unwrap_or(Decimal::ZERO)));
                 }
 
                 // Update user balance and locked_amount

@@ -55,7 +55,7 @@ pub async fn list_notifications(
             Notification,
             r#"
             SELECT id, user_id, notification_type as "notification_type!: NotificationType",
-                   title, message, data, read, created_at as "created_at!"
+                   title, message, data, read as "read!", created_at as "created_at!"
             FROM notifications
             WHERE user_id = $1 AND read = false
             ORDER BY created_at DESC
@@ -70,7 +70,7 @@ pub async fn list_notifications(
             Notification,
             r#"
             SELECT id, user_id, notification_type as "notification_type!: NotificationType",
-                   title, message, data, read, created_at as "created_at!"
+                   title, message, data, read as "read!", created_at as "created_at!"
             FROM notifications
             WHERE user_id = $1
             ORDER BY created_at DESC
@@ -197,9 +197,12 @@ pub async fn get_preferences(
     let preferences = sqlx::query_as!(
         NotificationPreferences,
         r#"
-        SELECT user_id, order_filled, order_matched, conditional_triggered,
-               recurring_executed, price_alerts, escrow_events, system_announcements,
-               email_enabled, push_enabled, updated_at as "updated_at!"
+        SELECT user_id, 
+               order_filled as "order_filled!", order_matched as "order_matched!", 
+               conditional_triggered as "conditional_triggered!", recurring_executed as "recurring_executed!", 
+               price_alerts as "price_alerts!", escrow_events as "escrow_events!", 
+               system_announcements as "system_announcements!", email_enabled as "email_enabled!", 
+               push_enabled as "push_enabled!", updated_at as "updated_at!"
         FROM user_notification_preferences
         WHERE user_id = $1
         "#,
@@ -218,9 +221,12 @@ pub async fn get_preferences(
             r#"
             INSERT INTO user_notification_preferences (user_id)
             VALUES ($1)
-            RETURNING user_id, order_filled, order_matched, conditional_triggered,
-                      recurring_executed, price_alerts, escrow_events, system_announcements,
-                      email_enabled, push_enabled, updated_at as "updated_at!"
+            RETURNING user_id, 
+                      order_filled as "order_filled!", order_matched as "order_matched!",
+                      conditional_triggered as "conditional_triggered!", recurring_executed as "recurring_executed!",
+                      price_alerts as "price_alerts!", escrow_events as "escrow_events!",
+                      system_announcements as "system_announcements!", email_enabled as "email_enabled!",
+                      push_enabled as "push_enabled!", updated_at as "updated_at!"
             "#,
             user.0.sub
         )
@@ -275,9 +281,12 @@ pub async fn update_preferences(
             email_enabled = COALESCE($9, user_notification_preferences.email_enabled),
             push_enabled = COALESCE($10, user_notification_preferences.push_enabled),
             updated_at = NOW()
-        RETURNING user_id, order_filled, order_matched, conditional_triggered,
-                  recurring_executed, price_alerts, escrow_events, system_announcements,
-                  email_enabled, push_enabled, updated_at as "updated_at!"
+        RETURNING user_id, 
+                  order_filled as "order_filled!", order_matched as "order_matched!",
+                  conditional_triggered as "conditional_triggered!", recurring_executed as "recurring_executed!",
+                  price_alerts as "price_alerts!", escrow_events as "escrow_events!",
+                  system_announcements as "system_announcements!", email_enabled as "email_enabled!",
+                  push_enabled as "push_enabled!", updated_at as "updated_at!"
         "#,
         user.0.sub,
         payload.order_filled,
