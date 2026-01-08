@@ -220,11 +220,19 @@ pub fn build_router(app_state: AppState) -> Router {
         .route("/preferences", get(crate::handlers::notifications::get_preferences).put(crate::handlers::notifications::update_preferences))
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
+    // User wallets management routes (auth required)
+    let user_wallets_routes = Router::new()
+        .route("/", get(crate::handlers::wallets::list_wallets).post(crate::handlers::wallets::link_wallet))
+        .route("/{id}", axum::routing::delete(crate::handlers::wallets::remove_wallet))
+        .route("/{id}/primary", axum::routing::put(crate::handlers::wallets::set_primary_wallet))
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify
         .nest("/users", v1_users_routes())     // POST /api/v1/users, GET /api/v1/users/me
         .nest("/meters", meters_routes)        // POST /api/v1/meters, auth required for minting
-        .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance
+        .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance (legacy)
+        .nest("/user-wallets", user_wallets_routes) // Multi-wallet management
         .nest("/status", v1_status_routes())   // GET /api/v1/status
         .nest("/trading", trading_routes)      // POST /api/v1/trading/orders
         .nest("/futures", futures_routes)      // /api/v1/futures

@@ -22,6 +22,7 @@ pub mod websocket;
 pub mod rpc;
 pub mod proxy;
 pub mod notifications;
+pub mod wallets;
 
 // Shared utilities
 pub mod common;
