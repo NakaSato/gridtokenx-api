@@ -147,3 +147,117 @@ pub struct Trade {
     pub amount: Decimal,
     pub executed_at: DateTime<Utc>,
 }
+
+// ==================== Conditional Orders (Stop-Loss/Take-Profit) ====================
+
+/// Type of conditional order trigger
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
+#[sqlx(type_name = "trigger_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerType {
+    /// Sell when price drops below trigger_price (to limit losses)
+    StopLoss,
+    /// Sell when price rises above trigger_price (to lock in profits)
+    TakeProfit,
+    /// Dynamic stop that follows price movements
+    TrailingStop,
+}
+
+/// Status of a conditional order trigger
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, ToSchema)]
+#[sqlx(type_name = "trigger_status", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerStatus {
+    /// Waiting for trigger condition to be met
+    Pending,
+    /// Trigger condition met, order executed
+    Triggered,
+    /// Order cancelled by user
+    Cancelled,
+    /// Order expired before trigger
+    Expired,
+}
+
+impl std::fmt::Display for TriggerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TriggerType::StopLoss => write!(f, "stop_loss"),
+            TriggerType::TakeProfit => write!(f, "take_profit"),
+            TriggerType::TrailingStop => write!(f, "trailing_stop"),
+        }
+    }
+}
+
+impl std::fmt::Display for TriggerStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TriggerStatus::Pending => write!(f, "pending"),
+            TriggerStatus::Triggered => write!(f, "triggered"),
+            TriggerStatus::Cancelled => write!(f, "cancelled"),
+            TriggerStatus::Expired => write!(f, "expired"),
+        }
+    }
+}
+
+/// Request to create a conditional (stop-loss/take-profit) order
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct CreateConditionalOrderRequest {
+    /// Order side (buy/sell)
+    pub side: OrderSide,
+    
+    /// Amount of energy to trade
+    #[schema(value_type = String, example = "10.5")]
+    pub energy_amount: Decimal,
+    
+    /// Price that triggers the order execution
+    #[schema(value_type = String, example = "0.10")]
+    pub trigger_price: Decimal,
+    
+    /// Type of conditional order
+    pub trigger_type: TriggerType,
+    
+    /// Optional limit price for the order after triggering (if not set, uses market order)
+    #[schema(value_type = String, example = "0.09")]
+    pub limit_price: Option<Decimal>,
+    
+    /// For trailing stop: the offset from peak price
+    #[schema(value_type = String, example = "0.02")]
+    pub trailing_offset: Option<Decimal>,
+    
+    /// Optional expiry time for the conditional order
+    pub expiry_time: Option<DateTime<Utc>>,
+}
+
+/// Response for conditional order creation
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ConditionalOrderResponse {
+    pub id: Uuid,
+    pub trigger_type: TriggerType,
+    pub trigger_status: TriggerStatus,
+    #[schema(value_type = String)]
+    pub trigger_price: Decimal,
+    pub created_at: DateTime<Utc>,
+    pub message: String,
+}
+
+/// Full conditional order info
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ConditionalOrder {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub side: OrderSide,
+    #[schema(value_type = String)]
+    pub energy_amount: Decimal,
+    #[schema(value_type = String)]
+    pub trigger_price: Decimal,
+    pub trigger_type: TriggerType,
+    pub trigger_status: TriggerStatus,
+    #[schema(value_type = String)]
+    pub limit_price: Option<Decimal>,
+    #[schema(value_type = String)]
+    pub trailing_offset: Option<Decimal>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub triggered_at: Option<DateTime<Utc>>,
+}
+

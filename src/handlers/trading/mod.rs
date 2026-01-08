@@ -1,4 +1,5 @@
 pub mod blockchain;
+pub mod conditional;
 pub mod market_data;
 pub mod orders;
 pub mod p2p;
@@ -8,6 +9,7 @@ pub mod routes;
 pub mod revenue;
 
 pub use blockchain::*;
+pub use conditional::*;
 pub use market_data::*;
 pub use orders::*;
 pub use p2p::*;

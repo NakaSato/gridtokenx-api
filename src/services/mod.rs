@@ -25,6 +25,7 @@ pub mod webhook;
 pub mod erc;
 pub mod grid_topology;
 pub mod notification;
+pub mod price_monitor;
 
 // Re-exports
 pub use auth::AuthService;
@@ -47,3 +48,5 @@ pub use webhook::WebhookService;
 pub use erc::ErcService;
 pub use grid_topology::GridTopologyService;
 pub use notification::NotificationService;
+pub use price_monitor::{PriceMonitor, PriceMonitorConfig};
+

@@ -6,6 +6,7 @@ use axum::{
 use crate::app_state::AppState;
 use super::orders::{create_order, cancel_order, update_order, get_order_book, get_user_orders, get_my_trades, get_token_balance};
 use super::blockchain::{get_blockchain_market_data, match_blockchain_orders};
+use super::conditional::{create_conditional_order, list_conditional_orders, cancel_conditional_order};
 use super::p2p::{calculate_p2p_cost, get_p2p_market_prices};
 use super::status::{get_matching_status, get_settlement_stats};
 use super::revenue::{get_revenue_summary, get_revenue_records};
@@ -16,6 +17,10 @@ pub fn v1_trading_routes() -> Router<AppState> {
         // Orders
         .route("/orders", post(create_order).get(get_user_orders))
         .route("/orders/{id}", delete(cancel_order).put(update_order))
+        
+        // Conditional Orders (Stop-Loss/Take-Profit)
+        .route("/conditional-orders", post(create_conditional_order).get(list_conditional_orders))
+        .route("/conditional-orders/{id}", delete(cancel_conditional_order))
         
         // Order Book
         .route("/orderbook", get(get_order_book))
@@ -44,4 +49,3 @@ pub fn v1_trading_routes() -> Router<AppState> {
         // Admin
         .route("/admin/match-orders", post(match_blockchain_orders))
 }
-
