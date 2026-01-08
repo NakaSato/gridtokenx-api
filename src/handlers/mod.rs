@@ -12,6 +12,7 @@
 // Domain handlers
 pub mod auth;
 pub mod blockchain;
+pub mod carbon;
 pub mod meter;
 pub mod dev;
 pub mod trading;

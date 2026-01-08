@@ -227,12 +227,21 @@ pub fn build_router(app_state: AppState) -> Router {
         .route("/{id}/primary", axum::routing::put(crate::handlers::wallets::set_primary_wallet))
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
+    // Carbon credits routes (auth required)
+    let carbon_routes = Router::new()
+        .route("/balance", get(crate::handlers::carbon::get_carbon_balance))
+        .route("/history", get(crate::handlers::carbon::get_carbon_history))
+        .route("/transactions", get(crate::handlers::carbon::get_carbon_transactions))
+        .route("/transfer", post(crate::handlers::carbon::transfer_credits))
+        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
+
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify
         .nest("/users", v1_users_routes())     // POST /api/v1/users, GET /api/v1/users/me
         .nest("/meters", meters_routes)        // POST /api/v1/meters, auth required for minting
         .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance (legacy)
         .nest("/user-wallets", user_wallets_routes) // Multi-wallet management
+        .nest("/carbon", carbon_routes)        // Carbon credits tracking
         .nest("/status", v1_status_routes())   // GET /api/v1/status
         .nest("/trading", trading_routes)      // POST /api/v1/trading/orders
         .nest("/futures", futures_routes)      // /api/v1/futures
