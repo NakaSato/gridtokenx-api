@@ -74,11 +74,6 @@ use crate::middleware::{metrics_middleware, active_requests_middleware};
         crate::handlers::analytics::admin::get_admin_activity,
         crate::handlers::analytics::admin::get_system_health,
         crate::handlers::analytics::admin::get_zone_economic_insights,
-        crate::handlers::futures::get_products,
-        crate::handlers::futures::create_order,
-        crate::handlers::futures::get_my_orders,
-        crate::handlers::futures::get_positions,
-        crate::handlers::futures::close_position,
         crate::handlers::meter::stub::get_meter_readings,
         crate::handlers::meter::stub::get_meter_trends,
         crate::handlers::meter::stub::get_meter_health,
@@ -160,13 +155,6 @@ use crate::middleware::{metrics_middleware, active_requests_middleware};
             crate::services::health_check::types::DependencyHealth,
             crate::services::health_check::types::HealthCheckStatus,
             crate::services::health_check::types::SystemMetrics,
-            crate::handlers::futures::CreateFuturesOrderRequest,
-            crate::services::futures::FuturesProduct,
-            crate::services::futures::FuturesPosition,
-            crate::services::futures::Candle,
-            crate::services::futures::OrderBook,
-            crate::services::futures::OrderBookEntry,
-            crate::services::futures::FuturesOrder,
             crate::services::dashboard::types::DashboardMetrics,
             crate::services::event_processor::types::EventProcessorStats,
             crate::handlers::trading::types::OrderBookResponse,
@@ -209,9 +197,6 @@ pub fn build_router(app_state: AppState) -> Router {
     let trading_routes = v1_trading_routes()
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
-    let futures_routes = crate::handlers::futures::routes()
-        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
-
     let analytics_routes = crate::handlers::analytics::routes()
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
@@ -245,24 +230,14 @@ pub fn build_router(app_state: AppState) -> Router {
         .route("/{id}/primary", axum::routing::put(crate::handlers::wallets::set_primary_wallet))
         .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
 
-    // Carbon credits routes (auth required)
-    let carbon_routes = Router::new()
-        .route("/balance", get(crate::handlers::carbon::get_carbon_balance))
-        .route("/history", get(crate::handlers::carbon::get_carbon_history))
-        .route("/transactions", get(crate::handlers::carbon::get_carbon_transactions))
-        .route("/transfer", post(crate::handlers::carbon::transfer_credits))
-        .layer(middleware::from_fn_with_state(app_state.clone(), auth_middleware));
-
     let v1_api = Router::new()
         .nest("/auth", v1_auth_routes())       // POST /api/v1/auth/token, GET /api/v1/auth/verify
         .nest("/users", v1_users_routes())     // POST /api/v1/users, GET /api/v1/users/me
         .nest("/meters", meters_routes)        // POST /api/v1/meters, auth required for minting
         .nest("/wallets", v1_wallets_routes()) // GET /api/v1/wallets/{address}/balance (legacy)
         .nest("/user-wallets", user_wallets_routes) // Multi-wallet management
-        .nest("/carbon", carbon_routes)        // Carbon credits tracking
         .nest("/status", v1_status_routes())   // GET /api/v1/status
         .nest("/trading", trading_routes)      // POST /api/v1/trading/orders
-        .nest("/futures", futures_routes)      // /api/v1/futures
         .nest("/analytics", analytics_routes)  // /api/v1/analytics
         .nest("/dashboard", v1_dashboard_routes()) // /api/v1/dashboard/metrics
         .nest("/notifications", notifications_routes) // /api/v1/notifications

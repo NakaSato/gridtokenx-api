@@ -140,7 +140,7 @@ impl NotificationService {
 
     /// Get user email from database
     pub async fn get_user_email(&self, user_id: &Uuid) -> Result<String, ApiError> {
-        let result = sqlx::query_scalar!(
+        let result: Option<String> = sqlx::query_scalar!(
             "SELECT email FROM users WHERE id = $1",
             user_id
         )

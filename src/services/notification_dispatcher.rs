@@ -163,7 +163,7 @@ impl NotificationDispatcher {
 
     /// Create notification in database and optionally broadcast
     async fn create_notification(&self, request: CreateNotificationRequest, broadcast: bool) -> anyhow::Result<Notification> {
-        let notification = sqlx::query_as!(
+        let notification: Notification = sqlx::query_as!(
             Notification,
             r#"
             INSERT INTO notifications (user_id, notification_type, title, message, data)

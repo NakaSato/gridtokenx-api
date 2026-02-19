@@ -12,11 +12,11 @@
 // Domain handlers
 pub mod auth;
 pub mod blockchain;
-pub mod carbon;
+// pub mod carbon; // CDA Cleanup
 pub mod meter;
 pub mod dev;
 pub mod trading;
-pub mod futures;
+// pub mod futures; // CDA Cleanup
 pub mod dashboard;
 pub mod analytics;
 pub mod websocket;
